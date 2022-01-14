@@ -1,10 +1,12 @@
 #!/usr/bin/python3
 import math
 from sympy import nonlinsolve, nsolve, solve, groebner, Symbol, sympify, poly, I, simplify, expand
+import cvxpy as cp
+import numpy as np
 
 # System params
-d = 2
-n = 2
+d = 4
+n = 4
 numVars = 2*n*d*d
 
 # The list of variables
@@ -74,39 +76,32 @@ for i in range(n):
                 full = exprConj*expr + sympify(-1/d)
                 F.append(expand(full))
 
+# Combine into a single polynomial
+toOpt = sympify(0)
 for i in range(len(F)):
     print(F[i])
-    # for j in range(numVars):
-        # F[i] = F[i].subs(xi[j], ideal[j])
-    # print(F[i])
+    toOpt += F[i]*F[i]
+toOpt = poly(toOpt)
 
-# res = groebner(F, *xi, order='lex', method='f5b')
-# print(res)
+# Extract the coefficients of each term
+coeffs = toOpt.coeffs()
+monoms = toOpt.monoms()
+print("num unique = ", len(coeffs))
 
-res = nsolve(F, xi, guess)
-# res = nonlinsolve(F, xi)
-print(res)
+# Generate sparse matrix for the objective TODO
+sparseVals = []
+sparseX = []
+sparseY = []
 
-# for i in range(numVars):
-    # if len(F[i].free_symbols) == 0:
-        # print("no vars left in: ", F[i])
-        # continue
-    # varToRemove = next(iter(F[i].free_symbols))
-    # print("removing var: ", varToRemove)
-    # F[i] = expand(F[i])
-    # print(F[i])
-    # varSolved = solve(F[i], varToRemove)
-    # if len(varSolved) > 0:
-        # for j in range(len(F)):
-            # F[j] = F[j].subs(varToRemove, varSolved[0])
+print(sparseVals)
+print(sparseX)
+print(sparseY)
 
-# x4 = solve(F[-1], xi[4])
-# print(F[-1])
-# print()
-# print(x4[0])
-# print()
-# print(expand(x4[0]))
+# Run the SDP
+# C = cp.spmatrix(sparseVals, sparseX, sparseY)
+# X = cp.Variable((n, n), symmetric=True)
+# constraints = [X >> 0, X[0] == coeffs[-1]]
+# prob = cp.Problem(cp.Minimize(cp.trace(C @ X)), constraints)
+# prob.solve()
 
-# print()
-# print(F)
 
