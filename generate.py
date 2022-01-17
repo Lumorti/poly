@@ -1,12 +1,14 @@
 #!/usr/bin/python3
 import math
-from sympy import nonlinsolve, nsolve, solve, groebner, Symbol, sympify, poly, I, simplify, expand
+from sympy import Symbol, sympify, poly, I, simplify, expand
 import cvxpy as cp
-import numpy as np
+import itertools 
+from monoms import getMonom
+from scipy.sparse import csc_matrix
 
 # System params
-d = 4
-n = 4
+d = 2
+n = 2
 numVars = 2*n*d*d
 
 # The list of variables
@@ -29,6 +31,7 @@ guess = [1 for i in range(numVars)]
 F = []
 
 # For each set
+print("Generating equations...")
 for i in range(n):
     for j in range(d):
         for k in range(d):
@@ -77,31 +80,37 @@ for i in range(n):
                 F.append(expand(full))
 
 # Combine into a single polynomial
+print("Combining into polynomial...")
 toOpt = sympify(0)
 for i in range(len(F)):
-    print(F[i])
     toOpt += F[i]*F[i]
 toOpt = poly(toOpt)
 
 # Extract the coefficients of each term
-coeffs = toOpt.coeffs()
-monoms = toOpt.monoms()
-print("num unique = ", len(coeffs))
+coeffs = [int(a) for a in toOpt.coeffs()]
+monoms = [list(a) for a in toOpt.monoms()]
+
+print("Generating monomial vec...")
+vec = getMonom(4, numVars)
+vecLength = len(vec)
+
+print("Generating monomial mat...")
+mat = []
+monomToLoc = {}
+for i1, v1 in enumerate(vec):
+    for i2, v2 in enumerate(vec):
+        monomToLoc[str([a+b for a, b in zip(v1, v2)])] = i1, i2
+
+print("d = ", d)
+print("n = ", n)
+print("numVars = ", numVars)
+print("num non-zero monomials = ", len(coeffs))
+print("full vec length = ", vecLength)
 
 # Generate sparse matrix for the objective TODO
-sparseVals = []
-sparseX = []
-sparseY = []
-
-print(sparseVals)
-print(sparseX)
-print(sparseY)
-
-# Run the SDP
-# C = cp.spmatrix(sparseVals, sparseX, sparseY)
-# X = cp.Variable((n, n), symmetric=True)
-# constraints = [X >> 0, X[0] == coeffs[-1]]
-# prob = cp.Problem(cp.Minimize(cp.trace(C @ X)), constraints)
-# prob.solve()
-
+print("Generating SDP...")
+with open("d" + str(d) + "n" + str(n) + ".csv", "w") as f:
+    for i in range(len(monoms)):
+        loc = monomToLoc[str(monoms[i])]
+        f.write(str(loc[0]) + " " + str(loc[1]) + " " + str(coeffs[i]) + "\n")
 
