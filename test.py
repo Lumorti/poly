@@ -1,11 +1,19 @@
 #!/usr/bin/python3
 import math
-from sympy import Symbol, sympify, poly, I, simplify, expand, Matrix
+from sympy import zeros, Symbol, sympify, poly, I, simplify, expand, Matrix
 import numpy as np
+import sys
 
 # System params
-d = 4
-n = 4
+d = 2
+n = 2
+kIndep = 1
+if len(sys.argv) > 1:
+    d = int(sys.argv[1])
+if len(sys.argv) > 2:
+    n = int(sys.argv[2])
+if len(sys.argv) > 3:
+    kIndep = int(sys.argv[3])
 numVars = 2*n*d*d
 
 # The list of variables
@@ -39,7 +47,7 @@ for i in range(n):
                 expr = sympify(-1)
                 for l in range(0, 2*d, 2):
                     expr += xi[start+l]*xi[start+l] + xi[start+l+1]*xi[start+l+1]
-                F.append(poly(expr))
+                F.append(expr)
 
 # For each set
 for i in range(n):
@@ -55,8 +63,8 @@ for i in range(n):
                 for l in range(0, 2*d, 2):
                     exprReal += xi[startj+l]*xi[startk+l] + xi[startj+l+1]*xi[startk+l+1]
                     exprImag += xi[startj+l]*xi[startk+l+1] - xi[startj+l+1]*xi[startk+l]
-                F.append(poly(exprReal))
-                F.append(poly(exprImag))
+                F.append(exprReal)
+                F.append(exprImag)
 
 # For each pair of sets
 for i in range(n):
@@ -75,7 +83,37 @@ for i in range(n):
                     expr += (xi[startk+m]-I*xi[startk+m+1])*(xi[startl+m]+I*xi[startl+m+1])
                     exprConj += (xi[startk+m]+I*xi[startk+m+1])*(xi[startl+m]-I*xi[startl+m+1])
                 full = exprConj*expr + sympify(-1/d)
-                F.append(poly(expand(full)))
+                F.append(expand(full))
+
+numOrig = len(F)
+
+# For higher k
+print("Generating higher k extension...")
+kPoly = []
+if kIndep == 2:
+    for x in xi:
+        kPoly.append(x)
+elif kIndep == 3:
+    for x in xi:
+        kPoly.append(x)
+    for x in xi:
+        for y in xi:
+            kPoly.append(x*y)
+elif kIndep == 4:
+    for x in xi:
+        kPoly.append(x)
+    for x in xi:
+        for y in xi:
+            kPoly.append(x*y)
+    for x in xi:
+        for y in xi:
+            for z in xi:
+                kPoly.append(x*y*z)
+newEqns = []
+for pol in kPoly:
+    for eqn in F:
+        newEqns.append(eqn*pol)
+F.extend(newEqns)
 
 # Extract the coefficients for each equation
 print("Extracting coefficients...")
@@ -83,9 +121,10 @@ coeffs = []
 monoms = []
 gens = []
 for eqn in F:
-    coeffs.append([int(a) for a in eqn.coeffs()])
+    eqn = poly(eqn)
+    coeffs.append(eqn.coeffs())
     monoms.append([list(a) for a in eqn.monoms()])
-    gens.append([a for a in eqn.gens])
+    gens.append(eqn.gens)
 
 # Get an ordering for the monomials
 print("Getting monomial ordering...")
@@ -105,17 +144,94 @@ for i in range(len(monoms)):
             ind += 1
     fullMonoms.append(newMonoms)
 
+print("Matrix is going to be " + str(len(coeffs)) + " by " + str(ind))
+
 # Generate the coefficient matrix
 print("Generating coefficient matrix...")
-fullCoeffs = np.zeros((len(coeffs), ind))
+matY = len(coeffs)
+matX = ind
+fullCoeffs = np.zeros((matY, matX))
 for i in range(len(coeffs)):
     for j in range(len(coeffs[i])):
-        fullCoeffs[i,uniqueMonoms[fullMonoms[i][j]]] = coeffs[i][j]
+        if sum(monoms[i][j]) <= 4:
+            fullCoeffs[i,uniqueMonoms[fullMonoms[i][j]]] = coeffs[i][j]
 
-# Row reduce
-print("Calculating matrix rank...")
-rank = np.linalg.matrix_rank(fullCoeffs)
-print("rank = ", rank)
+# np.set_printoptions(threshold=sys.maxsize, linewidth=sys.maxsize)
+# print(fullCoeffs)
+
+# Row reduce TODO
+print("Reducing matrix...")
+for i in range(1):
+
+    # Keep track of which rows have already been used (no swaps allowed)
+    rowUsed = [False for i in range(matY)]
+    rowUsed[i] = True
+
+    # For each element of the row, try to make it zero
+    for j in range(matX):
+
+        # Find a pivot row
+        piv = -1
+        for k in range(matY):
+            if fullCoeffs[k,j] != 0 and not rowUsed[k]:
+                piv = k
+                rowUsed[k] = True
+                break
+
+        # If there's no valid pivot, stop
+        if piv == -1:
+            continue
+
+        # Make this have the only non-zero in the column
+        for k in range(matY):
+            if k != piv:
+                factor = -fullCoeffs[k,j] / fullCoeffs[piv,j]
+                fullCoeffs[k,:] = fullCoeffs[k,:] + factor*fullCoeffs[piv,:]
+
+zeroRows = np.where(~fullCoeffs[0:numOrig+1,:].any(axis=1))[0]
+
 print("num vars = ", numVars)
+print("orig equations = ", numOrig)
+print("orig equations that don't depend = ", numOrig - len(zeroRows))
+
+# rank = np.linalg.matrix_rank(fullCoeffs)
+# np.roll(fullCoeffs, -numOrig, 0)
+# reduced = Matrix(fullCoeffs).rref()
+# print(reduced)
+# numAllZero = 0
+# zeroRow = zeros(1, ind)
+# for i in range(numOrig):
+    # endRow = reduced[0].row(len(coeffs)-i-1)
+    # if endRow == zeroRow:
+        # numAllZero += 1
+# print("num vars = ", numVars)
+# print("orig equations that don't depend = ", numOrig - numAllZero)
+
+# mat = np.array([[2,1,1,0,0,0,0,0], 
+                # [1,0,1,1,0,0,0,0],
+                # [0,2,0,1,0,1,0,0],
+                # [0,0,2,0,1,1,0,0],
+                # [0,1,0,0,0,1,1,0],
+                # [0,0,1,0,1,0,0,1]])
+# w = 13
+# h = 12
+# mat = np.array([[2,1,1,0,0,0,0,0,0,0,0,0,0], 
+                # [1,0,1,1,0,0,0,0,0,0,0,0,0],
+                # [0,2,0,1,0,1,0,0,0,0,0,0,0],
+                # [0,0,2,0,1,1,0,0,0,0,0,0,0],
+                # [0,1,0,0,0,1,1,0,0,0,0,0,0],
+                # [0,0,1,0,1,0,0,1,0,0,0,0,0],
+                # [0,0,0,2,0,0,1,1,0,0,0,0,0],
+                # [0,0,0,1,0,0,0,1,1,0,0,0,0],
+                # [0,0,0,0,2,0,0,0,0,1,1,0,0],
+                # [0,0,0,0,1,0,0,0,0,0,1,1,0],
+                # [0,0,0,0,0,2,0,1,0,1,0,0,0],
+                # [0,0,0,0,0,1,0,0,0,1,0,0,1]])
+
+# print(mat)
+
+
+
+
 
 
