@@ -95,6 +95,14 @@ void prettyPrint(std::string pre, Eigen::Matrix<type, -1, -1> arr) {
 
 }
 
+// Pretty print a general 1D Eigen vector
+void prettyPrint(std::string pre, Eigen::VectorXf arr) {
+
+	// Extract the dense array and then call the routine as normal
+	prettyPrint(pre, Eigen::MatrixXf(arr));
+
+}
+
 // Pretty print a general 2D sparse Eigen array
 template <typename type>
 void prettyPrint(std::string pre, Eigen::SparseMatrix<type> arr) {
@@ -149,7 +157,7 @@ int main (int argc, char ** argv) {
 	// Create augmented matrix and compare ranks TODO
 	Eigen::SparseMatrix<float,Eigen::ColMajor> aug = ACols;
 	aug.conservativeResize(arrayHeight, arrayWidth+1);
-	aug.insert(std::stoi(std::string(argv[1]))*2, arrayWidth) = 1;
+	aug.insert(0, arrayWidth) = 1;
 	aug.makeCompressed();
 
 	//prettyPrint("", ACols);
@@ -157,12 +165,24 @@ int main (int argc, char ** argv) {
 
 	// testing https://arxiv.org/pdf/0801.3788.pdf
 	// 2 2 1 is apparently incon
-	int rank1 = Eigen::SparseQR<Eigen::SparseMatrix<float>, Eigen::COLAMDOrdering<int>>(ACols).rank();
-	int rank2 = Eigen::SparseQR<Eigen::SparseMatrix<float>, Eigen::COLAMDOrdering<int>>(aug).rank();
-	std::cout << "rank of coefficient matrix = " << rank1 << std::endl;
-	std::cout << "rank of augmented matrix = " << rank2 << std::endl;
-	std::cout << "system is consistent? " << (rank1 < rank2) << std::endl;
-	std::cout << "(if yes, polynomial system not possible)" << std::endl;
+	Eigen::VectorXf bVec = Eigen::VectorXf::Zero(arrayWidth);
+	bVec(0) = 1;
+	//int rank1 = Eigen::SparseQR<Eigen::SparseMatrix<float>, Eigen::COLAMDOrdering<int>>(ACols).rank();
+	//std::cout << "rank of coefficient matrix = " << rank1 << std::endl;
+	//int rank2 = Eigen::SparseQR<Eigen::SparseMatrix<float>, Eigen::COLAMDOrdering<int>>(aug).rank();
+	//std::cout << "rank of augmented matrix = " << rank2 << std::endl;
+	//std::cout << "system is consistent? " << (rank1 < rank2) << std::endl;
+	//std::cout << "(if yes, polynomial system not possible)" << std::endl;
+	ACols = ACols.transpose();
+	//Eigen::SparseQR<Eigen::SparseMatrix<float>, Eigen::COLAMDOrdering<int>> solver;;
+	Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<float>> solver;
+	solver.compute(ACols);
+	Eigen::VectorXf sol = solver.solve(bVec);
+	std::cout << "num iterations = " << solver.iterations() << std::endl;
+	std::cout << "|Ax-b|^2 error = " << solver.error() << std::endl;
+	std::cout << (ACols*sol - bVec).squaredNorm() << std::endl;
+	//prettyPrint("", ACols*sol);
+	//prettyPrint("", bVec);
 
 	return 0;
 

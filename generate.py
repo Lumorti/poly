@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 import math
-from sympy import zeros, Symbol, sympify, poly, I, simplify, expand, Matrix
+from sympy import conjugate, zeros, Symbol, sympify, poly, I, simplify, expand, Matrix
 import numpy as np
 import sys
 
@@ -14,15 +14,12 @@ if len(sys.argv) > 2:
     n = int(sys.argv[2])
 if len(sys.argv) > 3:
     kIndep = int(sys.argv[3])
-numVars = 2*n*d*d
+numVars = n*d*d
 
 # The list of variables
 def nameFromInd(i):
-    if i % 2 == 0:
-        return "a" + str(int(i/2))
-    else:
-        return "b" + str(int((i-1)/2))
-xi = [Symbol(nameFromInd(i), real=True) for i in range(numVars)]
+    return "v" + str(i)
+xi = [Symbol(nameFromInd(i)) for i in range(numVars)]
 rt2 = 1.0 / math.sqrt(2.0)
 ideal = [
             1.0, 0.0,  0.0, 0.0,
@@ -43,28 +40,27 @@ for i in range(n):
 
             # Normalisation
             if j == k:
-                start = i*d*d*2 + j*d*2
+                start = i*d*d + j*d
                 expr = sympify(-1)
-                for l in range(0, 2*d, 2):
-                    expr += xi[start+l]*xi[start+l] + xi[start+l+1]*xi[start+l+1]
+                for l in range(d):
+                    expr += conjugate(xi[start+l])*xi[start+l]
                 F.append(expr)
 
 # For each set
 for i in range(n):
+
+    # For each combination in this set
     for j in range(d):
-        for k in range(d):
+        for k in range(j+1, d):
 
             # Orthogonality
             if j != k:
-                exprReal = sympify(0)
-                exprImag = sympify(0)
-                startj = i*d*d*2 + j*d*2
-                startk = i*d*d*2 + k*d*2
-                for l in range(0, 2*d, 2):
-                    exprReal += xi[startj+l]*xi[startk+l] + xi[startj+l+1]*xi[startk+l+1]
-                    exprImag += xi[startj+l]*xi[startk+l+1] - xi[startj+l+1]*xi[startk+l]
-                F.append(exprReal)
-                F.append(exprImag)
+                expr = sympify(0)
+                startj = i*d*d + j*d
+                startk = i*d*d + k*d
+                for l in range(d):
+                    expr += conjugate(xi[startj+l])*xi[startk+l]
+                F.append(expr)
 
 # For each pair of sets
 for i in range(n):
@@ -75,17 +71,19 @@ for i in range(n):
             for l in range(d):
 
                 # Their inner product should equal 1/d
-                startk = i*d*d*2 + k*d*2
-                startl = j*d*d*2 + l*d*2
+                startk = i*d*d + k*d
+                startl = j*d*d + l*d
                 expr = sympify(0)
                 exprConj = sympify(0)
-                for m in range(0, 2*d, 2):
-                    expr += (xi[startk+m]-I*xi[startk+m+1])*(xi[startl+m]+I*xi[startl+m+1])
-                    exprConj += (xi[startk+m]+I*xi[startk+m+1])*(xi[startl+m]-I*xi[startl+m+1])
-                full = exprConj*expr + sympify(-1/d)
+                for m in range(d):
+                    expr += conjugate(xi[startk+m])*xi[startl+m]
+                full = conjugate(expr)*expr + sympify(-1/d)
                 F.append(expand(full))
 
 numOrig = len(F)
+
+# for eq in F:
+    # print(eq)
 
 # For higher k
 print("Generating higher k extension...")
@@ -115,12 +113,19 @@ for pol in kPoly:
         newEqns.append(eqn*pol)
 F.extend(newEqns)
 
+# Add the complex conjugates of each
+newEqns2 = []
+for eq in F:
+    newEqns2.append(conjugate(eq))
+F.extend(newEqns2)
+
 # Extract the coefficients for each equation
 print("Extracting coefficients for {} equations...".format(len(F)))
 coeffs = []
 monoms = []
 gens = []
-for eqn in F:
+for i, eqn in enumerate(F):
+    print("{} / {}".format(i, len(F)))
     eqn = poly(eqn)
     coeffs.append(eqn.coeffs())
     monoms.append([list(a) for a in eqn.monoms()])
@@ -128,8 +133,8 @@ for eqn in F:
 
 # Get an ordering for the monomials
 print("Getting monomial ordering...")
-ind = 0
-uniqueMonoms = {}
+ind = 1
+uniqueMonoms = {"": 0}
 fullMonoms = []
 for i in range(len(monoms)):
     newMonoms = []
