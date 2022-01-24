@@ -122,7 +122,7 @@ void prettyPrint(std::string pre, Eigen::SparseMatrix<type, 1> arr) {
 }
 
 // Standard cpp entry point
-int main (int argc, char ** argv) {
+int main(int argc, char ** argv) {
 
 	// Load the data from file
 	std::cout << "Loading file..." << std::endl;
