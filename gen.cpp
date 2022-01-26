@@ -23,7 +23,7 @@ void pretty(std::unordered_map<K, V> const &m) {
 }
 
 // Print an equation
-void pretty(std::unordered_map<int,std::string> invertedMap, std::vector<std::pair<int,int>> a) {
+void pretty(std::unordered_map<int,std::string> invertedMap, std::vector<std::pair<int,char>> a) {
 	std::cout << "[";
 	for (int i=0; i<a.size(); i++) {
 		std::cout << invertedMap[a[i].first] << ": " << a[i].second << ", ";
@@ -113,7 +113,7 @@ int main(int argc, char ** argv) {
 	int nextInd = 1;
 	std::unordered_map<std::string, int> map = {{"", 0}};
 	std::unordered_map<int, std::string> invertedMap;
-	std::vector<std::vector<std::pair<int,int>>> eqns;
+	std::vector<std::vector<std::pair<int,char>>> eqns;
 	std::vector<std::string> varNames;
 	for (int i1=0; i1<numVars; i1++) {
 		varNames.push_back(std::to_string(i1));
@@ -125,7 +125,7 @@ int main(int argc, char ** argv) {
 		for (int j=0; j<d; j++) {
 
 			// Start with a -1 term
-			std::vector<std::pair<int,int>> eqn = {{0, -1}};
+			std::vector<std::pair<int,char>> eqn = {{0, -1}};
 
 			// Magnitude of this vector should sum to 1
 			for (int k=0; k<d; k++) {
@@ -142,7 +142,7 @@ int main(int argc, char ** argv) {
 				}
 
 				// Add this term to the equation
-				eqn.push_back(std::pair<int,int>(map[term], 1));
+				eqn.push_back(std::pair<int,char>(map[term], 1));
 
 			}
 
@@ -159,8 +159,8 @@ int main(int argc, char ** argv) {
 			for (int k=j+1; k<d; k++) {
 
 				// Start with two blank equations
-				std::vector<std::pair<int,int>> eqn = {};
-				std::vector<std::pair<int,int>> eqnConj = {};
+				std::vector<std::pair<int,char>> eqn = {};
+				std::vector<std::pair<int,char>> eqnConj = {};
 
 				// The inner product of these two vectors should equal zero
 				for (int l=0; l<d; l++) {
@@ -184,8 +184,8 @@ int main(int argc, char ** argv) {
 					}
 
 					// Add this term to the equation
-					eqn.push_back(std::pair<int,int>(map[term1], 1));
-					eqnConj.push_back(std::pair<int,int>(map[term2], 1));
+					eqn.push_back(std::pair<int,char>(map[term1], 1));
+					eqnConj.push_back(std::pair<int,char>(map[term2], 1));
 
 				}
 
@@ -207,8 +207,8 @@ int main(int argc, char ** argv) {
 				for (int l=0; l<d; l++) {
 
 					// Start with a -1 term (should be -1/d but we multiply by d for integers)
-					std::vector<std::pair<int,int>> eqn = {{0, -1}};
-					std::vector<std::pair<int,int>> eqnConj = {{0, -1}};
+					std::vector<std::pair<int,char>> eqn = {{0, -1}};
+					std::vector<std::pair<int,char>> eqnConj = {{0, -1}};
 
 					// Multiply out the brackets
 					for (int t1=0; t1<d; t1++) {
@@ -235,8 +235,8 @@ int main(int argc, char ** argv) {
 							}
 
 							// Add the term to the equation
-							eqn.push_back(std::pair<int,int>(map[term1], d));
-							eqnConj.push_back(std::pair<int,int>(map[term2], d));
+							eqn.push_back(std::pair<int,char>(map[term1], d));
+							eqnConj.push_back(std::pair<int,char>(map[term2], d));
 
 						}
 					}
@@ -250,6 +250,8 @@ int main(int argc, char ** argv) {
 
 		}
 	}
+
+	// TODO combine
 	
 	// Get the polynomial to multiply by
 	std::cout << "Generating moment vector..." << std::endl;
@@ -290,12 +292,13 @@ int main(int argc, char ** argv) {
 	// Multiply each original equation by each element of this polynomial 
 	std::cout << "Multiplying equations..." << std::endl;
 	int numOrig = eqns.size();
-	std::vector<std::vector<std::pair<int,int>>> newEqns;
+	std::vector<std::vector<std::pair<int,char>>> newEqns;
 	for (int j=0; j<termsToMultiply.size(); j++) {
+		std::cout << j << "/" << termsToMultiply.size() << std::endl;
 		for (int i=0; i<numOrig; i++) {
 
 			// Start with a copy
-			std::vector<std::pair<int,int>> newEqn = eqns[i];
+			std::vector<std::pair<int,char>> newEqn = eqns[i];
 
 			// Multiply each term
 			for (int k=0; k<newEqn.size(); k++) {
@@ -339,8 +342,9 @@ int main(int argc, char ** argv) {
 	outFile.open(fileName);
 	outFile << newEqns.size() << " " << nextInd << " " << eqns.size() << " " << numVars << std::endl;
 	for (int i=0; i<newEqns.size(); i++) {
+		std::cout << i << "/" << newEqns.size() << std::endl;
 		for (int j=0; j<newEqns[i].size(); j++) {
-			outFile << i << " " << newEqns[i][j].first << " " << newEqns[i][j].second << std::endl;
+			outFile << i << " " << newEqns[i][j].first << " " << int(newEqns[i][j].second) << std::endl;
 		}
 	}
 

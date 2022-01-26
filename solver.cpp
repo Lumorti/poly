@@ -40,7 +40,7 @@ template <typename type> void prettyPrint(std::string pre, std::vector<type> arr
 	std::cout << "}" << std::endl;
 
 	// Reset things for normal output
-	std::cout << std::noshowpos;
+	std::cout << std::defaultfloat << std::noshowpos;
 
 }
 
@@ -91,7 +91,7 @@ void prettyPrint(std::string pre, Eigen::Matrix<type, -1, -1> arr) {
 	}
 
 	// Reset things for normal output
-	std::cout << std::noshowpos;
+	std::cout << std::defaultfloat << std::noshowpos;
 
 }
 
@@ -128,6 +128,7 @@ int main(int argc, char ** argv) {
 	int d = 2;
 	int n = 2;
 	int k = 0;
+	int iters = 100;
 	if (argc > 1) {
 		d = std::stoi(argv[1]);
 	}
@@ -136,6 +137,9 @@ int main(int argc, char ** argv) {
 	}
 	if (argc > 3) {
 		k = std::stoi(argv[3]);
+	}
+	if (argc > 4) {
+		iters = std::stoi(argv[4]);
 	}
 
 	// Load the data from file
@@ -164,11 +168,22 @@ int main(int argc, char ** argv) {
 	Eigen::SparseMatrix<float,Eigen::ColMajor> ACols(arrayHeight, arrayWidth);
 	ACols.setFromTriplets(coefficients.begin(), coefficients.end());
 	//Eigen::SparseMatrix<float,Eigen::RowMajor> ARows(arrayHeight, arrayWidth);
-	//Eigen::SparseMatrix<float,Eigen::ColMajor> AColsMinusOrig(arrayHeight, arrayWidth);
 	//ARows.setFromTriplets(coefficients.begin(), coefficients.end());
+	//Eigen::SparseMatrix<float,Eigen::ColMajor> AColsMinusOrig(arrayHeight, arrayWidth);
 	//AColsMinusOrig.setFromTriplets(coefficientsMinusOrig.begin(), coefficientsMinusOrig.end());
 
-	// Create augmented matrix and compare ranks TODO
+	//int canRemove = 0;
+	//Eigen::SparseMatrix<float,Eigen::ColMajor> blankVec(ACols.rows(), 1);
+	//for (int i=0; i<ACols.cols(); i++) {
+		//if (ACols.col(i).nonZeros() <= 1) {
+			//canRemove++;
+			//ACols.col(i) = blankVec.col(0);
+		//}
+	//}
+	//std::cout << "removed " << canRemove << std::endl;
+	//std::cout << "Matrix is now " << ACols.rows() << " by " << ACols.cols() << " (" << ACols.nonZeros() << " non-zero elements)" << std::endl;
+
+	// Create augmented matrix and compare ranks
 	//Eigen::SparseMatrix<float,Eigen::ColMajor> aug = ACols;
 	//aug.conservativeResize(arrayHeight, arrayWidth+1);
 	//aug.insert(0, arrayWidth) = 1;
@@ -177,11 +192,11 @@ int main(int argc, char ** argv) {
 	//prettyPrint("", ACols);
 	//prettyPrint("", aug);
 
-	// testing https://arxiv.org/pdf/0801.3788.pdf
+	// testing https://arxiv.org/pdf/0801.3788.pdf TODO
 	// 2 2 1 is apparently incon
 	ACols = ACols.transpose();
-	Eigen::VectorXf bVec = Eigen::VectorXf::Zero(ACols.rows());
-	bVec(0) = 1;
+	Eigen::SparseVector<float> bVec(ACols.rows());
+	bVec.coeffRef(0) = 1;
 	//int rank1 = Eigen::SparseQR<Eigen::SparseMatrix<float>, Eigen::COLAMDOrdering<int>>(ACols).rank();
 	//std::cout << "rank of coefficient matrix = " << rank1 << std::endl;
 	//int rank2 = Eigen::SparseQR<Eigen::SparseMatrix<float>, Eigen::COLAMDOrdering<int>>(aug).rank();
@@ -190,13 +205,34 @@ int main(int argc, char ** argv) {
 	//std::cout << "(if yes, polynomial system not possible)" << std::endl;
 	//Eigen::SparseQR<Eigen::SparseMatrix<float>, Eigen::COLAMDOrdering<int>> solver;;
 	Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<float>> solver;
+	solver.setMaxIterations(iters);
+	solver.setTolerance(1e-15);
 	solver.compute(ACols);
 	Eigen::VectorXf sol = solver.solve(bVec);
 	std::cout << "num iterations = " << solver.iterations() << std::endl;
 	std::cout << "|Ax-b|^2 error = " << solver.error() << std::endl;
 	std::cout << (ACols*sol - bVec).squaredNorm() << std::endl;
+	std::cout << (ACols*sol - bVec).norm() << std::endl;
+	//std::cout << std::abs((ACols*sol - bVec).coeffRef(0)) << std::endl;
+	//std::cout << std::endl;
+	//std::cout << sol << std::endl;
+	//std::cout << std::endl;
+	//std::cout << ACols*sol << std::endl;
 	//prettyPrint("", ACols*sol);
 	//prettyPrint("", bVec);
+	
+	//int squareSize = std::max(arrayHeight, arrayWidth);
+	//ACols.conservativeResize(squareSize, squareSize);
+	//bVec.conservativeResize(squareSize);
+	//Eigen::VectorXf opt = Eigen::VectorXf::Zero(squareSize);
+	//float gam = 0.1 / ACols.squaredNorm();
+	//for (int i=0; i<1000; i++) {
+		//opt += gam * (ACols*opt - bVec);
+	//}
+	//std::cout << (ACols*opt - bVec).squaredNorm() << std::endl;
+	//std::cout << std::endl;
+	//std::cout << opt << std::endl;
+	//std::cout << ACols*opt << std::endl;
 
 	return 0;
 
