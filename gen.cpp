@@ -26,15 +26,53 @@ void pretty(std::unordered_map<K, V> const &m) {
 void pretty(std::unordered_map<int,std::string> invertedMap, std::vector<std::pair<int,char>> a) {
 	std::cout << "[";
 	for (int i=0; i<a.size(); i++) {
-		std::cout << invertedMap[a[i].first] << ": " << a[i].second << ", ";
+		std::cout << invertedMap[a[i].first] << ": " << int(a[i].second) << ", ";
 	}
 	std::cout << "]" << std::endl;
 }
 
-// Multiply two terms together, sorting the result TODO
+// Substitute and evaluate an equation
+float eval(std::unordered_map<int,std::string> invertedMap, std::vector<float> ideals, std::vector<std::pair<int,char>> a, int padding) {
+
+	// Add up each term in this equation
+	float total = 0;
+	for (int i=0; i<a.size(); i++) {
+
+		// Start with the constant term
+		float term = int(a[i].second);
+
+		// Go through this 1,3,4
+		std::string label = invertedMap[a[i].first];
+		int firstStart = 0;
+		for (int j=0; j<label.size(); j+=padding) {
+
+			// Extract the index
+			std::string string1 = label.substr(j, padding);
+			int val1 = std::stoi(string1);
+
+			// Multiply by this ideal value
+			term *= ideals[val1];
+
+		}
+
+		// Add this term to the total
+		total += term;
+
+	}
+
+	return total;
+
+}
+
+// Multiply two terms together, sorting the result
 // e.g. 1,3,7, * 2,5, = 1,2,3,5,7,
 // this should be O(n+m)
-std::string multiplyFull(std::string a, std::string b) {
+std::string multiplyFull(std::string a, std::string b, int padding) {
+
+	// If adding to nothing, just return
+	if (a.size() == 0 || b.size() == 0) {
+		return a + b;
+	}
 
 	// Start with a blank string, go through and add the other items
 	std::string newString = "";
@@ -43,59 +81,49 @@ std::string multiplyFull(std::string a, std::string b) {
 	int firstStart = 0;
 	int secondStart = 0;
 	int j = 0;
-	for (int i=0; i<a.size(); i++) {
+	for (int i=0; i<a.size(); i+=padding) {
 
-		// Stop at each comma, we have a new value
-		if (a[i] == ',') {
+		// Get the value
+		std::string string1 = a.substr(i, padding);
+		int val1 = std::stoi(string1);
+
+		// Go through the other string
+		for (j=j; j < b.size(); j+=padding) {
 
 			// Get the value
-			std::string string1 = a.substr(firstStart, i-firstStart);
-			int val1 = std::stoi(string1);
-			firstStart = i+1;
+			std::string string2 = b.substr(j, padding);
+			int val2 = std::stoi(string2);
 
-			// Go through the other string
-			while (j<b.size()) {
-
-				// Stop at each comma, we have a new value
-				if (b[j] == ',') {
-
-					// Get the value
-					std::string string2 = b.substr(secondStart, j-secondStart);
-					int val2 = std::stoi(string2);
-					secondStart = j+1;
-
-					// If this is less, add it
-					if (val2 < val1) {
-						newString += string2 + ",";
-					} else {
-						j -= j-secondStart+1;
-						secondStart = j-1;
-						break;
-					}
-
-				}
-
-				j++;
-
+			// If this is less, add it
+			if (val2 < val1) {
+				newString += string2;
+			} else {
+				//j -= padding-1;
+				break;
 			}
-
-			// Then finally add the first string
-			newString += string1 + ",";
 
 		}
 
+		// Then finally add the first string
+		newString += string1;
+
+	}
+
+	// Add anything in b that bigger than all of a
+	if (j < b.size()) {
+		newString += b.substr(j, b.size()-j);
 	}
 
 	return newString;
 }
 
-// Standard cpp entry point
+// Standard cpp entry point 
 int main(int argc, char ** argv) {
 
 	// Get the problem from the args
 	int d = 2;
 	int n = 2;
-	int k = 0;
+	int kVal = 0;
 	if (argc > 1) {
 		d = std::stoi(argv[1]);
 	}
@@ -103,10 +131,13 @@ int main(int argc, char ** argv) {
 		n = std::stoi(argv[2]);
 	}
 	if (argc > 3) {
-		k = std::stoi(argv[3]);
+		kVal = std::stoi(argv[3]);
 	}
 	int numVarsNonConj = n*d*d;
 	int numVars = 2*n*d*d;
+
+	// The width of all of the digits in the string
+	int paddingWidth = std::floor(std::log(numVars));
 
 	// Init the monomial ordering
 	int conjDelta = numVarsNonConj;
@@ -115,8 +146,11 @@ int main(int argc, char ** argv) {
 	std::unordered_map<int, std::string> invertedMap;
 	std::vector<std::vector<std::pair<int,char>>> eqns;
 	std::vector<std::string> varNames;
+	std::string name = "";
 	for (int i1=0; i1<numVars; i1++) {
-		varNames.push_back(std::to_string(i1));
+		name = std::to_string(i1);
+		name.insert(name.begin(), paddingWidth - name.size(), ' ');
+		varNames.push_back(name);
 	}
 
 	// Generate normalisation equations
@@ -134,7 +168,7 @@ int main(int argc, char ** argv) {
 				int ind = i*d*d + j*d + k;
 
 				// Add to the mapping if it's new
-				std::string term = varNames[ind] + "," + varNames[ind+conjDelta] + ",";
+				std::string term = varNames[ind] + varNames[ind+conjDelta];
 				if (map.find(term) == map.end()) {
 					map[term] = nextInd;
 					invertedMap[nextInd] = term;
@@ -170,8 +204,8 @@ int main(int argc, char ** argv) {
 					int ind2 = i*d*d + k*d + l;
 
 					// Add to the mapping if it's new
-					std::string term1 = varNames[ind1] + "," + varNames[ind2+conjDelta] + ",";
-					std::string term2 = varNames[ind1+conjDelta] + "," + varNames[ind2] + ",";
+					std::string term1 = varNames[ind1] + varNames[ind2+conjDelta];
+					std::string term2 = varNames[ind2] + varNames[ind1+conjDelta];
 					if (map.find(term1) == map.end()) {
 						map[term1] = nextInd;
 						invertedMap[nextInd] = term1;
@@ -221,8 +255,8 @@ int main(int argc, char ** argv) {
 							int var4 = j*d*d + l*d + t2;
 
 							// Add to the mapping if it's new
-							std::string term1 = varNames[var3] + "," + varNames[var2]  + "," + varNames[var1+conjDelta] + "," + varNames[var4+conjDelta] + ",";
-							std::string term2 = varNames[var1] + "," + varNames[var4]  + "," + varNames[var3+conjDelta] + "," + varNames[var2+conjDelta] + ",";
+							std::string term1 = varNames[var3] + varNames[var2]  + varNames[var1+conjDelta] + varNames[var4+conjDelta];
+							std::string term2 = varNames[var1] + varNames[var4]  + varNames[var3+conjDelta] + varNames[var2+conjDelta];
 							if (map.find(term1) == map.end()) {
 								map[term1] = nextInd;
 								invertedMap[nextInd] = term1;
@@ -251,38 +285,49 @@ int main(int argc, char ** argv) {
 		}
 	}
 
-	// TODO combine
-	
 	// Get the polynomial to multiply by
 	std::cout << "Generating moment vector..." << std::endl;
 	std::vector<std::string> termsToMultiply = {""};
-	if (k >= 1) {
+	if (kVal >= 1) {
 		for (int i=0; i<numVars; i++) {
-			termsToMultiply.push_back(std::to_string(i)+",");
+			termsToMultiply.push_back(varNames[i]);
 		}
 	}
-	if (k >= 2) {
+	if (kVal >= 2) {
 		for (int i=0; i<numVars; i++) {
 			for (int j=0; j<numVars; j++) {
-				termsToMultiply.push_back(std::to_string(i)+","+std::to_string(j)+",");
+				termsToMultiply.push_back(varNames[i]+varNames[j]);
 			}
 		}
 	}
-	if (k >= 3) {
+	if (kVal >= 3) {
 		for (int i=0; i<numVars; i++) {
 			for (int j=0; j<numVars; j++) {
 				for (int k=0; k<numVars; k++) {
-					termsToMultiply.push_back(std::to_string(i)+","+std::to_string(j)+","+std::to_string(k)+",");
+					termsToMultiply.push_back(varNames[i]+varNames[j]+varNames[k]);
 				}
 			}
 		}
 	}
-	if (k >= 4) {
+	if (kVal >= 4) {
 		for (int i=0; i<numVars; i++) {
 			for (int j=0; j<numVars; j++) {
 				for (int k=0; k<numVars; k++) {
 					for (int l=0; l<numVars; l++) {
-						termsToMultiply.push_back(std::to_string(i)+","+std::to_string(j)+","+std::to_string(k)+","+std::to_string(l)+",");
+						termsToMultiply.push_back(varNames[i]+varNames[j]+varNames[k]+varNames[l]);
+					}
+				}
+			}
+		}
+	}
+	if (kVal >= 5) {
+		for (int i=0; i<numVars; i++) {
+			for (int j=0; j<numVars; j++) {
+				for (int k=0; k<numVars; k++) {
+					for (int l=0; l<numVars; l++) {
+						for (int m=0; m<numVars; m++) {
+							termsToMultiply.push_back(varNames[i]+varNames[j]+varNames[k]+varNames[l]+varNames[m]);
+						}
 					}
 				}
 			}
@@ -294,7 +339,7 @@ int main(int argc, char ** argv) {
 	int numOrig = eqns.size();
 	std::vector<std::vector<std::pair<int,char>>> newEqns;
 	for (int j=0; j<termsToMultiply.size(); j++) {
-		std::cout << j << "/" << termsToMultiply.size() << std::endl;
+		std::cout << "multiplying " << j << "/" << termsToMultiply.size() << std::endl;
 		for (int i=0; i<numOrig; i++) {
 
 			// Start with a copy
@@ -304,7 +349,7 @@ int main(int argc, char ** argv) {
 			for (int k=0; k<newEqn.size(); k++) {
 
 				// Convert back then multiply
-				std::string term = multiplyFull(invertedMap[newEqn[k].first], termsToMultiply[j]);
+				std::string term = multiplyFull(invertedMap[newEqn[k].first], termsToMultiply[j], paddingWidth);
 
 				// Add to the mapping if it's new
 				if (map.find(term) == map.end()) {
@@ -324,29 +369,41 @@ int main(int argc, char ** argv) {
 		}
 	}
 
-	// Check everything TODO check for k>0
+	// Check everything TODO check 
 	//pretty(map);
 	//std::cout << "before" << std::endl;
 	//for (int i=0; i<eqns.size(); i++) {
 		//pretty(invertedMap, eqns[i]);
 	//}
 	//std::cout << "after" << std::endl;
+	//float sqrt2 = 1.0 / std::sqrt(2.0);
+	//std::vector<float> idealVals;
+	//idealVals = {1, 0,   0, 1,   sqrt2, sqrt2,   sqrt2, -sqrt2, 1, 0,   0, 1,   sqrt2, sqrt2,   sqrt2, -sqrt2};
+	//float maxEval = 0;
 	//for (int i=0; i<newEqns.size(); i++) {
 		//pretty(invertedMap, newEqns[i]);
+		//float v = eval(invertedMap, idealVals, newEqns[i], paddingWidth);
+		//std::cout << v << std::endl;
+		//if (v > maxEval) {
+			//maxEval = v;
+		//}
 	//}
+	//std::cout << "max eval = " << maxEval << std::endl;
 
 	// Write to file
 	std::cout << "Writing file..." << std::endl;
-	std::string fileName = "matrices/d" + std::to_string(d) + "n" + std::to_string(n) + "k" + std::to_string(k) + ".csv"; 
+	std::string fileName = "matrices/d" + std::to_string(d) + "n" + std::to_string(n) + "k" + std::to_string(kVal) + ".csv"; 
 	std::ofstream outFile;
 	outFile.open(fileName);
-	outFile << newEqns.size() << " " << nextInd << " " << eqns.size() << " " << numVars << std::endl;
+	//outFile << newEqns.size() << " " << nextInd << " " << eqns.size() << " " << numVars << std::endl;
 	for (int i=0; i<newEqns.size(); i++) {
-		std::cout << i << "/" << newEqns.size() << std::endl;
+		std::cout << "writing " << i << "/" << newEqns.size() << std::endl;
 		for (int j=0; j<newEqns[i].size(); j++) {
 			outFile << i << " " << newEqns[i][j].first << " " << int(newEqns[i][j].second) << std::endl;
 		}
 	}
+
+	return 0;
 
 }
 	

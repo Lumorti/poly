@@ -148,18 +148,21 @@ int main(int argc, char ** argv) {
 	std::cout << fileName << std::endl;
 	std::ifstream infile(fileName);
 	std::vector<Eigen::Triplet<float>> coefficients;
-	std::vector<Eigen::Triplet<float>> coefficientsMinusOrig;
+	//std::vector<Eigen::Triplet<float>> coefficientsMinusOrig;
 	float val;
 	int x, y;
 	int arrayWidth = 0;
 	int arrayHeight = 0;
 	int numOrig = 0;
 	int numVars = 0;
-	infile >> arrayHeight >> arrayWidth >> numOrig >> numVars;
+	//infile >> arrayHeight >> arrayWidth >> numOrig >> numVars;
 	while (infile >> x >> y >> val) {
 		coefficients.push_back(Eigen::Triplet<float>(x, y, val));
-		if (x > numOrig) {
-			coefficientsMinusOrig.push_back(Eigen::Triplet<float>(x, y, val));
+		if (x > arrayHeight-1) {
+			arrayHeight = x+1;
+		}
+		if (y > arrayWidth-1) {
+			arrayWidth = y+1;
 		}
 	}
 	std::cout << "Matrix is " << arrayHeight << " by " << arrayWidth << " (" << coefficients.size() << " non-zero elements)" << std::endl;
@@ -167,10 +170,11 @@ int main(int argc, char ** argv) {
 	// Create a sparse Eigen array
 	Eigen::SparseMatrix<float,Eigen::ColMajor> ACols(arrayHeight, arrayWidth);
 	ACols.setFromTriplets(coefficients.begin(), coefficients.end());
+	ACols = ACols.transpose();
 	//Eigen::SparseMatrix<float,Eigen::RowMajor> ARows(arrayHeight, arrayWidth);
 	//ARows.setFromTriplets(coefficients.begin(), coefficients.end());
-	//Eigen::SparseMatrix<float,Eigen::ColMajor> AColsMinusOrig(arrayHeight, arrayWidth);
-	//AColsMinusOrig.setFromTriplets(coefficientsMinusOrig.begin(), coefficientsMinusOrig.end());
+
+
 
 	//int canRemove = 0;
 	//Eigen::SparseMatrix<float,Eigen::ColMajor> blankVec(ACols.rows(), 1);
@@ -185,34 +189,30 @@ int main(int argc, char ** argv) {
 
 	// Create augmented matrix and compare ranks
 	//Eigen::SparseMatrix<float,Eigen::ColMajor> aug = ACols;
-	//aug.conservativeResize(arrayHeight, arrayWidth+1);
-	//aug.insert(0, arrayWidth) = 1;
+	//aug.conservativeResize(ACols.rows(), ACols.cols()+1);
+	//aug.insert(0, ACols.cols()) = 1;
 	//aug.makeCompressed();
-
-	//prettyPrint("", ACols);
-	//prettyPrint("", aug);
-
-	// testing https://arxiv.org/pdf/0801.3788.pdf TODO
-	// 2 2 1 is apparently incon
-	ACols = ACols.transpose();
-	Eigen::SparseVector<float> bVec(ACols.rows());
-	bVec.coeffRef(0) = 1;
+	//prettyPrint("col = ", ACols);
+	//prettyPrint("aug = ", aug);
 	//int rank1 = Eigen::SparseQR<Eigen::SparseMatrix<float>, Eigen::COLAMDOrdering<int>>(ACols).rank();
 	//std::cout << "rank of coefficient matrix = " << rank1 << std::endl;
 	//int rank2 = Eigen::SparseQR<Eigen::SparseMatrix<float>, Eigen::COLAMDOrdering<int>>(aug).rank();
 	//std::cout << "rank of augmented matrix = " << rank2 << std::endl;
 	//std::cout << "system is consistent? " << (rank1 < rank2) << std::endl;
 	//std::cout << "(if yes, polynomial system not possible)" << std::endl;
-	//Eigen::SparseQR<Eigen::SparseMatrix<float>, Eigen::COLAMDOrdering<int>> solver;;
+	
+	// testing https://arxiv.org/pdf/0801.3788.pdf TODO
+	// 2 2 1 is apparently incon
+	Eigen::SparseVector<float> bVec(ACols.rows());
+	bVec.coeffRef(0) = 1;
 	Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<float>> solver;
 	solver.setMaxIterations(iters);
 	solver.setTolerance(1e-15);
 	solver.compute(ACols);
 	Eigen::VectorXf sol = solver.solve(bVec);
 	std::cout << "num iterations = " << solver.iterations() << std::endl;
-	std::cout << "|Ax-b|^2 error = " << solver.error() << std::endl;
-	std::cout << (ACols*sol - bVec).squaredNorm() << std::endl;
-	std::cout << (ACols*sol - bVec).norm() << std::endl;
+	std::cout << "solver error = " << solver.error() << std::endl;
+	std::cout << "real error = " << (ACols*sol - bVec).norm() << std::endl;
 	//std::cout << std::abs((ACols*sol - bVec).coeffRef(0)) << std::endl;
 	//std::cout << std::endl;
 	//std::cout << sol << std::endl;
@@ -221,6 +221,10 @@ int main(int argc, char ** argv) {
 	//prettyPrint("", ACols*sol);
 	//prettyPrint("", bVec);
 	
+	//Eigen::SparseQR<Eigen::SparseMatrix<float>, Eigen::COLAMDOrdering<int>> test(ACols);
+	//Eigen::VectorXf testSol = test.solve(bVec);
+	//std::cout << (ACols*testSol - bVec).norm() << std::endl;
+
 	//int squareSize = std::max(arrayHeight, arrayWidth);
 	//ACols.conservativeResize(squareSize, squareSize);
 	//bVec.conservativeResize(squareSize);
@@ -235,95 +239,5 @@ int main(int argc, char ** argv) {
 	//std::cout << ACols*opt << std::endl;
 
 	return 0;
-
-	// Perform row reduction without swaps TODO
-	//std::cout << "Solving..." << std::endl;
-	//std::vector<bool> rowAllowed(arrayHeight, true);
-	//float factor = 1;
-	//for (long int j=0; j<numOrig; j++) {
-		//std::cout << j << " / " << numOrig << std::endl;
-
-		//// Get the non-zero elements of this row
-		//std::vector<bool> colAllowed(arrayWidth, true);
-		//std::vector<int> colsToProcess;
-		//for (Eigen::SparseMatrix<float,Eigen::RowMajor>::InnerIterator itRow(ARows, j); itRow; ++itRow) {
-			//colsToProcess.push_back(itRow.col());
-		//}
-
-		//// For each non-zero element of this row
-		//while (colsToProcess.size() > 0 && ARows.row(j).nonZeros() < 100) {
-			//int currentCol = colsToProcess.front();
-			//colsToProcess.erase(colsToProcess.begin());
-			//if (!colAllowed[currentCol]) {
-				//continue;
-			//}
-			//colAllowed[currentCol] = false;
-
-			//// Try to first pick a pivot from outside the orig vectors
-			//int pivotRow = -1;
-			//int pivotVal = -1;
-			//for (Eigen::SparseMatrix<float>::InnerIterator itCol(ACols, currentCol); itCol; ++itCol) {
-				//if (itCol.row() >= numOrig && rowAllowed[itCol.row()]) {
-					//pivotRow = itCol.row();
-					//pivotVal = itCol.value();
-					//break;
-				//}
-			//}
-
-			//// If can't find something, use one of the orig vectors
-			//if (pivotRow == -1) {
-				//for (Eigen::SparseMatrix<float>::InnerIterator itCol(ACols, currentCol); itCol; ++itCol) {
-					//if (itCol.row() != j) {
-						//pivotRow = itCol.row();
-						//pivotVal = itCol.value();
-						//break;
-					//}
-				//}
-			//}
-
-			//// If there is another possible pivot
-			//if (pivotRow >= 0) {
-
-				//// Stop this row from being used as the pivot for a different column
-				//rowAllowed[pivotRow] = false;
-
-				//// For all rows where this elemenet in non-zero
-				//for (Eigen::SparseMatrix<float>::InnerIterator itCol(ACols, currentCol); itCol; ++itCol) {
-
-					//// Modify all the other rows
-					//if (itCol.row() != pivotRow && itCol.row() != j) {
-						//ARows.row(itCol.row()) = (ARows.row(itCol.row()) - (itCol.value() / pivotVal) * ARows.row(pivotRow)).pruned(1e-5);
-
-					//// Modify the top row, updating the list of things to do TODO
-					//} else if (itCol.row() != pivotRow) {
-						//ARows.row(itCol.row()) = (ARows.row(itCol.row()) - (itCol.value() / pivotVal) * ARows.row(pivotRow)).pruned(1e-5);
-						//for (Eigen::SparseMatrix<float,Eigen::RowMajor>::InnerIterator itRow(ARows, pivotRow); itRow; ++itRow) {
-							//colsToProcess.push_back(itRow.col());
-						//}
-					//}
-
-				//}
-
-				//// Recalculate the col array TODO do smaller updates
-				//ACols = Eigen::SparseMatrix<float,Eigen::ColMajor>(ARows);
-
-			//}
-
-		//}
-		
-	//}
-
-	//// Count the rows with all zero
-	//int numZero = 0;
-	//for (int l=0; l<numOrig; l++) {
-		//if (ARows.row(l).squaredNorm() <= 1e-3) {
-			//numZero += 1;
-		//}
-	//}
-
-	////prettyPrint("after = ", B);
-	//std::cout << "num zero = " << numZero << std::endl;
-	//std::cout << "num indep eqns = " << numOrig-numZero << std::endl;
-	//std::cout << "num vars = " << numVars << std::endl;
 
 }
