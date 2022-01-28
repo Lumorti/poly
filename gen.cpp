@@ -14,12 +14,32 @@
 // TODO
 // https://www.math.ucdavis.edu/~deloera/RECENT_WORK/jsc09_issac08.pdf
 
+// Generate/add the vector of r-combinations of 1...n
+void genCombinations(std::vector<std::vector<int>> &combs, int n, int r) {
+
+	// https://stackoverflow.com/questions/9430568/generating-combinations-in-c
+	std::vector<bool> v(n);
+	std::fill(v.begin(), v.begin() + r, true);
+	do {
+		std::vector<int> comb;
+		for (int i=0; i<n; ++i) {
+            if (v[i]) {
+				comb.push_back(i);
+            }
+        }
+		combs.push_back(comb);
+	} while (std::prev_permutation(v.begin(), v.end()));
+
+}
+
 // Print an unordered map
 template<typename K, typename V>
 void pretty(std::unordered_map<K, V> const &m) {
+	std::cout << "{ ";
     for (auto const &pair: m) {
-        std::cout << "{" << pair.first << ": " << pair.second << "}\n";
+        std::cout << pair.first << ": " << pair.second << ", ";
     }
+	std::cout << "} " << std::endl;;
 }
 
 // Print an equation
@@ -29,6 +49,29 @@ void pretty(std::unordered_map<int,std::string> invertedMap, std::vector<std::pa
 		std::cout << invertedMap[a[i].first] << ": " << int(a[i].second) << ", ";
 	}
 	std::cout << "]" << std::endl;
+}
+
+// Print an equation
+void pretty(std::vector<std::pair<std::string,float>> eqn) {
+	std::cout << "[";
+	for (int i=0; i<eqn.size(); i++) {
+		std::cout << eqn[i].first << ": " << eqn[i].second << ", ";
+	}
+	std::cout << "]" << std::endl;
+}
+
+// Add equation b to a in-place, scaling by c TODO
+void addEqns(std::unordered_map<std::string,float> &a, std::unordered_map<std::string,float> b, float c) {
+	for (auto& it: b) {
+		if (a.find(it.first) != a.end()) {
+			a[it.first] += it.second * c;
+			if (std::abs(a[it.first]) < 1e-5) {
+				a.erase(it.first);
+			}
+		} else {
+			a[it.first] = it.second * c;
+		}
+	}
 }
 
 // Substitute and evaluate an equation
@@ -286,90 +329,90 @@ int main(int argc, char ** argv) {
 	}
 
 	// Get the polynomial to multiply by
-	std::cout << "Generating moment vector..." << std::endl;
-	std::vector<std::string> termsToMultiply = {""};
-	if (kVal >= 1) {
-		for (int i=0; i<numVars; i++) {
-			termsToMultiply.push_back(varNames[i]);
-		}
-	}
-	if (kVal >= 2) {
-		for (int i=0; i<numVars; i++) {
-			for (int j=0; j<numVars; j++) {
-				termsToMultiply.push_back(varNames[i]+varNames[j]);
-			}
-		}
-	}
-	if (kVal >= 3) {
-		for (int i=0; i<numVars; i++) {
-			for (int j=0; j<numVars; j++) {
-				for (int k=0; k<numVars; k++) {
-					termsToMultiply.push_back(varNames[i]+varNames[j]+varNames[k]);
-				}
-			}
-		}
-	}
-	if (kVal >= 4) {
-		for (int i=0; i<numVars; i++) {
-			for (int j=0; j<numVars; j++) {
-				for (int k=0; k<numVars; k++) {
-					for (int l=0; l<numVars; l++) {
-						termsToMultiply.push_back(varNames[i]+varNames[j]+varNames[k]+varNames[l]);
-					}
-				}
-			}
-		}
-	}
-	if (kVal >= 5) {
-		for (int i=0; i<numVars; i++) {
-			for (int j=0; j<numVars; j++) {
-				for (int k=0; k<numVars; k++) {
-					for (int l=0; l<numVars; l++) {
-						for (int m=0; m<numVars; m++) {
-							termsToMultiply.push_back(varNames[i]+varNames[j]+varNames[k]+varNames[l]+varNames[m]);
-						}
-					}
-				}
-			}
-		}
-	}
+	//std::cout << "Generating moment vector..." << std::endl;
+	//std::vector<std::string> termsToMultiply = {""};
+	//if (kVal >= 1) {
+		//for (int i=0; i<numVars; i++) {
+			//termsToMultiply.push_back(varNames[i]);
+		//}
+	//}
+	//if (kVal >= 2) {
+		//for (int i=0; i<numVars; i++) {
+			//for (int j=0; j<numVars; j++) {
+				//termsToMultiply.push_back(varNames[i]+varNames[j]);
+			//}
+		//}
+	//}
+	//if (kVal >= 3) {
+		//for (int i=0; i<numVars; i++) {
+			//for (int j=0; j<numVars; j++) {
+				//for (int k=0; k<numVars; k++) {
+					//termsToMultiply.push_back(varNames[i]+varNames[j]+varNames[k]);
+				//}
+			//}
+		//}
+	//}
+	//if (kVal >= 4) {
+		//for (int i=0; i<numVars; i++) {
+			//for (int j=0; j<numVars; j++) {
+				//for (int k=0; k<numVars; k++) {
+					//for (int l=0; l<numVars; l++) {
+						//termsToMultiply.push_back(varNames[i]+varNames[j]+varNames[k]+varNames[l]);
+					//}
+				//}
+			//}
+		//}
+	//}
+	//if (kVal >= 5) {
+		//for (int i=0; i<numVars; i++) {
+			//for (int j=0; j<numVars; j++) {
+				//for (int k=0; k<numVars; k++) {
+					//for (int l=0; l<numVars; l++) {
+						//for (int m=0; m<numVars; m++) {
+							//termsToMultiply.push_back(varNames[i]+varNames[j]+varNames[k]+varNames[l]+varNames[m]);
+						//}
+					//}
+				//}
+			//}
+		//}
+	//}
 
-	// Multiply each original equation by each element of this polynomial 
-	std::cout << "Multiplying equations..." << std::endl;
-	int numOrig = eqns.size();
-	std::vector<std::vector<std::pair<int,char>>> newEqns;
-	for (int j=0; j<termsToMultiply.size(); j++) {
-		std::cout << "multiplying " << j << "/" << termsToMultiply.size() << std::endl;
-		for (int i=0; i<numOrig; i++) {
+	//// Multiply each original equation by each element of this polynomial 
+	//std::cout << "Multiplying equations..." << std::endl;
+	//int numOrig = eqns.size();
+	//std::vector<std::vector<std::pair<int,char>>> newEqns;
+	//for (int j=0; j<termsToMultiply.size(); j++) {
+		////std::cout << "multiplying " << j << "/" << termsToMultiply.size() << std::endl;
+		//for (int i=0; i<numOrig; i++) {
 
-			// Start with a copy
-			std::vector<std::pair<int,char>> newEqn = eqns[i];
+			//// Start with a copy
+			//std::vector<std::pair<int,char>> newEqn = eqns[i];
 
-			// Multiply each term
-			for (int k=0; k<newEqn.size(); k++) {
+			//// Multiply each term
+			//for (int k=0; k<newEqn.size(); k++) {
 
-				// Convert back then multiply
-				std::string term = multiplyFull(invertedMap[newEqn[k].first], termsToMultiply[j], paddingWidth);
+				//// Convert back then multiply
+				//std::string term = multiplyFull(invertedMap[newEqn[k].first], termsToMultiply[j], paddingWidth);
 
-				// Add to the mapping if it's new
-				if (map.find(term) == map.end()) {
-					map[term] = nextInd;
-					invertedMap[nextInd] = term;
-					nextInd++;
-				}
+				//// Add to the mapping if it's new
+				//if (map.find(term) == map.end()) {
+					//map[term] = nextInd;
+					//invertedMap[nextInd] = term;
+					//nextInd++;
+				//}
 				
-				// Update this term
-				newEqn[k].first = map[term];
+				//// Update this term
+				//newEqn[k].first = map[term];
 
-			}
+			//}
 
-			// Add to the new array
-			newEqns.push_back(newEqn);
+			//// Add to the new array
+			//newEqns.push_back(newEqn);
 
-		}
-	}
+		//}
+	//}
 
-	// Check everything TODO check 
+	// Check everything
 	//pretty(map);
 	//std::cout << "before" << std::endl;
 	//for (int i=0; i<eqns.size(); i++) {
@@ -390,18 +433,167 @@ int main(int argc, char ** argv) {
 	//}
 	//std::cout << "max eval = " << maxEval << std::endl;
 
-	// Write to file
-	std::cout << "Writing file..." << std::endl;
-	std::string fileName = "matrices/d" + std::to_string(d) + "n" + std::to_string(n) + "k" + std::to_string(kVal) + ".csv"; 
-	std::ofstream outFile;
-	outFile.open(fileName);
-	//outFile << newEqns.size() << " " << nextInd << " " << eqns.size() << " " << numVars << std::endl;
-	for (int i=0; i<newEqns.size(); i++) {
-		std::cout << "writing " << i << "/" << newEqns.size() << std::endl;
-		for (int j=0; j<newEqns[i].size(); j++) {
-			outFile << i << " " << newEqns[i][j].first << " " << int(newEqns[i][j].second) << std::endl;
+	// TODO try low-memory reduction method
+	std::vector<std::unordered_map<std::string,float>> newnewEqns;
+	std::unordered_map<std::string,float> mainEqn;
+	//for (int i=0; i<eqns.size(); i++) {
+		//std::unordered_map<std::string,float> newE;
+		//for (int j=0; j<eqns[i].size(); j++) {
+			//newE[invertedMap[eqns[i][j].first]] = float(eqns[i][j].second);
+		//}
+		//newnewEqns.push_back(newE);
+	//}
+
+	newnewEqns.push_back({{"  0  1", 1}, {"  0", 1}, {"", 1}});
+	newnewEqns.push_back({{"  0", 1}, {"", -1}});
+	newnewEqns.push_back({{"  1", 1}, {"", -1}});
+
+	// Use the negative of the last equation as a starting point
+	mainEqn = newnewEqns[newnewEqns.size()-1];
+	for (auto& it: mainEqn) {
+		it.second = -it.second;
+	}
+
+	std::cout << "equations available:" << std::endl;
+	for (int i=0; i<newnewEqns.size(); i++) {
+		pretty(newnewEqns[i]);
+	}
+	std::cout << "main equation:" << std::endl;
+	pretty(mainEqn);
+
+	std::unordered_map<std::string,std::unordered_map<std::string,float>> eqnToRemoveTerm;
+	eqnToRemoveTerm[""] = mainEqn;
+	std::string termToRemove = "";
+	int termOrder = 0;
+
+	int maxLevel = 3;
+	std::vector<std::vector<std::vector<int>>> combs(maxLevel);
+	std::vector<int> blank;
+	for (int i=0; i<maxLevel; i++) {
+		for (int j=i+1; j>0; j--) {
+			genCombinations(combs[i], i+1, j);
+		}
+		combs[i].push_back(blank);
+	}
+
+	std::vector<std::vector<std::vector<int>>> negCombs(combs.size());
+	for (int l=0; l<combs.size(); l++) {
+		std::vector<int> full;
+		for (int i=0; i<l+1; i++) {
+			full.push_back(i);
+		}
+		for (int i=0; i<combs[l].size(); i++) {
+			std::vector<int> fullCopy = full;
+			for (int j=0; j<combs[l][i].size(); j++) {
+				fullCopy.erase(std::find(fullCopy.begin(), fullCopy.end(), combs[l][i][j]));
+			}
+			negCombs[l].push_back(fullCopy);
 		}
 	}
+
+	for (int ord=0; ord<maxLevel; ord++) {
+
+		for (int iter=0; iter<3; iter++) {
+
+			termToRemove = "";
+			for (auto& it: mainEqn) {
+				if (it.first.size() > 0) {
+					termToRemove = it.first;
+					termOrder = termToRemove.size() / paddingWidth - 1;
+					if (termOrder == ord) {
+						break;
+					}
+				}
+			}
+			if (termToRemove.size() == 0) {
+				break;
+			}
+			std::cout << "trying to remove " << termToRemove << " (order " << termOrder << ")" << std::endl;
+			bool termRemoved = false;
+
+			std::unordered_map<std::string,float> foundEqn;
+			std::string lookingFor = "";
+			std::string toMultiply = "";
+			for (int k=0; k<combs[termOrder].size(); k++) {
+
+				lookingFor = "";
+				toMultiply = "";
+				for (int l=0; l<combs[termOrder][k].size(); l++) {
+					lookingFor += termToRemove.substr(combs[termOrder][k][l]*paddingWidth, paddingWidth);
+				}
+				for (int l=0; l<negCombs[termOrder][k].size(); l++) {
+					toMultiply += termToRemove.substr(negCombs[termOrder][k][l]*paddingWidth, paddingWidth);
+				}
+				std::cout << "looking for '" << lookingFor  << "' (multiply by '" << toMultiply << "')" << std::endl;
+
+				// See if this term is in one of the equations
+				for (int i=0; i<newnewEqns.size(); i++) {
+					if (newnewEqns[i].find(lookingFor) != newnewEqns[i].end()) {
+						std::unordered_map<std::string,float> checkEqn = newnewEqns[i];
+
+						std::cout << "found:" << std::endl;
+						pretty(checkEqn);
+
+						std::unordered_map<std::string,float> mulEqn;
+						for (auto& it: checkEqn) {
+							std::string t = multiplyFull(it.first, toMultiply, paddingWidth);
+							mulEqn[t] = it.second;
+						}
+
+						// Reduce this using the equations that have already reduced the main
+						for (auto& it: mulEqn) {
+							if (eqnToRemoveTerm.find(it.first) != eqnToRemoveTerm.end()) {
+								addEqns(mulEqn, eqnToRemoveTerm[it.first], -mulEqn[it.first] / eqnToRemoveTerm[it.first][it.first]);
+							}
+						}
+
+						std::cout << "multiplied and reduced:" << std::endl;
+						pretty(mulEqn);
+
+						// See if it's still valid after reduction
+						if (mulEqn.find(termToRemove) != mulEqn.end()) {
+
+							eqnToRemoveTerm[termToRemove] = mulEqn;
+							addEqns(mainEqn, mulEqn, -mainEqn[termToRemove] / mulEqn[termToRemove]);
+
+							std::cout << "new main equation:" << std::endl;
+							pretty(mainEqn);
+							
+							termRemoved = true;
+							break;
+
+						}
+
+					}
+
+				}
+
+				if (termRemoved) {
+					break;
+				}
+
+			}
+
+			if (!termRemoved) {
+				std::cout << "couldn't solve system" << std::endl;
+				return 0;
+			}
+
+		}
+
+	}
+
+	// Write to file
+	//std::cout << "Writing file..." << std::endl;
+	//std::string fileName = "matrices/d" + std::to_string(d) + "n" + std::to_string(n) + "k" + std::to_string(kVal) + ".csv"; 
+	//std::ofstream outFile;
+	//outFile.open(fileName);
+	//for (int i=0; i<newEqns.size(); i++) {
+		//std::cout << "writing " << i << "/" << newEqns.size() << std::endl;
+		//for (int j=0; j<newEqns[i].size(); j++) {
+			//outFile << i << " " << newEqns[i][j].first << " " << int(newEqns[i][j].second) << std::endl;
+		//}
+	//}
 
 	return 0;
 
