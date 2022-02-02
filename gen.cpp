@@ -64,6 +64,16 @@ void pretty(std::unordered_map<int,std::string> invertedMap, std::vector<std::pa
 }
 
 // Print an equation
+std::string makePretty(std::unordered_map<std::string,float> eqn) {
+	std::string ret = "[";
+    for (auto const &pair: eqn) {
+        ret += pair.first + ": " + std::to_string(pair.second) + ", ";
+    }
+	ret += "]";
+	return ret;
+}
+
+// Print an equation
 void pretty(std::vector<std::pair<std::string,float>> eqn) {
 	std::cout << "[";
 	for (int i=0; i<eqn.size(); i++) {
@@ -351,6 +361,55 @@ int main(int argc, char ** argv) {
 		}
 	}
 
+	//map.clear();
+	//invertedMap.clear();
+	//eqns.clear();
+	//nextInd = 0;
+	//numVars = 4;
+
+	//std::string newTerm = "";
+
+	//newTerm = "";
+	//map[newTerm] = nextInd;
+	//invertedMap[nextInd] = newTerm;
+	//nextInd++;
+
+	//newTerm = "  0";
+	//map[newTerm] = nextInd;
+	//invertedMap[nextInd] = newTerm;
+	//nextInd++;
+
+	//newTerm = "  1";
+	//map[newTerm] = nextInd;
+	//invertedMap[nextInd] = newTerm;
+	//nextInd++;
+
+	//newTerm = "  2";
+	//map[newTerm] = nextInd;
+	//invertedMap[nextInd] = newTerm;
+	//nextInd++;
+
+	//newTerm = "  3";
+	//map[newTerm] = nextInd;
+	//invertedMap[nextInd] = newTerm;
+	//nextInd++;
+
+	//newTerm = "  0  1";
+	//map[newTerm] = nextInd;
+	//invertedMap[nextInd] = newTerm;
+	//nextInd++;
+
+	//newTerm = "  2  3";
+	//map[newTerm] = nextInd;
+	//invertedMap[nextInd] = newTerm;
+	//nextInd++;
+
+	//eqns.push_back({{0, -1}, {1, 1}});
+	//eqns.push_back({{0, -1}, {2, 1}});
+	//eqns.push_back({{0, -1}, {3, 1}});
+	//eqns.push_back({{0, -1}, {4, 1}});
+	//eqns.push_back({{0, 1}, {5, -1}, {6, -1}});
+
 	// Get the polynomial to multiply by
 	//std::cout << "Generating moment vector..." << std::endl;
 	//std::vector<std::string> termsToMultiply = {""};
@@ -435,70 +494,81 @@ int main(int argc, char ** argv) {
 		//}
 	//}
 
-	// Check everything
-	//pretty(map);
-	//std::cout << "before" << std::endl;
-	//for (int i=0; i<eqns.size(); i++) {
-		//pretty(invertedMap, eqns[i]);
-	//}
-	//std::cout << "after" << std::endl;
-	//float sqrt2 = 1.0 / std::sqrt(2.0);
-	//std::vector<float> idealVals;
-	//idealVals = {1, 0,   0, 1,   sqrt2, sqrt2,   sqrt2, -sqrt2, 1, 0,   0, 1,   sqrt2, sqrt2,   sqrt2, -sqrt2};
-	//float maxEval = 0;
+	//// Check everything
+	////pretty(map);
+	////std::cout << "before" << std::endl;
+	////for (int i=0; i<eqns.size(); i++) {
+		////pretty(invertedMap, eqns[i]);
+	////}
+	////std::cout << "after" << std::endl;
+	////float sqrt2 = 1.0 / std::sqrt(2.0);
+	////std::vector<float> idealVals;
+	////idealVals = {1, 0,   0, 1,   sqrt2, sqrt2,   sqrt2, -sqrt2, 1, 0,   0, 1,   sqrt2, sqrt2,   sqrt2, -sqrt2};
+	////float maxEval = 0;
+	////for (int i=0; i<newEqns.size(); i++) {
+		////pretty(invertedMap, newEqns[i]);
+		////float v = eval(invertedMap, idealVals, newEqns[i], paddingWidth);
+		////std::cout << v << std::endl;
+		////if (v > maxEval) {
+			////maxEval = v;
+		////}
+	////}
+	////std::cout << "max eval = " << maxEval << std::endl;
+
+	//// Write to file
+	//std::cout << "Writing file..." << std::endl;
+	//std::string fileName = "matrices/d" + std::to_string(d) + "n" + std::to_string(n) + "k" + std::to_string(kVal) + ".csv"; 
+	//std::ofstream outFile;
+	//outFile.open(fileName);
 	//for (int i=0; i<newEqns.size(); i++) {
-		//pretty(invertedMap, newEqns[i]);
-		//float v = eval(invertedMap, idealVals, newEqns[i], paddingWidth);
-		//std::cout << v << std::endl;
-		//if (v > maxEval) {
-			//maxEval = v;
+		//std::cout << "writing " << i << "/" << newEqns.size() << std::endl;
+		//for (int j=0; j<newEqns[i].size(); j++) {
+			//outFile << i << " " << newEqns[i][j].first << " " << int(newEqns[i][j].second) << std::endl;
 		//}
 	//}
-	//std::cout << "max eval = " << maxEval << std::endl;
+
+	//return 0;
 
 	// A low-memory reduction method
 	std::vector<std::unordered_map<std::string,float>> newnewEqns;
 	std::unordered_map<std::string,float> mainEqn;
 
-	// System is obviously inconsistent, but method doesn't detect it TODO
-	paddingWidth = 3;
-	newnewEqns.push_back({{" 17", 1}, {"", -1}});
-	newnewEqns.push_back({{"  0", 1}, {"", -1}});
-	newnewEqns.push_back({{" 16", 1}, {"", -1}});
-	newnewEqns.push_back({{"  1", 1}, {"", -1}});
-	newnewEqns.push_back({{"  1 17", 1}, {"  0 16", 1}, {"", -1}});
+	// Test system
+	if (argc == 1) {
+		paddingWidth = 3;
+		newnewEqns.push_back({{" 17", 1}, {"", -1}});
+		newnewEqns.push_back({{"  0", 1}, {"", -1}});
+		newnewEqns.push_back({{" 16", 1}, {"", -1}});
+		newnewEqns.push_back({{"  1", 1}, {"", -1}});
+		newnewEqns.push_back({{"  1 17", 1}, {"  0 16", 1}, {"", -1}});
 
-	//newnewEqns.push_back({{"  1", 1}});
-	//newnewEqns.push_back({{" 17", 1}});
-	//newnewEqns.push_back({{"  3", 1}, {"", -1}});
-	//newnewEqns.push_back({{" 19", 1}, {"", -1}});
-	//newnewEqns.push_back({{"  2", 1}});
-	//newnewEqns.push_back({{" 18", 1}});
+	// Use the real deal
+	} else {
 
-	//paddingWidth = 2;
-	//newnewEqns.push_back({{" 0", 1}, {"", -1}});
-	//newnewEqns.push_back({{" 1", 1}, {"", -1}});
-	//newnewEqns.push_back({{" 0 1", 1}, {" 0", 1}, {"", 1}});
-	
-	//for (int i=0; i<eqns.size(); i++) {
-		//std::unordered_map<std::string,float> newE;
-		//for (int j=0; j<eqns[i].size(); j++) {
-			//newE[invertedMap[eqns[i][j].first]] = float(eqns[i][j].second);
-		//}
-		//newnewEqns.push_back(newE);
-	//}
+		// Get the equations into a nice form
+		for (int i=0; i<eqns.size(); i++) {
+			std::unordered_map<std::string,float> newE;
+			for (int j=0; j<eqns[i].size(); j++) {
+				newE[invertedMap[eqns[i][j].first]] = float(eqns[i][j].second);
+			}
+			newnewEqns.push_back(newE);
+		}
+
+	}
 
 	// TODO settings
-	int maxLevel = 20;
-	int startingEqn = newnewEqns.size()-1;
+	int maxLevel = 10;
+	//int startingEqn = newnewEqns.size()-1;
 
 	// Use the negative of the last equation as a starting point
-	mainEqn = newnewEqns[startingEqn];
-	newnewEqns.erase(newnewEqns.begin()+startingEqn);
-	//mainEqn = newnewEqns[newnewEqns.size()-1];
-	for (auto& it: mainEqn) {
-		it.second = -it.second;
-	}
+	mainEqn[""] = 1;
+	//mainEqn = newnewEqns[startingEqn];
+	//newnewEqns.erase(newnewEqns.end()+startingEqn);
+	//for (auto& it: mainEqn) {
+		//it.second = -it.second;
+	//}
+
+	std::vector<std::pair<std::string, float>> certificate;
 
 	// List the equations available
 	std::cout << "equations available:" << std::endl;
@@ -507,10 +577,11 @@ int main(int argc, char ** argv) {
 	}
 	std::cout << "main equation:" << std::endl;
 	pretty(mainEqn);
+	//std::vector<bool> eqnAllowed(new);
 
 	// The list of equations that can be used to remove terms
 	std::unordered_map<std::string,std::unordered_map<std::string,float>> eqnToRemoveTerm;
-	eqnToRemoveTerm[""] = mainEqn;
+	//eqnToRemoveTerm[""] = mainEqn;
 	std::string termToRemove = "";
 	int termOrder = 0;
 
@@ -559,23 +630,26 @@ int main(int argc, char ** argv) {
 	for (int ord=1; ord<maxLevel; ord++) {
 
 		// Keep repeating for a while
-		for (int iter=0; iter<1000000; iter++) {
+		for (int iter=0; iter<10000000; iter++) {
 
-			// Try to find a term in the main equation of this order
-			termToRemove = "";
-			for (auto& it: mainEqn) {
-				if (it.first.size() > 0) {
-					termOrder = it.first.size() / paddingWidth - 1;
-					if (termOrder <= ord) {
-						termToRemove = it.first;
-						break;
-					}
-				}
-			}
-			if (termToRemove.size() == 0) {
+			// Stop if we've reached zero
+			if (mainEqn.size() == 0) {
 				break;
 			}
-			std::cout << "trying to remove " << termToRemove << " (order " << termOrder << ")" << std::endl;
+
+			// Try to find a term in the main equation of this order
+			termToRemove = "x";
+			for (auto& it: mainEqn) {
+				termOrder = it.first.size() / paddingWidth - 1;
+				if (termOrder <= ord) {
+					termToRemove = it.first;
+					break;
+				}
+			}
+			if (termToRemove == "x") {
+				break;
+			}
+			std::cout << std::endl << "trying to remove '" << termToRemove << "' (order " << termOrder << ")" << std::endl;
 			bool termRemoved = false;
 
 			// Try to find something that could be multiplied to make this
@@ -605,60 +679,61 @@ int main(int argc, char ** argv) {
 
 					// See if this term is in one of the equations
 					for (int i=0; i<newnewEqns.size(); i++) {
-						if (newnewEqns[i].find(lookingFor) != newnewEqns[i].end()) {
-							std::unordered_map<std::string,float> checkEqn = newnewEqns[i];
+						std::unordered_map<std::string,float> checkEqn = newnewEqns[i];
 
-							// TODO prevent inifinite
-							//if (lookingFor == "" && newnewEqns[i].find(toMultiply.substr(0, paddingWidth)) != newnewEqns[i].end()) {
-								//std::cout << "skipped" << std::endl;
-								//continue;
-							//}
+						// Multiply this by the factor needed to reach the term to remove
+						std::unordered_map<std::string,float> mulEqn;
+						for (auto& it: checkEqn) {
+							std::string t = multiplyFull(it.first, toMultiply, paddingWidth);
+							mulEqn[t] = it.second;
+						}
 
-							// Multiply this by the factor needed to reach the term to remove
-							std::unordered_map<std::string,float> mulEqn;
-							for (auto& it: checkEqn) {
-								std::string t = multiplyFull(it.first, toMultiply, paddingWidth);
-								mulEqn[t] = it.second;
-							}
+						//std::cout << "before reduction:" << std::endl;
+						//pretty(mulEqn);
 
-							// Reduce this using the equations that have already reduced the main
-							bool somethingRemoved = true;
-							while (somethingRemoved) {
-								somethingRemoved = false;
-								for (auto& it: mulEqn) {
-									if (std::abs(it.second) > 1e-8 && eqnToRemoveTerm.find(it.first) != eqnToRemoveTerm.end()) {
-										addEqns(mulEqn, eqnToRemoveTerm[it.first], -mulEqn[it.first] / eqnToRemoveTerm[it.first][it.first]);
-										somethingRemoved = true;
-									}
+						// Reduce this using the equations that have already reduced the main
+						bool somethingRemoved = true;
+						while (somethingRemoved) {
+							somethingRemoved = false;
+							for (auto& it: mulEqn) {
+								if (std::abs(it.second) > 1e-8 && eqnToRemoveTerm.find(it.first) != eqnToRemoveTerm.end()) {
+									addEqns(mulEqn, eqnToRemoveTerm[it.first], -mulEqn[it.first] / eqnToRemoveTerm[it.first][it.first]);
+									somethingRemoved = true;
 								}
 							}
-							cleanEqn(mulEqn);
+						}
+						cleanEqn(mulEqn);
 
-							//std::cout << "after reduction:" << std::endl;
-							//prettySorted(mulEqn);
+						//std::cout << "after reduction:" << std::endl;
+						//pretty(mulEqn);
 
-							// See if it's still valid after reduction
-							if (mulEqn.find(termToRemove) != mulEqn.end()) {
+						// See if it's still valid after reduction
+						if (mulEqn.find(termToRemove) != mulEqn.end()) {
 
-								// This can now be used to reduce other equations
-								eqnToRemoveTerm[termToRemove] = mulEqn;
+							// This can now be used to reduce other equations
+							eqnToRemoveTerm[termToRemove] = mulEqn;
 
-								std::cout << "found with '" << lookingFor  << "' (multiply by '" << toMultiply << "')" << std::endl;
+							// Keep track of all of the things needed to make this TODO
 
-								// Reduce the main equations
-								addEqns(mainEqn, mulEqn, -mainEqn[termToRemove] / mulEqn[termToRemove]);
-								cleanEqn(mainEqn);
-								std::cout << "new main equation:" << std::endl;
-								prettySorted(mainEqn);
+							std::cout << "found with '" << lookingFor  << "' (multiply by '" << toMultiply << "')" << std::endl;
+							//std::cout << "will now reduce '" << termToRemove  << "' with:" << std::endl;
+							//pretty(mulEqn);
 
-								// TODO to avoid getting stuck
-								std::rotate(newnewEqns.begin(),newnewEqns.begin()+1,newnewEqns.end());
-								
-								// Stop trying to remove this term
-								termRemoved = true;
-								break;
+							// Reduce the main equations
+							float factor = -mainEqn[termToRemove] / mulEqn[termToRemove];
+							addEqns(mainEqn, mulEqn, factor);
+							cleanEqn(mainEqn);
 
-							}
+							// Keep track of the sums for the certificate
+							//certificate.push_back({toMultiply + to_string(i), factor});
+
+							// Output
+							std::cout << "new main equation:" << std::endl;
+							prettySorted(mainEqn);
+
+							// Stop trying to remove this term
+							termRemoved = true;
+							break;
 
 						}
 
@@ -682,12 +757,6 @@ int main(int argc, char ** argv) {
 			if (!termRemoved) {
 				std::cout << "couldn't solve system" << std::endl;
 				return 0;
-
-			// If something was removed, check if it's now == 1
-			} else if (mainEqn.size() == 1) {
-				std::cout << "system reduced to 1" << std::endl;
-				return 0;
-
 			}
 
 		}
@@ -695,6 +764,11 @@ int main(int argc, char ** argv) {
 	}
 
 	prettySorted(mainEqn);
+
+	//std::cout << "certificate: " << std::endl;
+	//for (int i=0; i<certificate.size(); i++) {
+		//std::cout << certificate[i].first << ": " << certificate[i].second << std::endl;
+	//}
 
 	// Check what this would give if evaluated
 	std::vector<float> ids(numVars);
@@ -712,18 +786,6 @@ int main(int argc, char ** argv) {
 		tot += val;
 	}
 	std::cout << tot << std::endl;
-
-	// Write to file
-	//std::cout << "Writing file..." << std::endl;
-	//std::string fileName = "matrices/d" + std::to_string(d) + "n" + std::to_string(n) + "k" + std::to_string(kVal) + ".csv"; 
-	//std::ofstream outFile;
-	//outFile.open(fileName);
-	//for (int i=0; i<newEqns.size(); i++) {
-		//std::cout << "writing " << i << "/" << newEqns.size() << std::endl;
-		//for (int j=0; j<newEqns[i].size(); j++) {
-			//outFile << i << " " << newEqns[i][j].first << " " << int(newEqns[i][j].second) << std::endl;
-		//}
-	//}
 
 	return 0;
 

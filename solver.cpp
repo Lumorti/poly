@@ -213,7 +213,8 @@ int main(int argc, char ** argv) {
 	std::cout << "num iterations = " << solver.iterations() << std::endl;
 	std::cout << "solver error = " << solver.error() << std::endl;
 	std::cout << "real error = " << (ACols*sol - bVec).norm() << std::endl;
-	//std::cout << std::abs((ACols*sol - bVec).coeffRef(0)) << std::endl;
+	Eigen::VectorXf del = ACols*sol - bVec;
+	std::cout << "difference in first term = " << std::abs(del[0]) << std::endl;
 	//std::cout << std::endl;
 	//std::cout << sol << std::endl;
 	//std::cout << std::endl;
