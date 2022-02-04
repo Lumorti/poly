@@ -1,5 +1,5 @@
 CXX=g++
-CXXFLAGS=-Wfatal-errors -O3
+CXXFLAGS=-Wfatal-errors -O3 -g
 LIBS=-I/usr/include/eigen3
 
 all:

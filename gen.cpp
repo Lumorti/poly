@@ -12,14 +12,10 @@
 #include <chrono>
 #include <math.h>
 
-// Eigen
-#include <Eigen/Dense>
-#include <Eigen/Sparse>
-#include <Eigen/SparseQR>
-#include <Eigen/OrderingMethods>
-
-
-double zeroVal = 1e-10;
+// Algorithm settings
+int maxLevel = 25;
+double zeroVal = 1e-13;
+int maxTries = 1000;
 
 // Generate/add the vector of r-combinations of 1...n
 void genCombinations(std::vector<std::vector<int>> &combs, int n, int r) {
@@ -164,8 +160,6 @@ std::string multiplyFull(std::string a, std::string b, int padding) {
 	std::string newString = "";
 
 	// Loop through the first string
-	int firstStart = 0;
-	int secondStart = 0;
 	int j = 0;
 	for (int i=0; i<a.size(); i+=padding) {
 
@@ -566,494 +560,489 @@ int main(int argc, char ** argv) {
 
 	}
 
-	// settings
-	//int maxLevel = 20;
+	// Start with 1
+	mainEqn[""] = 1;
 
-	//// Start with 1
-	//mainEqn[""] = 1;
+	// Keep track of which equations have been used for the certificate
+	std::vector<std::unordered_map<std::string,double>> eqnsUsed;
 
-	//std::vector<std::string> certificate;
-	//std::vector<std::unordered_map<std::string,double>> eqnsUsed;
+	// List the equations available
+	std::cout << "equations available:" << std::endl;
+	for (int i=0; i<newnewEqns.size(); i++) {
+		pretty(newnewEqns[i]);
+	}
+	std::cout << "main equation:" << std::endl;
+	pretty(mainEqn);
 
-	//// List the equations available
-	//std::cout << "equations available:" << std::endl;
+	// The list of equations that can be used to remove terms
+	std::unordered_map<std::string,std::unordered_map<std::string,double>> eqnToRemoveTerm;
+	std::string termToRemove = "";
+	int termOrder = 0;
+
+	// String of x's used to remove section of a string later
+	std::string xString = "";
+	for (int i=0; i<paddingWidth; i++) {
+		xString += "x";
+	}
+
+	// Try to remove the lowest order terms first
+	for (int ord=1; ord<maxLevel; ord++) {
+
+		// Keep repeating for a while
+		for (int iter=0; iter<10000000000; iter++) {
+
+			// Stop if we've reached zero
+			if (mainEqn.size() == 0) {
+				break;
+			}
+
+			// Find the largest term in the main equation of this order (or less)
+			termToRemove = "x";
+			double bestMag = 0;
+			double maxVal = 0;
+			double minVal = 10000;
+			double mag = 0;
+			for (auto& it: mainEqn) {
+				mag = std::abs(it.second);
+				if (int(it.first.size() / paddingWidth) - 1 <= ord && mag > bestMag) {
+					termToRemove = it.first;
+					bestMag = mag;
+				}
+				if (mag > maxVal) {
+					maxVal = mag;
+				}
+				if (mag < minVal) {
+					minVal = mag;
+				}
+			}
+			if (termToRemove == "x") {
+				break;
+			}
+			termOrder = termToRemove.size() / paddingWidth - 1;
+			std::cout << ord << " " << iter << "  in main = " << mainEqn.size() << " rem ord = " << termOrder << " min/max = " << minVal << " " << maxVal << std::endl;
+
+			// Try to find something that could be multiplied to make this
+			std::unordered_map<std::string,double> foundEqn;
+			double bestCoeff = 0;
+			std::string lookingFor = "";
+			std::string toMultiply = "";
+			int triesLeft = maxTries;
+			for (int k=termOrder+1; k>=0; k--) {
+
+				// Generate the combinations to check
+				std::vector<std::vector<int>> combs;
+				genCombinations(combs, termOrder+1, k);
+
+				// Loop over these combinations
+				for (int m=0; m<combs.size(); m++) {
+
+					// Extract the strings to search for
+					lookingFor = "";
+					toMultiply = termToRemove;
+					for (int l=0; l<combs[m].size(); l++) {
+						lookingFor += termToRemove.substr(combs[m][l]*paddingWidth, paddingWidth);
+					}
+					for (int l=0; l<combs[m].size(); l++) {
+						toMultiply.replace(combs[m][l]*paddingWidth, paddingWidth, xString);
+					}
+					toMultiply.erase(std::remove(toMultiply.begin(), toMultiply.end(), 'x'), toMultiply.end());
+					//std::cout << "looking for '" << lookingFor  << "' (multiply by '" << toMultiply << "')" << std::endl;
+
+					// See if this term is in one of the equations
+					for (int i=0; i<newnewEqns.size(); i++) {
+						std::unordered_map<std::string,double> checkEqn = newnewEqns[i];
+
+						// Multiply this by the factor needed to reach the term to remove
+						std::unordered_map<std::string,double> mulEqn;
+						for (auto& it: checkEqn) {
+							std::string t = multiplyFull(it.first, toMultiply, paddingWidth);
+							mulEqn[t] = it.second;
+						}
+						std::unordered_map<std::string,double> mulEqnBackup = mulEqn;
+
+						// Reduce this using the equations that have already reduced the main
+						bool somethingRemoved = true;
+						while (somethingRemoved) {
+							somethingRemoved = false;
+							for (auto& it: mulEqn) {
+								if (std::abs(it.second) > zeroVal && eqnToRemoveTerm.find(it.first) != eqnToRemoveTerm.end()) {
+									addEqns(mulEqn, eqnToRemoveTerm[it.first], -mulEqn[it.first] / eqnToRemoveTerm[it.first][it.first]);
+									somethingRemoved = true;
+								}
+							}
+						}
+						cleanEqn(mulEqn);
+
+						// See if it's still valid after reduction
+						if (mulEqn.find(termToRemove) != mulEqn.end()) {
+
+							// If this is the equation with the biggest coeff for the term TODO
+							if (std::abs(mulEqn[termToRemove]) > bestCoeff) {
+								foundEqn = mulEqn;
+								bestCoeff = std::abs(mulEqn[termToRemove]);
+								if (bestCoeff > 1e-3) {
+									triesLeft = 0;
+								}
+							}
+
+							// Only try a certain number of times before we assume we've found something big enough
+							triesLeft--;
+							if (triesLeft <= 0) {
+								break;
+							}
+
+						}
+
+					}
+
+					if (triesLeft <= 0) {
+						break;
+					}
+					//if (foundEqn.size() > 0) {
+						//break;
+					//}
+
+				}
+
+				if (triesLeft <= 0) {
+					break;
+				}
+				//if (foundEqn.size() > 0) {
+					//break;
+				//}
+
+			}
+
+			// Process the chosen row TODO
+			if (foundEqn.size() > 0) {
+
+				// Apply this to all of the reduction equations
+				for (auto& it: eqnToRemoveTerm) {
+					if (it.second.find(termToRemove) != it.second.end()) {
+						addEqns(it.second, foundEqn, -it.second[termToRemove] / foundEqn[termToRemove]);
+						cleanEqn(it.second);
+					}
+				}
+
+				// This can now be used to reduce other equations
+				eqnToRemoveTerm[termToRemove] = foundEqn;
+
+				//std::cout << "found with '" << lookingFor  << "' (multiply by '" << toMultiply << "')" << std::endl;
+				//std::cout << "will now reduce '" << termToRemove  << "' with:" << std::endl;
+				//pretty(mulEqn);
+
+				// Reduce the main equations
+				addEqns(mainEqn, foundEqn, -mainEqn[termToRemove] / foundEqn[termToRemove]);
+				cleanEqn(mainEqn);
+
+				// Keep track of the sums for the certificate
+				eqnsUsed.push_back(foundEqn);
+
+				// Output
+				//std::cout << "new main equation:" << std::endl;
+				//prettySorted(mainEqn);
+
+			}
+
+		}
+
+	}
+
+	std::cout << "final equation:" << std::endl;
+	prettySorted(mainEqn);
+
+	// If we reached zero
+	if (mainEqn.size() == 0) {
+
+		// Create the linear system using these
+		std::cout << "Creating monomial mapping..." << std::endl;
+		int newInd = 1;
+		std::unordered_map<std::string,int> testMap;
+		testMap[""] = 0;
+		for (int i=0; i<eqnsUsed.size(); i++) {
+			for (auto& it: eqnsUsed[i]) {
+				if (testMap.find(it.first) == testMap.end()) {
+					testMap[it.first] = newInd;
+					newInd++;
+				}
+			}
+		}
+
+		// Save the certificate system to file
+		std::cout << "Writing file..." << std::endl;
+		std::string fileName = "cert.csv"; 
+		std::ofstream outFile;
+		outFile.open(fileName);
+		for (int i=0; i<eqnsUsed.size(); i++) {
+			for (auto& it: eqnsUsed[i]) {
+				outFile << testMap[it.first] << " " << i << " " << it.second << std::endl;
+			}
+		}
+
+	}
+
+	// New method:
+	// 1) least squares optimise
+	// 2) add equations based on residiuals
+	// 3) repeat
+
+	// Create the linear system using these
+	//int newInd = 1;
+	//std::unordered_map<std::string,int> symMap;
+	//std::unordered_map<int,std::string> symMapInverted;
+	//symMap[""] = 0;
+	//std::vector<Eigen::Triplet<double>> coefficients;
 	//for (int i=0; i<newnewEqns.size(); i++) {
-		//pretty(newnewEqns[i]);
+		//for (auto& it: newnewEqns[i]) {
+			//if (symMap.find(it.first) == symMap.end()) {
+				//symMap[it.first] = newInd;
+				//symMapInverted[newInd] = it.first;
+				//newInd++;
+			//}
+			//coefficients.push_back(Eigen::Triplet<double>(symMap[it.first], i, it.second));
+		//}
 	//}
-	//std::cout << "main equation:" << std::endl;
-	//pretty(mainEqn);
-	////std::vector<bool> eqnAllowed(new);
+	//Eigen::SparseMatrix<double> A(newInd, newnewEqns.size());
+	//A.setFromTriplets(coefficients.begin(), coefficients.end());
+	//Eigen::SparseVector<double> b(A.rows());
+	//b.coeffRef(0) = 1.0;
 
-	//// The list of equations that can be used to remove terms
-	//std::unordered_map<std::string,std::unordered_map<std::string,double>> eqnToRemoveTerm;
-	////eqnToRemoveTerm[""] = mainEqn;
-	//std::string termToRemove = "";
-	//int termOrder = 0;
-
-	//// Generate combinations
-	////std::vector<std::vector<std::vector<int>>> combs(maxLevel);
-	////std::vector<int> blank;
-	////for (int i=1; i<maxLevel; i+=2) {
-		////for (int j=i+1; j>0; j--) {
-			////genCombinations(combs[i], i+1, j);
-		////}
-		////combs[i].push_back(blank);
-	////}
-
-	//// Generate the negative for the combinations (e.g. for 123, if the comb is 12 the neg is 3)
-	////std::vector<std::vector<std::vector<int>>> negCombs(combs.size());
-	////for (int l=0; l<combs.size(); l++) {
-		////std::vector<int> full;
-		////for (int i=0; i<l+1; i++) {
-			////full.push_back(i);
-		////}
-		////for (int i=0; i<combs[l].size(); i++) {
-			////std::vector<int> fullCopy = full;
-			////for (int j=0; j<combs[l][i].size(); j++) {
-				////fullCopy.erase(std::find(fullCopy.begin(), fullCopy.end(), combs[l][i][j]));
-			////}
-			////negCombs[l].push_back(fullCopy);
-		////}
-	////}
-
-	////for (int i=0; i<maxLevel; i++) {
-		////std::cout << "level = " << i << std::endl;
-		////for (int j=0; j<combs[i].size(); j++) {
-			////for (int k=0; k<combs[i][j].size(); k++) {
-				////std::cout << combs[i][j][k] << ",";
-			////}
-			////std::cout << std::endl;
-		////}
-	////}
+	//int iters = 20;
+	//double tolerance = 1e-10;
 
 	//std::string xString = "";
 	//for (int i=0; i<paddingWidth; i++) {
 		//xString += "x";
 	//}
 
-	//// Try to remove the lowest order terms first
-	//for (int ord=1; ord<maxLevel; ord++) {
+	//std::unordered_set<std::string> eqnsUsed;
 
-		//// Keep repeating for a while
-		//for (int iter=0; iter<10000000; iter++) {
+	////Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
+	//Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> solver;
+	//solver.setMaxIterations(iters);
+	//solver.setTolerance(tolerance);
 
-			//// Stop if we've reached zero
-			//if (mainEqn.size() == 0) {
-				//break;
+	//double prevError = 10000;
+	//double error = 1;
+	//int prevCols = 1;
+	//int prevRows = 1;
+	//Eigen::VectorXd sol;
+	//Eigen::VectorXd resids;
+	//int origSize = b.size();
+	//int prevResidZero = -10;
+	//double prevScore = 10000000000000;
+
+	//double zeroThresh = 1e-6;
+
+	////for (int i=0; i<3; i++) {
+	////for (int i=0; i<1000; i++) {
+	//for (int i=0; i<10000000000000000; i++) {
+
+		////Eigen::SparseMatrix<double> W(A.rows(), A.rows());
+		////for (int j=0; j<W.rows(); j++) {
+			////W.insert(j,j) = std::pow(W.rows()-j, 10);
+			////W.insert(j,j) = std::pow(W.rows()-j, 10);
+			////if (rand() > 0.1) {
+				////W.insert(j,j) = 1;
+			////} else {
+				////W.insert(j,j) = 1000000;
+			////}
+		////}
+		////W.makeCompressed();
+
+		////std::cout << Eigen::MatrixXd(W) << std::endl;
+		////std::cout << std::endl;
+		////std::cout << Eigen::MatrixXd(A) << std::endl;
+		////std::cout << std::endl;
+		////std::cout << Eigen::MatrixXd(W*A) << std::endl;
+
+		//// Minimise this system to get the min residuals
+		//solver.compute(A);
+		//Eigen::VectorXd sol = solver.solve(b);
+		//Eigen::VectorXd resids = A*sol - b;
+		//resids = resids.cwiseProduct(resids);
+		//error = resids.norm();
+		////std::cout << resids << std::endl;
+		////std::cout << sol << std::endl;
+
+		//int residZero = 0;
+		//std::vector<int> resChoices;
+		//for (int k=0; k<resids.size(); k++) {
+			//if (std::abs(resids(k)) < zeroThresh) {
+				//residZero += 1;
+			//} else {
+				//resChoices.push_back(k);
 			//}
+		//}
 
-			//// Try to find a term in the main equation of this order
-			//termToRemove = "x";
-			//for (auto& it: mainEqn) {
-				//termOrder = it.first.size() / paddingWidth - 1;
-				//if (termOrder <= ord) {
-					//termToRemove = it.first;
-					//break;
+		//// Remove the latest column if nothing changed
+		////if (error > prevError) {
+		////double score = residZero - resids.size();
+		//double score = error;
+		//if (score > prevScore) {
+			//for (int k=prevRows; k<b.size(); k++) {
+				//std::string toRemove = symMapInverted[k];
+				//symMap.erase(toRemove);
+				//symMapInverted.erase(k);
+			//}
+			//A.conservativeResize(prevRows, prevCols);
+			//b.conservativeResize(prevRows);
+			//nextInd = prevRows;
+		//} else {
+			//prevScore = score;
+		//}
+
+		//std::cout << i << " err = " << error << " A!0 = " << A.nonZeros() << " mons = " << b.size() << " s = " << score << std::endl;
+
+		//// Stop if the error becomes lower than some value
+		//if (resids.norm() < zeroThresh) {
+			//break;
+		//}
+
+		//// SCOREBOARD for 1000
+		//// norm = 0.00605595 first = 0.0038096   iters = 20   nnz = 3195
+		//// norm = 0.00541202 first = 0.00332837   iters = 20   nnz = 2851
+		//// 294102 err = 0.00359397 A!0 = 4934 s = 0.00359397
+
+		//// Get the biggest residuals
+		////double smallestRes = -100;
+		////for (int k=0; k<resids.size(); k++) {
+			////if (-(smallestRes - resids(k)) > 1e-5) {
+				////smallestRes = resids(k);
+				////resChoices.clear();
+				////resChoices.push_back(k);
+			////} else if (std::abs(smallestRes-resids(k)) < 1e-5) {
+				////resChoices.push_back(k);
+			////}
+		////}
+
+		////for (int k=0; k<resChoices.size(); k++) {
+			////std::cout << resChoices[k] << std::endl;
+		////}
+
+		////int ind = rand() % origSize;
+		////if (i > 10000) {
+			////ind = rand() % (origSize*origSize);
+		////}
+		////if (i > 10000) {
+			////ind = rand() % (origSize*origSize);
+		////}
+		////int ind = rand() % newInd;
+		//int ind1 = resChoices[rand()%resChoices.size()];
+		//int ind2 = resChoices[rand()%resChoices.size()];
+		////int ind = resChoices[0];
+		////int ind = 3;
+		////Eigen::Index t;
+		////resids.maxCoeff(&t);
+		////ind = t;
+		//std::string biggestResid = symMapInverted[ind1];
+		//std::string resid2 = symMapInverted[ind2];
+		////std::cout << "ind chosen = " << ind << std::endl;
+		////std::cout << "biggest resid = " << biggestResid << std::endl;
+
+		//// Find an equation containing this variable
+		//int termOrder = biggestResid.size() / paddingWidth - 1;
+		//std::unordered_map<std::string,double> foundEqn;
+		//std::string lookingFor = "";
+		//std::string toMultiply = "";
+
+		//// Try find the equation requiring the least amount of multiplication
+		//for (int k=termOrder+1; k>=0; k--) {
+
+			//// Generate the combinations to check
+			//std::vector<std::vector<int>> combs;
+			//genCombinations(combs, termOrder+1, k);
+
+			//// Loop over these combinations
+			//for (int m=0; m<combs.size(); m++) {
+
+				//// Extract the strings to search for
+				//lookingFor = "";
+				//toMultiply = biggestResid;
+				//for (int l=0; l<combs[m].size(); l++) {
+					//lookingFor += biggestResid.substr(combs[m][l]*paddingWidth, paddingWidth);
 				//}
-			//}
-			//if (termToRemove == "x") {
-				//break;
-			//}
-			//std::cout << std::endl << "trying to remove '" << termToRemove << "' (order " << termOrder << ")" << std::endl;
-			//bool termRemoved = false;
+				//for (int l=0; l<combs[m].size(); l++) {
+					//toMultiply.replace(combs[m][l]*paddingWidth, paddingWidth, xString);
+				//}
+				//toMultiply.erase(std::remove(toMultiply.begin(), toMultiply.end(), 'x'), toMultiply.end());
 
-			//// Try to find something that could be multiplied to make this
-			//std::unordered_map<std::string,double> foundEqn;
-			//std::string lookingFor = "";
-			//std::string toMultiply = "";
-			//for (int k=termOrder+1; k>=0; k--) {
-
-				//// Generate the combinations to check
-				//std::vector<std::vector<int>> combs;
-				//genCombinations(combs, termOrder+1, k);
-
-				//// Loop over these combinations
-				//for (int m=0; m<combs.size(); m++) {
-
-					//// Extract the strings to search for
-					//lookingFor = "";
-					//toMultiply = termToRemove;
-					//for (int l=0; l<combs[m].size(); l++) {
-						//lookingFor += termToRemove.substr(combs[m][l]*paddingWidth, paddingWidth);
-					//}
-					//for (int l=0; l<combs[m].size(); l++) {
-						//toMultiply.replace(combs[m][l]*paddingWidth, paddingWidth, xString);
-					//}
-					//toMultiply.erase(std::remove(toMultiply.begin(), toMultiply.end(), 'x'), toMultiply.end());
-					////std::cout << "looking for '" << lookingFor  << "' (multiply by '" << toMultiply << "')" << std::endl;
-
-					//// See if this term is in one of the equations
-					//for (int i=0; i<newnewEqns.size(); i++) {
-						//std::unordered_map<std::string,double> checkEqn = newnewEqns[i];
+				//// See if this term is in one of the equations
+				//for (int i=0; i<newnewEqns.size(); i++) {
+					//if (newnewEqns[i].find(lookingFor) != newnewEqns[i].end()) {
 
 						//// Multiply this by the factor needed to reach the term to remove
+						//std::unordered_map<std::string,double> checkEqn = newnewEqns[i];
 						//std::unordered_map<std::string,double> mulEqn;
 						//for (auto& it: checkEqn) {
 							//std::string t = multiplyFull(it.first, toMultiply, paddingWidth);
 							//mulEqn[t] = it.second;
 						//}
-						//std::unordered_map<std::string,double> mulEqnBackup = mulEqn;
 
-						////std::cout << "before reduction:" << std::endl;
-						////pretty(mulEqn);
-
-						//// Reduce this using the equations that have already reduced the main
-						//std::vector<std::string> tempCert;
-						//bool somethingRemoved = true;
-						//while (somethingRemoved) {
-							//somethingRemoved = false;
-							//for (auto& it: mulEqn) {
-								//if (std::abs(it.second) > zeroVal && eqnToRemoveTerm.find(it.first) != eqnToRemoveTerm.end()) {
-									//double factor = -mulEqn[it.first] / eqnToRemoveTerm[it.first][it.first];
-									//addEqns(mulEqn, eqnToRemoveTerm[it.first], factor);
-									//somethingRemoved = true;
-									//tempCert.push_back("    (reduced " + std::to_string(factor) + " * red eqn '" + it.first + "')");
+						//int otherTerms = 0;
+						//for (auto& it: mulEqn) {
+							//if (symMap.find(it.first) != symMap.end()) {
+								//if (std::abs(resids(symMap[it.first])) > zeroThresh) {
+									//otherTerms++;
 								//}
 							//}
 						//}
-						//cleanEqn(mulEqn);
+						//if (otherTerms == 0) {
+							//continue;
+						//}
 
-						////std::cout << "after reduction:" << std::endl;
-						////pretty(mulEqn);
+						//// Ensure we don't use the same equation twice
+						//std::string eqnName = toMultiply + "*" + std::to_string(i);
+						//if (eqnsUsed.find(eqnName) == eqnsUsed.end()) {
 
-						//// See if it's still valid after reduction
-						//if (mulEqn.find(termToRemove) != mulEqn.end()) {
+							//// Stop this equation from being used again
+							//eqnsUsed.insert(eqnName);
 
-							//// Apply this to all of the reduction equations
-							//for (auto& it: eqnToRemoveTerm) {
-								//if (it.second.find(termToRemove) != it.second.end()) {
-									//addEqns(it.second, mulEqn, -it.second[termToRemove] / mulEqn[termToRemove]);
-									//cleanEqn(it.second);
-								//}
-							//}
-
-							//// This can now be used to reduce other equations
-							//eqnToRemoveTerm[termToRemove] = mulEqn;
-
-							//std::cout << "found with '" << lookingFor  << "' (multiply by '" << toMultiply << "')" << std::endl;
-							////std::cout << "will now reduce '" << termToRemove  << "' with:" << std::endl;
-							////pretty(mulEqn);
-
-							//// Reduce the main equations
-							//double factor = -mainEqn[termToRemove] / mulEqn[termToRemove];
-							//addEqns(mainEqn, mulEqn, factor);
-							//cleanEqn(mainEqn);
-
-							//// Keep track of the sums for the certificate
-							//eqnsUsed.push_back(mulEqnBackup);
-							//certificate.push_back("added " + std::to_string(factor) + " * '" + toMultiply + "' * eqn " + std::to_string(i) + " to main to remove " + termToRemove + "    " + lookingFor);
-							//for (int i2=0; i2<tempCert.size(); i2++) {
-								//certificate.push_back(tempCert[i2]);
-							//}
-
-							//// Output
-							//std::cout << "new main equation:" << std::endl;
-							//prettySorted(mainEqn);
-
-							//// Stop trying to remove this term
-							//termRemoved = true;
+							//// Stop searching once we have something
+							//foundEqn = mulEqn;
 							//break;
 
 						//}
 
 					//}
-
-					//// If the term was removed, we don't need to check more combinations
-					//if (termRemoved) {
-						//break;
-					//}
-
 				//}
 
-				//// If the term was removed, we don't need to check more combinations
-				//if (termRemoved) {
+				//// Stop searching once we have something
+				//if (foundEqn.size() > 0) {
 					//break;
 				//}
 
 			//}
 
-			//// If there was no possible way to remove this term, not possible to generate certificate
-			//if (!termRemoved) {
-				//std::cout << "couldn't solve system" << std::endl;
-				//return 0;
+			//// Stop searching once we have something
+			//if (foundEqn.size() > 0) {
+				//break;
 			//}
 
 		//}
+
+		//// Add any new terms to the mappings
+		//for (auto& it: foundEqn) {
+			//if (symMap.find(it.first) == symMap.end()) {
+				//symMap[it.first] = newInd;
+				//symMapInverted[newInd] = it.first;
+				//newInd++;
+			//}
+		//}
+
+		//// Expand and add to A
+		//prevRows = A.rows();
+		//prevCols = A.cols();
+		//A.conservativeResize(newInd, A.cols()+1);
+		//for (auto& it: foundEqn) {
+			//A.insert(symMap[it.first], A.cols()-1) = it.second;
+		//}
+		//A.makeCompressed();
+
+		//// Expand b
+		//b.conservativeResize(newInd);
 
 	//}
-
-	//std::cout << "final equation:" << std::endl;
-	//prettySorted(mainEqn);
-
-	//if (mainEqn.size() == 0) {
-
-		////std::cout << "certificate: " << std::endl;
-		////for (int i=0; i<certificate.size(); i++) {
-			////std::cout << certificate[i] << std::endl;
-		////}
-
-		////for (int i=0; i<eqnsUsed.size(); i++) {
-			////std::cout << makePretty(eqnsUsed[i]) << std::endl;
-		////}
-
-		//// Create the linear system using these
-		//int newInd = 1;
-		//std::unordered_map<std::string,int> testMap;
-		//testMap[""] = 0;
-		//for (int i=0; i<eqnsUsed.size(); i++) {
-			//for (auto& it: eqnsUsed[i]) {
-				//if (testMap.find(it.first) == testMap.end()) {
-					//testMap[it.first] = newInd;
-					//newInd++;
-				//}
-			//}
-		//}
-
-
-		//std::vector<Eigen::Triplet<double>> coefficients;
-		//for (int i=0; i<eqnsUsed.size(); i++) {
-			//for (auto& it: eqnsUsed[i]) {
-				//coefficients.push_back(Eigen::Triplet<double>(testMap[it.first], i, it.second));
-			//}
-		//}
-		//Eigen::SparseMatrix<double> A(newInd, eqnsUsed.size());
-		//A.setFromTriplets(coefficients.begin(), coefficients.end());
-
-		//Eigen::SparseVector<double> b(A.rows());
-		//b.coeffRef(0) = 1.0;
-
-		////Eigen::ColPivHouseholderQR<Eigen::MatrixXd> solver;
-		////solver.compute(A);
-		////auto res = solver.solve(b);
-		////std::cout << (A*res-b).norm() << std::endl;
-
-		//Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver(A);
-		//Eigen::VectorXd sol = solver.solve(b);
-		//std::cout << (A*sol-b).norm() << std::endl;
-
-	//}
-
-	// New method: TODO
-	// 1) least squares optimise
-	// 2) add equations based on residiuals
-	// 3) repeat
-
-	// Create the linear system using these
-	int newInd = 1;
-	std::unordered_map<std::string,int> symMap;
-	std::unordered_map<int,std::string> symMapInverted;
-	symMap[""] = 0;
-	std::vector<Eigen::Triplet<double>> coefficients;
-	for (int i=0; i<newnewEqns.size(); i++) {
-		for (auto& it: newnewEqns[i]) {
-			if (symMap.find(it.first) == symMap.end()) {
-				symMap[it.first] = newInd;
-				symMapInverted[newInd] = it.first;
-				newInd++;
-			}
-			coefficients.push_back(Eigen::Triplet<double>(symMap[it.first], i, it.second));
-		}
-	}
-	Eigen::SparseMatrix<double> A(newInd, newnewEqns.size());
-	A.setFromTriplets(coefficients.begin(), coefficients.end());
-	Eigen::SparseVector<double> b(A.rows());
-	b.coeffRef(0) = 1.0;
-
-	int iters = 20;
-	double tolerance = 1e-10;
-
-	std::string xString = "";
-	for (int i=0; i<paddingWidth; i++) {
-		xString += "x";
-	}
-
-	std::unordered_set<std::string> eqnsUsed;
-
-	//Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
-	Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> solver;
-	solver.setMaxIterations(iters);
-	solver.setTolerance(tolerance);
-
-	double prevError = 10000;
-	double error = 1;
-	int prevCols = 1;
-	int prevRows = 1;
-	Eigen::VectorXd sol;
-	Eigen::VectorXd resids;
-	int origSize = b.size();
-	int prevResidZero = -10;
-	double prevScore = -10000000000000;
-
-	//for (int i=0; i<1000; i++) {
-	for (int i=0; i<100000000000000; i++) {
-
-		// Minimise this system to get the min residuals
-		solver.compute(A);
-		Eigen::VectorXd sol = solver.solve(b);
-		Eigen::VectorXd resids = A*sol - b;
-		resids = resids.cwiseProduct(resids);
-		error = resids.norm();
-		//std::cout << resids << std::endl;
-		std::cout << sol << std::endl;
-
-		int residZero = 0;
-		std::vector<int> resChoices;
-		for (int k=0; k<resids.size(); k++) {
-			if (std::abs(resids(k)) < 1e-10) {
-				residZero += 1;
-			} else {
-				resChoices.push_back(k);
-			}
-		}
-
-		// Remove the latest column if nothing changed
-		//if (error > prevError) {
-		double score = residZero - resids.size();
-		if (score <= prevScore) {
-			for (int k=prevRows; k<b.size(); k++) {
-				std::string toRemove = symMapInverted[k];
-				symMap.erase(toRemove);
-				symMapInverted.erase(k);
-			}
-			A.conservativeResize(prevRows, prevCols);
-			b.conservativeResize(prevRows);
-			nextInd = prevRows;
-		} else {
-			prevScore = score;
-		}
-
-		std::cout << i << " err = " << error << " A!0 = " << A.nonZeros() << " s = " << score << std::endl;
-
-		// Stop if the error becomes lower than some value
-		if (resids.norm() < 1e-6) {
-			break;
-		}
-
-		// SCOREBOARD for 1000
-		// norm = 0.00605595 first = 0.0038096   iters = 20   nnz = 3195
-		// norm = 0.00541202 first = 0.00332837   iters = 20   nnz = 2851
-
-		// Get the biggest residuals
-		//double smallestRes = -100;
-		//for (int k=0; k<resids.size(); k++) {
-			//if (-(smallestRes - resids(k)) > 1e-5) {
-				//smallestRes = resids(k);
-				//resChoices.clear();
-				//resChoices.push_back(k);
-			//} else if (std::abs(smallestRes-resids(k)) < 1e-5) {
-				//resChoices.push_back(k);
-			//}
-		//}
-
-		//for (int k=0; k<resChoices.size(); k++) {
-			//std::cout << resChoices[k] << std::endl;
-		//}
-
-		//int ind = rand() % origSize;
-		//if (i > 10000) {
-			//ind = rand() % (origSize*origSize);
-		//}
-		//if (i > 10000) {
-			//ind = rand() % (origSize*origSize);
-		//}
-		int ind = rand() % newInd;
-		//int ind = resChoices[rand()%resChoices.size()];
-		//int ind = 3;
-		std::string biggestResid = symMapInverted[ind];
-		//std::cout << "ind chosen = " << ind << std::endl;
-		//std::cout << "biggest resid = " << biggestResid << std::endl;
-
-		// Find an equation containing this variable
-		int termOrder = biggestResid.size() / paddingWidth - 1;
-		std::unordered_map<std::string,double> foundEqn;
-		std::string lookingFor = "";
-		std::string toMultiply = "";
-
-		// Try find the equation requiring the least amount of multiplication
-		for (int k=termOrder+1; k>=0; k--) {
-
-			// Generate the combinations to check
-			std::vector<std::vector<int>> combs;
-			genCombinations(combs, termOrder+1, k);
-
-			// Loop over these combinations
-			for (int m=0; m<combs.size(); m++) {
-
-				// Extract the strings to search for
-				lookingFor = "";
-				toMultiply = biggestResid;
-				for (int l=0; l<combs[m].size(); l++) {
-					lookingFor += biggestResid.substr(combs[m][l]*paddingWidth, paddingWidth);
-				}
-				for (int l=0; l<combs[m].size(); l++) {
-					toMultiply.replace(combs[m][l]*paddingWidth, paddingWidth, xString);
-				}
-				toMultiply.erase(std::remove(toMultiply.begin(), toMultiply.end(), 'x'), toMultiply.end());
-
-				// See if this term is in one of the equations
-				for (int i=0; i<newnewEqns.size(); i++) {
-					if (newnewEqns[i].find(lookingFor) != newnewEqns[i].end()) {
-
-						// Multiply this by the factor needed to reach the term to remove
-						std::unordered_map<std::string,double> checkEqn = newnewEqns[i];
-						std::unordered_map<std::string,double> mulEqn;
-						for (auto& it: checkEqn) {
-							std::string t = multiplyFull(it.first, toMultiply, paddingWidth);
-							mulEqn[t] = it.second;
-						}
-
-						// Ensure we don't use the same equation twice
-						std::string eqnName = toMultiply + "*" + std::to_string(i);
-						if (eqnsUsed.find(eqnName) == eqnsUsed.end()) {
-
-							// Stop this equation from being used again
-							eqnsUsed.insert(eqnName);
-
-							// Stop searching once we have something
-							foundEqn = mulEqn;
-							break;
-
-						}
-
-					}
-				}
-
-				// Stop searching once we have something
-				if (foundEqn.size() > 0) {
-					break;
-				}
-
-			}
-
-			// Stop searching once we have something
-			if (foundEqn.size() > 0) {
-				break;
-			}
-
-		}
-
-		// Add any new terms to the mappings
-		for (auto& it: foundEqn) {
-			if (symMap.find(it.first) == symMap.end()) {
-				symMap[it.first] = newInd;
-				symMapInverted[newInd] = it.first;
-				newInd++;
-			}
-		}
-
-		// Expand and add to A
-		prevRows = A.rows();
-		prevCols = A.cols();
-		A.conservativeResize(newInd, A.cols()+1);
-		for (auto& it: foundEqn) {
-			A.insert(symMap[it.first], A.cols()-1) = it.second;
-		}
-		A.makeCompressed();
-
-		// Expand b
-		b.conservativeResize(newInd);
-
-	}
 
 	// Check what this would give if evaluated
 	//std::vector<double> ids(numVars);
