@@ -1,13 +1,5 @@
 CXX=g++
-CXXFLAGS=-Wfatal-errors -O3 -g
-LIBS=-I/usr/include/eigen3
+CXXFLAGS=-Wfatal-errors -O3 -Wall
 
 all:
-	$(CXX) $(CXXFLAGS) -o solver solver.cpp $(LIBS)
-	$(CXX) $(CXXFLAGS) -o gen gen.cpp $(LIBS)
-
-solver:
-	$(CXX) $(CXXFLAGS) -o solver solver.cpp $(LIBS)
-
-gen:
-	$(CXX) $(CXXFLAGS) -o gen gen.cpp $(LIBS)
+	$(CXX) $(CXXFLAGS) -o lmd main.cpp
