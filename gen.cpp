@@ -88,7 +88,6 @@ void pretty(std::vector<std::pair<std::string,double>> eqn) {
 	std::cout << "]" << std::endl;
 }
 
-
 // Remove zero terms from an equation
 void cleanEqn(std::unordered_map<std::string,double> &a) {
 	std::vector<std::string> toRem;
