@@ -4,7 +4,6 @@
 #include <random>
 #include <chrono>
 #include <math.h>
-#include <unordered_map>
 
 // Use Eigen for matrix/vector ops
 #include <Eigen/Dense>
@@ -12,7 +11,8 @@
 
 // Some useful definitions
 using namespace std::complex_literals;
-typedef std::unordered_map<std::string, std::complex<double>> eqn;
+typedef std::pair<std::complex<double>, std::vector<int>> term;
+typedef std::vector<term> eqn;
 
 // Pretty print a vector
 template <typename type>
@@ -30,22 +30,37 @@ void pretty(std::vector<type> a) {
 // Remove zero terms from an equation
 eqn prune(eqn a) {
 	eqn aPruned;
-    for (auto const &pair: a) {
-		if (std::abs(pair.second) > 1e-8) {
-			aPruned[pair.first] = pair.second;
+	for (int i=0; i<a.size(); i++) {
+		if (std::abs(a[i].first) > 1e-8) {
+			aPruned.push_back(a[i]);
 		}
-    }
+	}
 	return aPruned;
 }
 
 // Check equivalence of two equations
 bool equiv(eqn a, eqn b) {
-    for (auto const &pair: a) {
-		if (b[pair.first] != pair.second) {
+
+	// If there aren't the same number of non-zero term, they aren't equal
+	if (a.size() != b.size()) {
+		std::cout << "wrong size" << std::endl;
+		return false;
+	}
+
+	// For now check that they're the same order
+	for (int i=0; i<a.size(); i++) {
+		if (a[i].first != b[i].first) {
+			std::cout << "diff coeff = " << i << std::endl;
+			return false;
+		}
+		if (a[i].second != b[i].second) {
+			std::cout << "diff indices = " << i << std::endl;
 			return false;
 		}
 	}
+
 	return true;
+
 }
 
 // Integrate a polynomial with respect to a variable index
@@ -53,21 +68,18 @@ eqn integrate(eqn a, int ind) {
 
 	// Process each term
 	eqn result;
-    for (auto const &pair: a) {
+	for (int i=0; i<a.size(); i++) {
+		term newTerm = a[i];
 
 		// Count the number of times the variable appears here
-		int degree = std::count(pair.first.begin(), pair.first.end(), ind);
+		int degree = std::count(a[i].second.begin(), a[i].second.end(), ind);
 
 		// x**3 -> 0.25*x**4
-		std::vector<int> newInd = pair.first;
-		newInd.push_back(ind);
+		newTerm.first *= 1.0 / (degree+1);
+		newTerm.second.push_back(ind);
 
 		// Add to the result
-		if (result.find(newInd) != result.end()) {
-			result[newInd] += pair.second / (degree+1);
-		} else {
-			result[newInd] = pair.second / (degree+1);
-		}
+		result.push_back(newTerm);
 
 	}
 
@@ -80,30 +92,27 @@ eqn differentiate(eqn a, int ind) {
 
 	// Process each term
 	eqn result;
-    for (auto const &pair: a) {
+	for (int i=0; i<a.size(); i++) {
+		term newTerm = a[i];
 
 		// Count the number of times the variable appears here
-		int degree = std::count(pair.first.begin(), pair.first.end(), ind);
+		int degree = std::count(a[i].second.begin(), a[i].second.end(), ind);
 
 		// x**3 -> 3*x**2
-		std::vector<int> newInd = pair.first;
+		newTerm.first *= degree;
 		int indFound = -1;
-		for (int j=newInd.size()-1; j>=0; j--) {
-			if (newInd[j] == ind) {
+		for (int j=newTerm.second.size()-1; j>=0; j--) {
+			if (newTerm.second[j] == ind) {
 				indFound = j;
 				break;
 			}
 		}
 		if (indFound >= 0) {
-			newInd.erase(newInd.begin()+indFound);
+			newTerm.second.erase(newTerm.second.begin()+indFound);
 		}
 
 		// Add to the result
-		if (result.find(newInd) != result.end()) {
-			result[newInd] += pair.second * degree;
-		} else {
-			result[newInd] = pair.second * degree;
-		}
+		result.push_back(newTerm);
 
 	}
 
@@ -111,15 +120,16 @@ eqn differentiate(eqn a, int ind) {
 
 }
 
+
 // Eval an equation
 std::complex<double> eval(eqn a, std::vector<double> x) {
 	std::complex<double> soFar = 0;
-    for (auto const &pair: a) {
+    for (int i=0; i<a.size(); i++) {
 		std::complex<double> sub = 1;
-		for (int j=0; j<pair.first.size(); j++) {
-			sub *= x[pair.first[j]];
+		for (int j=0; j<a[i].second.size(); j++) {
+			sub *= x[a[i].second[j]];
 		}
-		soFar += sub*pair.second;
+		soFar += sub*a[i].first;
 	}
 	return soFar;
 }
@@ -127,12 +137,12 @@ std::complex<double> eval(eqn a, std::vector<double> x) {
 // Eval an equation
 std::complex<double> eval(eqn a, Eigen::VectorXd x) {
 	std::complex<double> soFar = 0;
-    for (auto const &pair: a) {
+    for (int i=0; i<a.size(); i++) {
 		std::complex<double> sub = 1;
-		for (int j=0; j<pair.first.size(); j++) {
-			sub *= x[pair.first[j]];
+		for (int j=0; j<a[i].second.size(); j++) {
+			sub *= x[a[i].second[j]];
 		}
-		soFar += sub*pair.second;
+		soFar += sub*a[i].first;
 	}
 	return soFar;
 }
@@ -140,8 +150,9 @@ std::complex<double> eval(eqn a, Eigen::VectorXd x) {
 // Conjugate an equation
 eqn conj(eqn a) {
 	eqn aConj;
-    for (auto const &pair: a) {
-		aConj[pair.first] = std::conj(pair.second);
+	for (int i=0; i<a.size(); i++) {
+		aConj.push_back(a[i]);
+		aConj[i].first = std::conj(aConj[i].first);
 	}
 	return aConj;
 }
@@ -153,13 +164,22 @@ eqn add(eqn a, eqn b) {
 	eqn result = a;
 
 	// For each term of the other
-    for (auto const &pair: b) {
+	for (int i=0; i<b.size(); i++) {
+
+		// See if it's already in the equation
+		int indFound = -1;
+		for (int j=0; j<result.size(); j++) {
+			if (result[j].second == b[i].second) {
+				indFound = j;
+				break;
+			}
+		}
 
 		// If it's new add it, otherwise combine with the existing
-		if (result.find(pair.first) != result.end()) {
-			result[newInd] += pair.second;
+		if (indFound == -1) {
+			result.push_back(b[i]);
 		} else {
-			result[newInd] = pair.second;
+			result[indFound].first += b[i].first;
 		}
 
 	}
@@ -174,22 +194,31 @@ eqn multiply(eqn a, eqn b) {
 
 	// For each term of both equations
 	eqn result;
-    for (auto const &pair1: a) {
-		for (auto const &pair2: b) {
+	for (int t1=0; t1<a.size(); t1++) {
+		for (int t2=0; t2<b.size(); t2++) {
 
 			// Combine the term list
 			std::vector<int> combined;
-			combined.insert(combined.end(), pair1.second.begin(), pair1.second.end());
-			combined.insert(combined.end(), pair2.second.begin(), pair2.second.end());
+			combined.insert(combined.end(), a[t1].second.begin(), a[t1].second.end());
+			combined.insert(combined.end(), b[t2].second.begin(), b[t2].second.end());
 
 			// Sort the term list
 			std::sort(combined.begin(), combined.end());
 
+			// See if it's already in the equation
+			int indFound = -1;
+			for (int i=0; i<result.size(); i++) {
+				if (result[i].second == combined) {
+					indFound = i;
+					break;
+				}
+			}
+
 			// If it's new add it, otherwise combine with the existing
-			if (result.find(combined) != result.end()) {
-				result[combined] += pair1.second*pair2.second;
+			if (indFound == -1) {
+				result.push_back(term(a[t1].first*b[t2].first, combined));
 			} else {
-				result[combined] = pair1.second*pair2.second;
+				result[indFound].first += a[t1].first*b[t2].first;
 			}
 
 		}
@@ -202,18 +231,38 @@ eqn multiply(eqn a, eqn b) {
 
 // Print an equation
 void pretty(eqn a) {
-	for (auto const &pair: a) {
-		std::cout << pair.second << "*{";
-		for (int j=0; j<pair.first.size(); j++) {
-			std::cout << pair.first[j];
-			if (j < pair.first.size()-1) {
+    for (int i=0; i<a.size(); i++) {
+		std::cout << a[i].first << "*{";
+		for (int j=0; j<a[i].second.size(); j++) {
+			std::cout << a[i].second[j];
+			if (j < a[i].second.size()-1) {
 				std::cout << ", ";
 			}
 		}
-		std::cout << "} + ";
+		std::cout << "}";
+		if (i < a.size()-1) {
+			std::cout << " + ";
+		}
     }
 	std::cout << " = 0" << std::endl;
 }
+
+// Class used by the LBFGS optimzer TODO
+class Optimizer {
+private:
+	eqn poly;
+	std::vector<eqn> gradient;
+	int numVars;
+public:
+    Optimizer(int numVars_, eqn poly_, std::vector<eqn> gradient_) : numVars(numVars_), poly(poly_), gradient(gradient_) {}
+    double operator()(const Eigen::VectorXd& x, Eigen::VectorXd& grad)
+    {
+		for (int i=0; i<numVars; i++) {
+			grad(i) = std::real(eval(gradient[i], x));
+		}
+        return std::real(eval(poly, x));
+    }
+};
 
 // Standard cpp entry point 
 int main(int argc, char ** argv) {

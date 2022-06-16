@@ -4,15 +4,369 @@
 #include <random>
 #include <chrono>
 #include <math.h>
+#include <unordered_map>
 
 // Use Eigen for matrix/vector ops
 #include <Eigen/Dense>
-#include <Eigen/IterativeLinearSolvers>
 
 // Some useful definitions
 using namespace std::complex_literals;
-typedef std::pair<std::complex<double>, std::vector<int>> term;
-typedef std::vector<term> eqn;
+
+// Class allowing manipulation of polynomials
+class Polynomial {
+public:
+
+	// General poly properties
+	int numVars = 1;
+	int digitsPerInd = 1;
+	std::unordered_map<std::string, std::complex<double>> coeffs;
+
+	// Used for fast eval
+	std::vector<std::vector<int>> inds;
+	std::vector<double> vals;
+
+	// Default constructor
+	Polynomial(int numVars_) {
+		numVars = numVars_;
+		digitsPerInd = std::ceil(std::log10(numVars));
+	}
+
+	// Add a term given a coefficient and an index list
+	void addTerm(std::complex<double> coeff, std::vector<int> list) {
+
+		// Convert the vector to a string
+		std::string asString = "";
+		for (int i=0; i<list.size(); i++) {
+			std::string padded = std::to_string(list[i]);
+			padded.insert(0, digitsPerInd-padded.size(), ' ');
+			asString += padded;
+		}
+
+		// Add it, combining it if the term already exists
+		if (coeffs.find(asString) != coeffs.end()) {
+			coeffs[asString] += coeff;
+			if (std::abs(coeffs[asString]) < 1e-10) {
+				coeffs.erase(asString);
+			}
+		} else {
+			coeffs[asString] = coeff;
+		}
+
+	}
+
+	// Remove zeros from a polynomial
+	Polynomial prune() {
+		Polynomial newPoly(numVars);
+		for (auto const &pair: coeffs) {
+			if (std::abs(pair.second) > 1e-8) {
+				newPoly.coeffs[pair.first] = pair.second;
+			}
+		}
+		return newPoly;
+	}
+
+	// Differentiate a polynomial with respect to a variable index
+	Polynomial differentiate(int ind) {
+
+		// Convert to a string and cache
+		std::string indString = std::to_string(ind);
+		indString.insert(0, digitsPerInd-indString.size(), ' ');
+
+		// Process each term
+		Polynomial result(numVars);
+		for (auto const &pair: coeffs) {
+
+			// Count the number of times the variable appears here
+			int indFound = -1;
+			double degree = 0.0;
+			for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
+				if (pair.first.substr(i,digitsPerInd) == indString) {
+					degree += 1.0;
+					indFound = i;
+				}
+			}
+
+			// Only do something if there is something with this ind
+			if (degree > 0.0) {
+
+				// Remove the latest term of this ind
+				std::string newInd = pair.first;
+				newInd.erase(newInd.begin()+indFound, newInd.begin()+indFound+digitsPerInd);
+
+				// Add to the result
+				if (result.coeffs.find(newInd) != result.coeffs.end()) {
+					result.coeffs[newInd] += pair.second * degree;
+				} else {
+					result.coeffs[newInd] = pair.second * degree;
+				}
+
+			}
+
+		}
+
+		// Remove any zero terms and return
+		return result.prune();
+
+	}
+
+	// Integrate a polynomial with respect to a variable index
+	Polynomial integrate(int ind) {
+
+		// Convert to a string and cache
+		std::string indString = std::to_string(ind);
+		indString.insert(0, digitsPerInd-indString.size(), ' ');
+
+		// Process each term
+		Polynomial result(numVars);
+		for (auto const &pair: coeffs) {
+
+			// Count the number of times the variable appears here
+			double degree = 0.0;
+			for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
+				if (pair.first.substr(i,digitsPerInd) == indString) {
+					degree += 1.0;
+				}
+			}
+
+			// Add an extra term at the right place
+			std::string newInd = pair.first;
+			bool hasAdded = false;
+			for (int i=0; i<newInd.size(); i+=digitsPerInd) {
+				if (std::stoi(newInd.substr(i,digitsPerInd)) > ind) {
+					newInd.insert(i, indString);
+					hasAdded = true;
+					break;
+				}
+			}
+
+			// If the index is larger than everything
+			if (!hasAdded) {
+				newInd += indString;
+			}
+
+			// Add to the result
+			if (result.coeffs.find(newInd) != result.coeffs.end()) {
+				result.coeffs[newInd] += pair.second / (degree+1);
+			} else {
+				result.coeffs[newInd] = pair.second / (degree+1);
+			}
+
+		}
+
+		// Remove any zero terms and return
+		return result.prune();
+
+	}
+
+	// Overload the addition operator
+	Polynomial operator+(const Polynomial& other) {
+
+		// Start with one equation
+		Polynomial result = other;
+
+		// For each term of the other
+		for (auto const &pair: coeffs) {
+
+			// If it's new add it, otherwise combine with the existing
+			if (result.coeffs.find(pair.first) != result.coeffs.end()) {
+				result.coeffs[pair.first] += pair.second;
+				if (std::abs(result.coeffs[pair.first]) < 1e-10) {
+					result.coeffs.erase(pair.first);
+				}
+			} else {
+				result.coeffs[pair.first] = pair.second;
+			}
+
+		}
+
+		// Remove any zeros and return
+		return result;
+
+	}
+
+	// Overload for in-place addition (+=)
+	Polynomial& operator+=(const Polynomial& other){
+
+		// For each term of the other
+		for (auto const &pair: other.coeffs) {
+
+			// If it's new add it, otherwise combine with the existing
+			if (coeffs.find(pair.first) != coeffs.end()) {
+				coeffs[pair.first] += pair.second;
+				if (std::abs(coeffs[pair.first]) < 1e-10) {
+					coeffs.erase(pair.first);
+				}
+			} else {
+				coeffs[pair.first] = pair.second;
+			}
+
+		}
+
+		return *this;
+	}
+
+	// Overload the multiplication operator
+	Polynomial operator*(const Polynomial& other) {
+
+		// For each term of both equations
+		Polynomial result(numVars);
+		for (auto const &pair1: coeffs) {
+			for (auto const &pair2: other.coeffs) {
+
+				// Combine the term list
+				std::string combined = "";
+				int ind1 = 0;
+				int ind2 = 0;
+				while (ind1 < pair1.first.size() && ind2 < pair2.first.size()) {
+					if (std::stoi(pair1.first.substr(ind1,digitsPerInd)) < std::stoi(pair2.first.substr(ind2,digitsPerInd))) {
+						combined += pair1.first.substr(ind1,digitsPerInd);
+						ind1 += digitsPerInd;
+					} else {
+						combined += pair2.first.substr(ind2,digitsPerInd);
+						ind2 += digitsPerInd;
+					}
+				}
+				combined += pair1.first.substr(ind1) + pair2.first.substr(ind2);
+
+				// If it's new add it, otherwise combine with the existing
+				if (result.coeffs.find(combined) != result.coeffs.end()) {
+					result.coeffs[combined] += pair1.second*pair2.second;
+				} else {
+					result.coeffs[combined] = pair1.second*pair2.second;
+				}
+
+			}
+		}
+
+		// Remove any zeros and return
+		return result.prune();
+
+	}
+
+	// Get the conjugate of the polynomial
+	Polynomial conj() {
+		Polynomial con(numVars);
+		for (auto const &pair: coeffs) {
+			con.coeffs[pair.first] = std::conj(pair.second);
+		}
+		return con;
+	}
+
+	// Evaluate a polynomial with x values
+	template <typename type>
+	std::complex<double> eval(type x) {
+
+		// For each term being added
+		std::complex<double> soFar = 0;
+		for (auto const &pair: coeffs) {
+
+			// Multiply all the values
+			std::complex<double> sub = 1;
+			for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
+				sub *= x[std::stoi(pair.first.substr(j, digitsPerInd))];
+			}
+
+			// Add to the total
+			soFar += sub*pair.second;
+
+		}
+
+		return soFar;
+
+	}
+
+	// Prepares this equation for rapid eval by caching things TODO
+	void prepareEvalFast() {
+
+		// For each coefficient
+		for (auto const &pair: coeffs) {
+
+			// Get the indices as a std::vector
+			std::vector<int> indVec;
+			for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
+				indVec.push_back(std::stoi(pair.first.substr(j, digitsPerInd)));
+			}
+			inds.push_back(indVec);
+
+			// Convert the coefficient to real
+			vals.push_back(std::real(pair.second));
+
+		}
+
+		// Free some space
+		coeffs.clear();
+
+	}
+
+	// Evaluate a polynomial with x values
+	template <typename type>
+	double evalFast(type x) {
+
+		// For each term being added
+		double soFar = 0;
+		for (int i=0; i<vals.size(); i++) {
+
+			// Multiply all the values
+			double sub = 1;
+			for (int j=0; j<inds[i].size(); j++) {
+				sub *= x[inds[i][j]];
+			}
+
+			// Add to the total
+			soFar += sub*vals[i];
+
+		}
+
+		return soFar;
+
+	}
+
+	// When doing std::cout << Polynomial
+	friend std::ostream &operator<<(std::ostream &output, const Polynomial &other) {
+
+		// For each term
+		int numSoFar = 0;
+		for (auto const &pair: other.coeffs) {
+
+			// First the coeff
+			output << pair.second << "*{";
+
+			// Then the indices
+			output << pair.first << "}";
+
+			// Output an addition on everything but the last
+			numSoFar += 1;
+			if (numSoFar < other.coeffs.size()) {
+				output << " + ";
+			}
+
+		}
+
+		return output;
+
+	}
+
+	// Checking equality between two polynomials
+	bool operator==(const Polynomial &other) {
+		for (auto const &pair: other.coeffs) {
+			if (coeffs[pair.first] != pair.second) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	// Checking inequality between two polynomials
+	bool operator!=(const Polynomial &other) {
+		for (auto const &pair: other.coeffs) {
+			if (coeffs[pair.first] == pair.second) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+};
 
 // Pretty print a vector
 template <typename type>
@@ -26,243 +380,6 @@ void pretty(std::vector<type> a) {
 	}
 	std::cout << "}" << std::endl;
 }
-
-// Remove zero terms from an equation
-eqn prune(eqn a) {
-	eqn aPruned;
-	for (int i=0; i<a.size(); i++) {
-		if (std::abs(a[i].first) > 1e-8) {
-			aPruned.push_back(a[i]);
-		}
-	}
-	return aPruned;
-}
-
-// Check equivalence of two equations
-bool equiv(eqn a, eqn b) {
-
-	// If there aren't the same number of non-zero term, they aren't equal
-	if (a.size() != b.size()) {
-		std::cout << "wrong size" << std::endl;
-		return false;
-	}
-
-	// For now check that they're the same order
-	for (int i=0; i<a.size(); i++) {
-		if (a[i].first != b[i].first) {
-			std::cout << "diff coeff = " << i << std::endl;
-			return false;
-		}
-		if (a[i].second != b[i].second) {
-			std::cout << "diff indices = " << i << std::endl;
-			return false;
-		}
-	}
-
-	return true;
-
-}
-
-// Integrate a polynomial with respect to a variable index
-eqn integrate(eqn a, int ind) {
-
-	// Process each term
-	eqn result;
-	for (int i=0; i<a.size(); i++) {
-		term newTerm = a[i];
-
-		// Count the number of times the variable appears here
-		int degree = std::count(a[i].second.begin(), a[i].second.end(), ind);
-
-		// x**3 -> 0.25*x**4
-		newTerm.first *= 1.0 / (degree+1);
-		newTerm.second.push_back(ind);
-
-		// Add to the result
-		result.push_back(newTerm);
-
-	}
-
-	return result;
-
-}
-
-// Differentiate a polynomial with respect to a variable index
-eqn differentiate(eqn a, int ind) {
-
-	// Process each term
-	eqn result;
-	for (int i=0; i<a.size(); i++) {
-		term newTerm = a[i];
-
-		// Count the number of times the variable appears here
-		int degree = std::count(a[i].second.begin(), a[i].second.end(), ind);
-
-		// x**3 -> 3*x**2
-		newTerm.first *= degree;
-		int indFound = -1;
-		for (int j=newTerm.second.size()-1; j>=0; j--) {
-			if (newTerm.second[j] == ind) {
-				indFound = j;
-				break;
-			}
-		}
-		if (indFound >= 0) {
-			newTerm.second.erase(newTerm.second.begin()+indFound);
-		}
-
-		// Add to the result
-		result.push_back(newTerm);
-
-	}
-
-	return prune(result);
-
-}
-
-
-// Eval an equation
-std::complex<double> eval(eqn a, std::vector<double> x) {
-	std::complex<double> soFar = 0;
-    for (int i=0; i<a.size(); i++) {
-		std::complex<double> sub = 1;
-		for (int j=0; j<a[i].second.size(); j++) {
-			sub *= x[a[i].second[j]];
-		}
-		soFar += sub*a[i].first;
-	}
-	return soFar;
-}
-
-// Eval an equation
-std::complex<double> eval(eqn a, Eigen::VectorXd x) {
-	std::complex<double> soFar = 0;
-    for (int i=0; i<a.size(); i++) {
-		std::complex<double> sub = 1;
-		for (int j=0; j<a[i].second.size(); j++) {
-			sub *= x[a[i].second[j]];
-		}
-		soFar += sub*a[i].first;
-	}
-	return soFar;
-}
-
-// Conjugate an equation
-eqn conj(eqn a) {
-	eqn aConj;
-	for (int i=0; i<a.size(); i++) {
-		aConj.push_back(a[i]);
-		aConj[i].first = std::conj(aConj[i].first);
-	}
-	return aConj;
-}
-
-// Add two equations
-eqn add(eqn a, eqn b) {
-
-	// Start with one equation
-	eqn result = a;
-
-	// For each term of the other
-	for (int i=0; i<b.size(); i++) {
-
-		// See if it's already in the equation
-		int indFound = -1;
-		for (int j=0; j<result.size(); j++) {
-			if (result[j].second == b[i].second) {
-				indFound = j;
-				break;
-			}
-		}
-
-		// If it's new add it, otherwise combine with the existing
-		if (indFound == -1) {
-			result.push_back(b[i]);
-		} else {
-			result[indFound].first += b[i].first;
-		}
-
-	}
-
-	// Remove any zeros and return
-	return prune(result);
-
-}
-
-// Multiply two equations
-eqn multiply(eqn a, eqn b) {
-
-	// For each term of both equations
-	eqn result;
-	for (int t1=0; t1<a.size(); t1++) {
-		for (int t2=0; t2<b.size(); t2++) {
-
-			// Combine the term list
-			std::vector<int> combined;
-			combined.insert(combined.end(), a[t1].second.begin(), a[t1].second.end());
-			combined.insert(combined.end(), b[t2].second.begin(), b[t2].second.end());
-
-			// Sort the term list
-			std::sort(combined.begin(), combined.end());
-
-			// See if it's already in the equation
-			int indFound = -1;
-			for (int i=0; i<result.size(); i++) {
-				if (result[i].second == combined) {
-					indFound = i;
-					break;
-				}
-			}
-
-			// If it's new add it, otherwise combine with the existing
-			if (indFound == -1) {
-				result.push_back(term(a[t1].first*b[t2].first, combined));
-			} else {
-				result[indFound].first += a[t1].first*b[t2].first;
-			}
-
-		}
-	}
-
-	// Remove any zeros and return
-	return prune(result);
-
-}
-
-// Print an equation
-void pretty(eqn a) {
-    for (int i=0; i<a.size(); i++) {
-		std::cout << a[i].first << "*{";
-		for (int j=0; j<a[i].second.size(); j++) {
-			std::cout << a[i].second[j];
-			if (j < a[i].second.size()-1) {
-				std::cout << ", ";
-			}
-		}
-		std::cout << "}";
-		if (i < a.size()-1) {
-			std::cout << " + ";
-		}
-    }
-	std::cout << " = 0" << std::endl;
-}
-
-// Class used by the LBFGS optimzer TODO
-class Optimizer {
-private:
-	eqn poly;
-	std::vector<eqn> gradient;
-	int numVars;
-public:
-    Optimizer(int numVars_, eqn poly_, std::vector<eqn> gradient_) : numVars(numVars_), poly(poly_), gradient(gradient_) {}
-    double operator()(const Eigen::VectorXd& x, Eigen::VectorXd& grad)
-    {
-		for (int i=0; i<numVars; i++) {
-			grad(i) = std::real(eval(gradient[i], x));
-		}
-        return std::real(eval(poly, x));
-    }
-};
 
 // Standard cpp entry point 
 int main(int argc, char ** argv) {
@@ -283,7 +400,7 @@ int main(int argc, char ** argv) {
 	int conjDelta = numVarsNonConj;
 	double rt2 = 1.0/std::sqrt(2.0);
 
-	// Known ideal TODO
+	// Known ideal
 	std::vector<double> idealX(numVars);
 	if (d == 2 && n == 2) {
 		idealX = {1, 0, 0, 1, rt2, rt2, rt2, -rt2, 0, 0, 0, 0, 0,   0,   0,    0};
@@ -293,9 +410,9 @@ int main(int argc, char ** argv) {
 	}
 
 	// The list of equations to fill
-	std::vector<eqn> eqns;
+	std::vector<Polynomial> eqns;
 
-	// Generate orthogonality equations
+	// Generate equations
 	std::cout << "Generating equations..." << std::endl;
 	for (int i=0; i<n; i++) {
 		for (int j=0; j<n; j++) {
@@ -303,36 +420,33 @@ int main(int argc, char ** argv) {
 				for (int l=0; l<d; l++) {
 
 					// Get the equation before squaring
-					eqn eqnPreSquare = {};
+					Polynomial eqnPreSquare(numVars);
 					for (int m=0; m<d; m++) {
 						int var1 = i*d*d + k*d + m;
 						int var2 = j*d*d + l*d + m;
 						int var3 = var1 + conjDelta;
 						int var4 = var2 + conjDelta;
-						eqnPreSquare.push_back(term(1, {var1, var2}));
-						eqnPreSquare.push_back(term(1, {var3, var4}));
-						eqnPreSquare.push_back(term(1i, {var1, var4}));
-						eqnPreSquare.push_back(term(-1i, {var2, var3}));
+						eqnPreSquare.addTerm(1, {var1, var2});
+						eqnPreSquare.addTerm(1, {var3, var4});
+						eqnPreSquare.addTerm(1i, {var1, var4});
+						eqnPreSquare.addTerm(-1i, {var2, var3});
 					}
 
 					// For the normalisation equations
 					if (i == j && k == l) {
-						eqnPreSquare.push_back(term(-1.0, {}));
+						eqnPreSquare.addTerm(-1.0, {});
 					}
 
 					// Square this equation
-					eqn eqn = multiply(conj(eqnPreSquare), eqnPreSquare);
+					Polynomial eqn = eqnPreSquare.conj() * eqnPreSquare;
 
 					// For the MUB-ness equations
 					if (i != j) {
-						eqn.push_back(term(-1.0/d, {}));
-						eqn = multiply(conj(eqn), eqn);
+						eqn.addTerm(-1.0/d, {});
+						eqn = eqn.conj() * eqn;
 					}
 
 					// Add it to the list
-					//pretty(eqn);
-					//std::cout << "eval = " << eval(eqn, idealX) << std::endl;
-					//std::cout << std::endl;
 					eqns.push_back(eqn);
 
 				}
@@ -342,105 +456,83 @@ int main(int argc, char ** argv) {
 
 	//// Combine these to create a single polynomial
 	std::cout << "Creating single polynomial..." << std::endl;
-	eqn poly;
+	Polynomial poly(numVars);
 	for (int i=0; i<eqns.size(); i++) {
-		poly = add(poly, eqns[i]);
+		poly += eqns[i];
 	}
-	//pretty(poly);
-	std::cout << "poly eval = " << eval(poly, idealX) << std::endl;
-	std::cout << std::endl;
 
 	// Integrate by a variable
 	std::cout << "Integrating..." << std::endl;
-	eqn integrated = integrate(poly, 0);
-	//pretty(integrated);
-	//std::cout << std::endl;
+	Polynomial integrated = poly.integrate(0);
 
-	// Get the derivates by each vars 
+	// Get the gradient TODO openmp
 	std::cout << "Differentiating..." << std::endl;
-	std::vector<eqn> gradient(numVars);
-	std::vector<std::vector<eqn>> hessian(numVars, std::vector<eqn>(numVars));
+	std::vector<Polynomial> gradient(numVars, Polynomial(numVars));
 	for (int i=0; i<numVars; i++) {
-		gradient[i] = differentiate(integrated, i);
-	}
-	for (int i=0; i<numVars; i++) {
-		for (int j=0; j<numVars; j++) {
-			hessian[i][j] = differentiate(gradient[i], j);
-		}
+		gradient[i] = integrated.differentiate(i);
 	}
 
 	// Ensure the first element is the same as the orig
-	if (!equiv(gradient[0], poly)) {
+	if (gradient[0] != poly) {
 		std::cout << "ERROR - differential of integral is not equivalent!" << std::endl;
 		return 0;
 	}
 
-	std::cout << "Optimizing..." << std::endl;
+	// Get the Hessian TODO openmp
+	std::vector<std::vector<Polynomial>> hessian(numVars, std::vector<Polynomial>(numVars, Polynomial(numVars)));
+	for (int i=0; i<numVars; i++) {
+		for (int j=i; j<numVars; j++) {
+			hessian[i][j] = gradient[i].differentiate(j);
+		}
+	}
+
+	// Pre-cache things to allow for much faster evals
+	std::cout << "Optimizing polynomials for fast eval..." << std::endl;
+	poly.prepareEvalFast();
+	integrated.prepareEvalFast();
+	for (int i=0; i<numVars; i++) {
+		gradient[i].prepareEvalFast();
+		for (int j=i; j<numVars; j++) {
+			hessian[i][j].prepareEvalFast();
+		}
+	}
 
 	// Random starting x
 	//std::srand(unsigned(std::time(nullptr)));
 	std::srand(0);
 	Eigen::VectorXd x = Eigen::VectorXd::Random(numVars);
-	//x(0) = 1e-29;
-	//for (int i=0; i<x.size(); i++) {
-		//x(i) = double(std::rand()) / RAND_MAX;
-	//}
-	std::cout << "init x = " << std::endl;
-	for (int i=0; i<x.size(); i++) {
-		std::cout << x(i) << ", ";
-	}
-	std::cout << std::endl;
-
-	// Initial Hessian calc
-	Eigen::MatrixXd H(numVars, numVars);
-	//for (int i=0; i<numVars; i++) {
-		//for (int j=0; j<numVars; j++) {
-			//H(i,j) = std::real(eval(hessian[i][j], x));
-		//}
-	//}
-
-	// Initial gradient calc
-	Eigen::VectorXd g(numVars);
-	//Eigen::VectorXd gNew(numVars);
-	//for (int i=0; i<numVars; i++) {
-		//g(i) = std::real(eval(gradient[i], x));
-	//}
 
 	// Perform gradient descent using this info
+	std::cout << "Minimizing..." << std::endl;
 	double alpha = 0.1;
 	if (argc > 3) {
 		alpha = std::stod(argv[3]);
 	}
 	Eigen::MatrixXd inv(numVars, numVars);
 	Eigen::VectorXd p(numVars);
-	Eigen::VectorXd q(numVars);
-	Eigen::VectorXd s(numVars);
-	Eigen::VectorXd y(numVars);
+	Eigen::MatrixXd H(numVars, numVars);
+	Eigen::VectorXd g(numVars);
 	double maxX = 0;
 	for (int iter=0; iter<10000000; iter++) {
 
-		// Calculate the gradient
+		// Calculate the gradient TODO openmp
 		for (int i=0; i<numVars; i++) {
-			g(i) = std::real(eval(gradient[i], x));
+			g(i) = gradient[i].evalFast(x);
 		}
 
-		// Calculate the Hessian
+		// Calculate the Hessian TODO openmp
 		for (int i=0; i<numVars; i++) {
-			for (int j=0; j<numVars; j++) {
-				H(i,j) = std::real(eval(hessian[i][j], x));
+			for (int j=i; j<numVars; j++) {
+				H(i,j) = hessian[i][j].evalFast(x);
+				H(j,i) = H(i,j);
 			}
 		}
 
-		// Calculate the inverse
-		inv = H.inverse();
-
-		// Calculate the direction
-		p = -inv*g;
-		//p = -H.colPivHouseholderQr().solve(g);
-		//Eigen::LeastSquaresConjugateGradient<Eigen::MatrixXd> lscg;
-		//lscg.compute(H);
-		//p = -lscg.solve(g);
-
+		// Determine the direction
+		//p = H.inverse()*g;
+		//p = H.partialPivLu().solve(g);
+		p = H.householderQr().solve(g);
+		
 		// Perform a line search
 		//alpha = 0.1;
 		//double c = 0.0;
@@ -449,7 +541,7 @@ int main(int argc, char ** argv) {
 		//double t = -c*m;
 		//for (int i=0; i<10; i++) {
 
-			//// Keep going until the Wolfe conditions hold TODO
+			//// Keep going until the Wolfe conditions hold
 			//if (std::real(eval(integrated, x)) - std::real(eval(integrated, x+alpha*p)) >= t*alpha) {
 				//break;
 			//}
@@ -460,21 +552,10 @@ int main(int argc, char ** argv) {
 		//}
 
 		// Perform the update
-		x += alpha*p;
-
-		// Calculate the gradient at the new point
-		//for (int i=0; i<numVars; i++) {
-			//gNew(i) = std::real(eval(gradient[i], x));
-		//}
-
-		// BFGS-style Hessian update TODO
-		//s = alpha*p;
-		//y = gNew - g;
-		//g = gNew;
-		//H += (y*y.transpose()) / (y.dot(s)) - ((H*s*s.transpose()*H.transpose()) / (s.dot(H*s)));
+		x -= alpha*p;
 
 		// Per-iteration output
-		std::cout << iter << " " << std::real(eval(integrated, x)) << " " << g.norm() << " " << alpha << std::endl;
+		std::cout << iter << " " << integrated.evalFast(x) << " " << g.norm() << " " << alpha << "          \r" << std::flush;
 
 		// Convergence criteria
 		if (std::abs(g(0)) < 1e-10) {
@@ -484,11 +565,15 @@ int main(int argc, char ** argv) {
 	}
 
 	// Output the final result
+	std::cout << std::endl << std::endl;
 	std::cout << "final x = " << std::endl;
 	for (int i=0; i<x.size(); i++) {
 		std::cout << x(i) << ", ";
 	}
 	std::cout << std::endl;
+	std::cout << "final eval = " << poly.eval(x) << std::endl;
+
+	// Final check for MUB-ness TODO
 
 	return 0;
 
