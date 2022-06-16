@@ -533,6 +533,14 @@ int main(int argc, char ** argv) {
 		//p = H.partialPivLu().solve(g);
 		p = H.householderQr().solve(g);
 		
+		//alpha = 0.1;
+		//for (int i=0; i<100; i++) {
+			//if (gradient[0].evalFast(x-alpha*p) - g(0) < alpha) {
+				//break;
+			//}
+			//alpha *= 0.9;
+		//}
+		
 		// Perform a line search
 		//alpha = 0.1;
 		//double c = 0.0;
@@ -555,7 +563,7 @@ int main(int argc, char ** argv) {
 		x -= alpha*p;
 
 		// Per-iteration output
-		std::cout << iter << " " << integrated.evalFast(x) << " " << g.norm() << " " << alpha << "          \r" << std::flush;
+		std::cout << iter << " " << g.norm() << " " << alpha << "          \r" << std::flush;
 
 		// Convergence criteria
 		if (std::abs(g(0)) < 1e-10) {
