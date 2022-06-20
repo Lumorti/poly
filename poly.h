@@ -1,3 +1,6 @@
+#ifndef _poly
+#define _poly
+
 #include <iostream>
 #include <vector>
 #include <complex>
@@ -9,9 +12,6 @@
 // Use Eigen for matrix/vector ops
 #include <Eigen/Dense>
 
-// Some useful definitions
-using namespace std::complex_literals;
-
 // Class allowing manipulation of polynomials
 class Polynomial {
 public:
@@ -22,6 +22,7 @@ public:
 	std::unordered_map<std::string, std::complex<double>> coeffs;
 
 	// Used for fast eval
+	bool fastEvalReady = false;
 	std::vector<std::vector<int>> inds;
 	std::vector<double> vals;
 
@@ -244,7 +245,7 @@ public:
 	}
 
 	// Get the conjugate of the polynomial
-	Polynomial conj() {
+	Polynomial conjugate() {
 		Polynomial con(numVars);
 		for (auto const &pair: coeffs) {
 			con.coeffs[pair.first] = std::conj(pair.second);
@@ -275,7 +276,7 @@ public:
 
 	}
 
-	// Prepares this equation for rapid eval by caching things TODO
+	// Prepares this equation for rapid eval by caching things
 	void prepareEvalFast() {
 
 		// For each coefficient
@@ -295,6 +296,9 @@ public:
 
 		// Free some space
 		coeffs.clear();
+
+		// Flag that ready for fast eval now
+		fastEvalReady = true;
 
 	}
 
@@ -366,224 +370,131 @@ public:
 		return true;
 	}
 
-};
+	// Use a gradient-descent method to find a local minimum
+	std::vector<double> findLocalMinimum(double alpha=0.1, double tolerance=1e-10, int maxIters=10000000) {
 
-// Pretty print a vector
-template <typename type>
-void pretty(std::vector<type> a) {
-	std::cout << "{ ";
-	for (int i=0; i<a.size(); i++) {
-		std::cout << a[i];
-		if (i < a.size()-1) {
-			std::cout << ", ";
-		}
-	}
-	std::cout << "}" << std::endl;
-}
-
-// Standard cpp entry point 
-int main(int argc, char ** argv) {
-
-	// Get the problem from the args
-	int d = 2;
-	int n = 2;
-	if (argc > 1) {
-		d = std::stoi(argv[1]);
-	}
-	if (argc > 2) {
-		n = std::stoi(argv[2]);
-	}
-
-	// Useful quantities
-	int numVarsNonConj = n*d*d;
-	int numVars = 2*n*d*d;
-	int conjDelta = numVarsNonConj;
-	double rt2 = 1.0/std::sqrt(2.0);
-
-	// Known ideal
-	std::vector<double> idealX(numVars);
-	if (d == 2 && n == 2) {
-		idealX = {1, 0, 0, 1, rt2, rt2, rt2, -rt2, 0, 0, 0, 0, 0,   0,   0,    0};
-	} else if (d == 2 && n == 3) {
-		idealX = {1, 0, 0, 1, rt2, rt2, rt2, -rt2,  rt2, 0,   rt2, 0,
-									  0, 0, 0, 0, 0,   0,   0,    0,    0,   rt2, 0,   -rt2};
-	}
-
-	// The list of equations to fill
-	std::vector<Polynomial> eqns;
-
-	// Generate equations
-	std::cout << "Generating equations..." << std::endl;
-	for (int i=0; i<n; i++) {
-		for (int j=0; j<n; j++) {
-			for (int k=0; k<d; k++) {
-				for (int l=0; l<d; l++) {
-
-					// Get the equation before squaring
-					Polynomial eqnPreSquare(numVars);
-					for (int m=0; m<d; m++) {
-						int var1 = i*d*d + k*d + m;
-						int var2 = j*d*d + l*d + m;
-						int var3 = var1 + conjDelta;
-						int var4 = var2 + conjDelta;
-						eqnPreSquare.addTerm(1, {var1, var2});
-						eqnPreSquare.addTerm(1, {var3, var4});
-						eqnPreSquare.addTerm(1i, {var1, var4});
-						eqnPreSquare.addTerm(-1i, {var2, var3});
-					}
-
-					// For the normalisation equations
-					if (i == j && k == l) {
-						eqnPreSquare.addTerm(-1.0, {});
-					}
-
-					// Square this equation
-					Polynomial eqn = eqnPreSquare.conj() * eqnPreSquare;
-
-					// For the MUB-ness equations
-					if (i != j) {
-						eqn.addTerm(-1.0/d, {});
-						eqn = eqn.conj() * eqn;
-					}
-
-					// Add it to the list
-					eqns.push_back(eqn);
-
-				}
-			}
-		}
-	}
-
-	//// Combine these to create a single polynomial
-	std::cout << "Creating single polynomial..." << std::endl;
-	Polynomial poly(numVars);
-	for (int i=0; i<eqns.size(); i++) {
-		poly += eqns[i];
-	}
-
-	// Integrate by a variable
-	std::cout << "Integrating..." << std::endl;
-	Polynomial integrated = poly.integrate(0);
-
-	// Get the gradient TODO openmp
-	std::cout << "Differentiating..." << std::endl;
-	std::vector<Polynomial> gradient(numVars, Polynomial(numVars));
-	for (int i=0; i<numVars; i++) {
-		gradient[i] = integrated.differentiate(i);
-	}
-
-	// Ensure the first element is the same as the orig
-	if (gradient[0] != poly) {
-		std::cout << "ERROR - differential of integral is not equivalent!" << std::endl;
-		return 0;
-	}
-
-	// Get the Hessian TODO openmp
-	std::vector<std::vector<Polynomial>> hessian(numVars, std::vector<Polynomial>(numVars, Polynomial(numVars)));
-	for (int i=0; i<numVars; i++) {
-		for (int j=i; j<numVars; j++) {
-			hessian[i][j] = gradient[i].differentiate(j);
-		}
-	}
-
-	// Pre-cache things to allow for much faster evals
-	std::cout << "Optimizing polynomials for fast eval..." << std::endl;
-	poly.prepareEvalFast();
-	integrated.prepareEvalFast();
-	for (int i=0; i<numVars; i++) {
-		gradient[i].prepareEvalFast();
-		for (int j=i; j<numVars; j++) {
-			hessian[i][j].prepareEvalFast();
-		}
-	}
-
-	// Random starting x
-	//std::srand(unsigned(std::time(nullptr)));
-	std::srand(0);
-	Eigen::VectorXd x = Eigen::VectorXd::Random(numVars);
-
-	// Perform gradient descent using this info
-	std::cout << "Minimizing..." << std::endl;
-	double alpha = 0.1;
-	if (argc > 3) {
-		alpha = std::stod(argv[3]);
-	}
-	Eigen::MatrixXd inv(numVars, numVars);
-	Eigen::VectorXd p(numVars);
-	Eigen::MatrixXd H(numVars, numVars);
-	Eigen::VectorXd g(numVars);
-	double maxX = 0;
-	for (int iter=0; iter<10000000; iter++) {
-
-		// Calculate the gradient TODO openmp
+		// Get the gradient TODO openmp
+		std::cout << "Differentiating..." << std::endl;
+		std::vector<Polynomial> gradient(numVars, Polynomial(numVars));
 		for (int i=0; i<numVars; i++) {
-			g(i) = gradient[i].evalFast(x);
+			gradient[i] = differentiate(i);
 		}
 
-		// Calculate the Hessian TODO openmp
+		// Get the Hessian TODO openmp
+		std::vector<std::vector<Polynomial>> hessian(numVars, std::vector<Polynomial>(numVars, Polynomial(numVars)));
 		for (int i=0; i<numVars; i++) {
 			for (int j=i; j<numVars; j++) {
-				H(i,j) = hessian[i][j].evalFast(x);
-				H(j,i) = H(i,j);
+				hessian[i][j] = gradient[i].differentiate(j);
 			}
 		}
 
-		// Determine the direction
-		//p = H.inverse()*g;
-		//p = H.partialPivLu().solve(g);
-		p = H.householderQr().solve(g);
-		
-		//alpha = 0.1;
-		//for (int i=0; i<100; i++) {
-			//if (gradient[0].evalFast(x-alpha*p) - g(0) < alpha) {
-				//break;
-			//}
-			//alpha *= 0.9;
-		//}
-		
-		// Perform a line search
-		//alpha = 0.1;
-		//double c = 0.0;
-		//double tau = 0.9;
-		//double m = g.dot(p);
-		//double t = -c*m;
-		//for (int i=0; i<10; i++) {
-
-			//// Keep going until the Wolfe conditions hold
-			//if (std::real(eval(integrated, x)) - std::real(eval(integrated, x+alpha*p)) >= t*alpha) {
-				//break;
-			//}
-
-			//// Reduce alpha
-			//alpha *= tau;
-
-		//}
-
-		// Perform the update
-		x -= alpha*p;
-
-		// Per-iteration output
-		std::cout << iter << " " << g.norm() << " " << alpha << "          \r" << std::flush;
-
-		// Convergence criteria
-		if (std::abs(g(0)) < 1e-10) {
-			break;
+		// Pre-cache things to allow for much faster evals
+		std::cout << "Optimizing polynomials for fast eval..." << std::endl;
+		prepareEvalFast();
+		for (int i=0; i<numVars; i++) {
+			gradient[i].prepareEvalFast();
+			for (int j=i; j<numVars; j++) {
+				hessian[i][j].prepareEvalFast();
+			}
 		}
 
+		// Random starting x
+		//std::srand(unsigned(std::time(nullptr)));
+		std::srand(0);
+		Eigen::VectorXd x = Eigen::VectorXd::Random(numVars);
+
+		// Perform gradient descent using this info
+		std::cout << "Minimizing..." << std::endl;
+		Eigen::MatrixXd inv(numVars, numVars);
+		Eigen::VectorXd p(numVars);
+		Eigen::MatrixXd H(numVars, numVars);
+		Eigen::VectorXd g(numVars);
+		double maxX = 0;
+		int iter = 0;
+		double norm = 1;
+		for (iter=0; iter<maxIters; iter++) {
+
+			// Calculate the gradient TODO openmp
+			for (int i=0; i<numVars; i++) {
+				g(i) = gradient[i].evalFast(x);
+			}
+
+			// Calculate the Hessian TODO openmp
+			for (int i=0; i<numVars; i++) {
+				for (int j=i; j<numVars; j++) {
+					H(i,j) = hessian[i][j].evalFast(x);
+					H(j,i) = H(i,j);
+				}
+			}
+
+			// Determine the direction
+			p = H.inverse()*g;
+			//p = H.partialPivLu().solve(g);
+			//p = H.householderQr().solve(g);
+
+			//alpha = 0.1;
+			//for (int i=0; i<100; i++) {
+				//if (gradient[0].evalFast(x-alpha*p) - g(0) < alpha) {
+					//break;
+				//}
+				//alpha *= 0.9;
+			//}
+			
+			// Perform a line search
+			//alpha = 0.1;
+			//double c = 0.0;
+			//double tau = 0.9;
+			//double m = g.dot(p);
+			//double t = -c*m;
+			//for (int i=0; i<10; i++) {
+
+				//// Keep going until the Wolfe conditions hold
+				//if (std::real(eval(this, x)) - std::real(eval(this, x+alpha*p)) >= t*alpha) {
+					//break;
+				//}
+
+				//// Reduce alpha
+				//alpha *= tau;
+
+			//}
+
+			// Perform the update
+			x -= alpha*p;
+
+			// Per-iteration output
+			norm = std::abs(g.norm());
+			std::cout << iter << " " << norm << " " << alpha << "          \r" << std::flush;
+
+			// Convergence criteria
+			if (norm < tolerance) {
+				break;
+			}
+
+		}
+
+		// Final output
+		std::cout << "Finished in " << iter << " iterations" << std::endl;
+		std::cout << "Final x = ";
+		std::cout << "{ ";
+		for (int i=0; i<numVars; i++) {
+			std::cout << x(i);
+			if (i < x.size()-1) {
+				std::cout << ", ";
+			}
+		}
+		std::cout << "}" << std::endl;
+		std::cout << "Final gradient = " << g(0) << std::endl;
+
+		// Convert the eigen vec into a normal vec
+		std::vector<double> toReturn(numVars);
+		for (int i=0; i<numVars; i++) {
+			toReturn[i] = x(i);
+		}
+		return toReturn;
+
 	}
 
-	// Output the final result
-	std::cout << std::endl << std::endl;
-	std::cout << "final x = " << std::endl;
-	for (int i=0; i<x.size(); i++) {
-		std::cout << x(i) << ", ";
-	}
-	std::cout << std::endl;
-	std::cout << "final eval = " << poly.eval(x) << std::endl;
+};
 
-	// Final check for MUB-ness TODO
-
-	return 0;
-
-}
+#endif
 	
