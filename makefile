@@ -5,8 +5,8 @@ LIBS=-I/usr/include/eigen3
 all: mub
 
 mub:
-	$(CXX) $(CXXFLAGS) -o mub mub.cpp poly.h $(LIBS)
+	$(CXX) $(CXXFLAGS) -o mub mub.cpp $(LIBS)
 
 factor:
-	$(CXX) $(CXXFLAGS) -o factor factor.cpp poly.h $(LIBS)
+	$(CXX) $(CXXFLAGS) -o factor factor.cpp $(LIBS)
 

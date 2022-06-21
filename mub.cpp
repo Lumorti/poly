@@ -25,10 +25,9 @@ int main(int argc, char ** argv) {
 	// Known ideal
 	std::vector<double> idealX(numVars);
 	if (d == 2 && n == 2) {
-		idealX = {1, 0, 0, 1, rt2, rt2, rt2, -rt2, 0, 0, 0, 0, 0,   0,   0,    0};
+		idealX = {1, 0, 0, 1, rt2, rt2, rt2, -rt2, 0, 0, 0, 0, 0, 0, 0, 0};
 	} else if (d == 2 && n == 3) {
-		idealX = {1, 0, 0, 1, rt2, rt2, rt2, -rt2,  rt2, 0,   rt2, 0,
-									  0, 0, 0, 0, 0,   0,   0,    0,    0,   rt2, 0,   -rt2};
+		idealX = {1, 0, 0, 1, rt2, rt2, rt2, -rt2, rt2, 0, rt2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, rt2, 0, -rt2};
 	}
 
 	// The list of equations to fill
@@ -60,13 +59,14 @@ int main(int argc, char ** argv) {
 					}
 
 					// Square this equation
-					Polynomial eqn = eqnPreSquare.conjugate() * eqnPreSquare;
+					Polynomial eqn = eqnPreSquare;
+					//Polynomial eqn = eqnPreSquare.conjugate() * eqnPreSquare;
 
 					// For the MUB-ness equations
 					if (i != j) {
-						eqn.addTerm(-1.0/d, {});
 						eqn = eqn.conjugate() * eqn;
-					}
+						eqn.addTerm(-1.0/d, {});
+	 				}
 
 					// Add it to the list
 					eqns.push_back(eqn);
@@ -76,12 +76,44 @@ int main(int argc, char ** argv) {
 		}
 	}
 
+	// TODO
+
+	std::vector<int> indsToReplace = {};
+	std::vector<std::complex<double>> valsToReplace = {};
+
+	// 2 for 2
+	if (d == 2 && n == 2) {
+		indsToReplace = {0,1,2,3,4,5,6,7,  8,9,10,11,12,13,14,15};
+		valsToReplace = {1, 0, 0, 1, rt2, rt2, rt2, -rt2, 0, 0, 0, 0, 0, 0, 0, 0};
+
+	// 2 for 3
+	} else if (d == 2 && n == 3) {
+		indsToReplace = {0,1,2,3,4,5,6,7,  12,13,14,15,16,17,18,19};
+		valsToReplace = {1, 0, 0, 1, rt2, rt2, rt2, -rt2, 0, 0, 0, 0, 0, 0, 0, 0};
+
+	// 3 for 3
+	} else if (d == 2 && n == 3) {
+		indsToReplace = {};
+		valsToReplace = {};
+
+	}
+
+	for (int i=0; i<eqns.size(); i++) {
+		//std::cout << std::endl << "orig = " << eqns[i] << std::endl;
+		std::cout << "0 = " << eqns[i].substitute(indsToReplace, valsToReplace) << std::endl;
+	}
+	return 0;
+
 	// Combine these to create a single polynomial
 	std::cout << "Creating single polynomial..." << std::endl;
 	Polynomial poly(numVars);
 	for (int i=0; i<eqns.size(); i++) {
 		poly += eqns[i];
 	}
+	//poly = poly.substitute(indsToReplace, valsToReplace);
+	std::cout << conjDelta << " " << numVars << std::endl;
+	//poly = poly.substitute({12,13,14,15}, {0,0,0,0});
+	poly = poly.substitute({8,9,10,11}, {0,0,0,0});
 
 	// Integrate and then find a local minimum of this
 	std::vector<double> x = poly.integrate(0).findLocalMinimum(0.1);

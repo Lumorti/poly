@@ -55,6 +55,53 @@ public:
 
 	}
 
+	// Substitute a variable for a value TODO
+	Polynomial substitute(int ind, std::complex<double> toReplace) {
+
+		// Cache the ind to replace as a string
+		std::string indString = std::to_string(ind);
+		indString.insert(0, digitsPerInd-indString.size(), ' ');
+
+		// For each element in this polynomial
+		Polynomial newPoly(numVars);
+		for (auto const &pair: coeffs) {
+
+			// Remove any instances of this index
+			std::string newKey = "";
+			std::complex<double> newVal = pair.second;
+			for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
+				if (pair.first.substr(i, digitsPerInd) == indString) {
+					newVal *= toReplace;
+				} else {
+					newKey += pair.first.substr(i,digitsPerInd); 
+				}
+			}
+
+			// Then add or create this new term
+			if (newPoly.coeffs.find(newKey) != newPoly.coeffs.end()) {
+				newPoly.coeffs[newKey] += newVal;
+				if (std::abs(newPoly.coeffs[newKey]) < 1e-10) {
+					newPoly.coeffs.erase(newKey);
+				}
+			} else {
+				newPoly.coeffs[newKey] = newVal;
+			}
+
+		}
+
+		return newPoly;
+
+	}	
+
+	// Substitute several variables for several values 
+	Polynomial substitute(std::vector<int> ind, std::vector<std::complex<double>> toReplace) {
+		Polynomial newPoly = substitute(ind[0], toReplace[0]);
+		for (int i=1; i<ind.size(); i++) {
+			newPoly = newPoly.substitute(ind[i], toReplace[i]);
+		}
+		return newPoly.prune();
+	}
+
 	// Remove zeros from a polynomial
 	Polynomial prune() {
 		Polynomial newPoly(numVars);
@@ -428,9 +475,19 @@ public:
 			}
 
 			// Determine the direction
-			p = H.inverse()*g;
+			//p = H.inverse()*g;
 			//p = H.partialPivLu().solve(g);
-			//p = H.householderQr().solve(g);
+			p = H.householderQr().solve(g);
+
+			for (int i=0; i<numVars; i++) {
+				if (isnan(p(i))) {
+					p(i) = 0;
+					x(i) = 0;
+				}
+			}
+
+			//std::cout << p.transpose() << std::endl;
+			//return std::vector<double>(1);
 
 			//alpha = 0.1;
 			//for (int i=0; i<100; i++) {
