@@ -1,10 +1,11 @@
 #include "poly.h"
-
-// Some useful definitions
-using namespace std::complex_literals;
+#include <time.h>
 
 // Standard cpp entry point 
 int main(int argc, char ** argv) {
+
+	// Sometimes we want this, sometimes we don't
+	std::srand(std::time(NULL));
 
 	// Get the problem from the args
 	int d = 2;
@@ -31,7 +32,7 @@ int main(int argc, char ** argv) {
 	}
 
 	// The list of equations to fill
-	std::vector<Polynomial> eqns;
+	std::vector<Polynomial<double>> eqns;
 
 	// Generate equations
 	std::cout << "Generating equations..." << std::endl;
@@ -41,26 +42,22 @@ int main(int argc, char ** argv) {
 				for (int l=0; l<d; l++) {
 
 					// Get the equation before squaring
-					Polynomial eqnPreSquare(numVars);
+					Polynomial<std::complex<double>> eqn(numVars);
 					for (int m=0; m<d; m++) {
 						int var1 = i*d*d + k*d + m;
 						int var2 = j*d*d + l*d + m;
 						int var3 = var1 + conjDelta;
 						int var4 = var2 + conjDelta;
-						eqnPreSquare.addTerm(1, {var1, var2});
-						eqnPreSquare.addTerm(1, {var3, var4});
-						eqnPreSquare.addTerm(1i, {var1, var4});
-						eqnPreSquare.addTerm(-1i, {var2, var3});
+						eqn.addTerm(1, {var1, var2});
+						eqn.addTerm(1, {var3, var4});
+						eqn.addTerm(1i, {var1, var4});
+						eqn.addTerm(-1i, {var2, var3});
 					}
 
 					// For the normalisation equations
 					if (i == j && k == l) {
-						eqnPreSquare.addTerm(-1.0, {});
+						eqn.addTerm(-1.0, {});
 					}
-
-					// Square this equation
-					Polynomial eqn = eqnPreSquare;
-					//Polynomial eqn = eqnPreSquare.conjugate() * eqnPreSquare;
 
 					// For the MUB-ness equations
 					if (i != j) {
@@ -68,8 +65,9 @@ int main(int argc, char ** argv) {
 						eqn.addTerm(-1.0/d, {});
 	 				}
 
-					// Add it to the list
-					eqns.push_back(eqn);
+					// Both the real and imag parts should be 0
+					eqns.push_back(Polynomial<double>(eqn.real()));
+					eqns.push_back(Polynomial<double>(eqn.imag()));
 
 				}
 			}
@@ -77,46 +75,60 @@ int main(int argc, char ** argv) {
 	}
 
 	// TODO
+	if (d == 2) {
 
-	std::vector<int> indsToReplace = {};
-	std::vector<std::complex<double>> valsToReplace = {};
+		std::vector<int> indsToReplace = {};
+		std::vector<double> valsToReplace = {};
 
-	// 2 for 2
-	if (d == 2 && n == 2) {
-		indsToReplace = {0,1,2,3,4,5,6,7,  8,9,10,11,12,13,14,15};
-		valsToReplace = {1, 0, 0, 1, rt2, rt2, rt2, -rt2, 0, 0, 0, 0, 0, 0, 0, 0};
+		// 2 for 2
+		if (d == 2 && n == 2) {
+			indsToReplace = {0,1,2,3,4,5,6,7,  8,9,10,11,12,13,14,15};
+			valsToReplace = {1, 0, 0, 1, rt2, rt2, rt2, -rt2, 0, 0, 0, 0, 0, 0, 0, 0};
 
-	// 2 for 3
-	} else if (d == 2 && n == 3) {
-		indsToReplace = {0,1,2,3,4,5,6,7,  12,13,14,15,16,17,18,19};
-		valsToReplace = {1, 0, 0, 1, rt2, rt2, rt2, -rt2, 0, 0, 0, 0, 0, 0, 0, 0};
+		// 3 for 3
+		} else if (d == 2 && n == 3) {
+			indsToReplace = {0,1,2,3,  4,5,6,7, 8,9,10,11,    12,13,14,15,16,17,18,19,20,21,22,23};
+			valsToReplace = {1,0,0,1,  rt2,rt2,rt2,-rt2,  rt2,0,rt2,0,    0,0,0,0,    0,0,0,0,    0,rt2,0,-rt2};
 
-	// 3 for 3
-	} else if (d == 2 && n == 3) {
-		indsToReplace = {};
-		valsToReplace = {};
+		// 3 for 4
+		} else if (d == 2 && n == 4) {
+			indsToReplace = {0,1,2,3,  4,5,6,7,   8,9,10,11,        16,17,18,19,  20,21,22,23,  24,25,26,27};
+			valsToReplace = {1,0,0,1,  rt2,rt2,rt2,-rt2,  rt2,0,rt2,0,    0,0,0,0,    0,0,0,0,    0,rt2,0,-rt2};
+
+		}
+
+		for (int i=0; i<eqns.size(); i++) {
+			std::cout << "0 = " << eqns[i].substitute(indsToReplace, valsToReplace) << std::endl;
+		}
 
 	}
-
-	for (int i=0; i<eqns.size(); i++) {
-		//std::cout << std::endl << "orig = " << eqns[i] << std::endl;
-		std::cout << "0 = " << eqns[i].substitute(indsToReplace, valsToReplace) << std::endl;
-	}
-	return 0;
 
 	// Combine these to create a single polynomial
 	std::cout << "Creating single polynomial..." << std::endl;
-	Polynomial poly(numVars);
+	Polynomial<double> poly(numVars+1);
 	for (int i=0; i<eqns.size(); i++) {
-		poly += eqns[i];
+		poly += eqns[i]*eqns[i];
 	}
-	//poly = poly.substitute(indsToReplace, valsToReplace);
-	std::cout << conjDelta << " " << numVars << std::endl;
-	//poly = poly.substitute({12,13,14,15}, {0,0,0,0});
-	poly = poly.substitute({8,9,10,11}, {0,0,0,0});
 
-	// Integrate and then find a local minimum of this
-	std::vector<double> x = poly.integrate(0).findLocalMinimum(0.1);
+	// Get the complex relaxation of this TODO
+	//std::cout << "Attempting to find a relaxed root..." << std::endl;
+	//Polynomial<double> relaxed = poly.getComplexRelaxation();
+	//relaxed.numVars += 1;
+	//std::vector<double> x2 = relaxed.findRoot(numVars);
+	//std::cout << "Testing this x = " << relaxed.eval(x2) << std::endl;
+
+	// Find a root of this
+	std::cout << "Attempting to find a root..." << std::endl;
+	std::vector<double> x = poly.findRoot();
+	std::cout << "Testing this x = " << poly.eval(x) << std::endl;
+
+	// Find a root of this when using partial data TODO
+
+	// Form a system of poly equations and try to solve that instead
+	//std::cout << std::endl;
+	//PolynomialSystem<double> sys(eqns);
+	//std::vector<double> x2 = sys.findRoot();
+	//std::cout << "Testing this x = " << poly.eval(x2) << std::endl;
 
 	return 0;
 

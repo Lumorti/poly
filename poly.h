@@ -12,28 +12,83 @@
 // Use Eigen for matrix/vector ops
 #include <Eigen/Dense>
 
+// OpenMP for parallelisation
+#include <omp.h>
+
+// Allow complex literals like 1i
+using namespace std::complex_literals;
+
 // Class allowing manipulation of polynomials
+template <class polyType>
 class Polynomial {
 public:
 
 	// General poly properties
 	int numVars = 1;
 	int digitsPerInd = 1;
-	std::unordered_map<std::string, std::complex<double>> coeffs;
+	std::unordered_map<std::string, polyType> coeffs;
 
 	// Used for fast eval
 	bool fastEvalReady = false;
 	std::vector<std::vector<int>> inds;
-	std::vector<double> vals;
+	std::vector<polyType> vals;
 
 	// Default constructor
 	Polynomial(int numVars_) {
 		numVars = numVars_;
-		digitsPerInd = std::ceil(std::log10(numVars));
+		digitsPerInd = std::ceil(std::log10(numVars+1));
+	}
+
+	// Contructor from another poly
+	template <typename type2>
+	Polynomial(Polynomial<type2> other) {
+
+		// Copy metadata
+		numVars = other.numVars;
+		digitsPerInd = other.digitsPerInd;
+		fastEvalReady = other.fastEvalReady;
+
+		// Copy coeffs
+		coeffs = std::unordered_map<std::string, polyType>(other.coeffs.size());
+		for (auto const &pair: other.coeffs) {
+			coeffs[pair.first] = polyType(pair.second);
+		}
+
+		// Copy fast eval coeffs
+		inds = other.inds;
+		vals = std::vector<polyType>(other.vals.size());
+		for (int i=0; i<other.vals.size(); i++) {
+			vals[i] = polyType(other.vals[i]);
+		}
+
+	}
+
+	// Constructor from a complex poly
+	template <typename type2>
+	Polynomial(Polynomial<std::complex<type2>> other) {
+
+		// Copy metadata
+		numVars = other.numVars;
+		digitsPerInd = other.digitsPerInd;
+		fastEvalReady = other.fastEvalReady;
+
+		// Copy coeffs
+		coeffs = std::unordered_map<std::string, polyType>(other.coeffs.size());
+		for (auto const &pair: other.coeffs) {
+			coeffs[pair.first] = polyType(std::real(pair.second));
+		}
+
+		// Copy fast eval coeffs
+		inds = other.inds;
+		vals = std::vector<polyType>(other.vals.size());
+		for (int i=0; i<other.vals.size(); i++) {
+			vals[i] = polyType(std::real(other.vals[i]));
+		}
+
 	}
 
 	// Add a term given a coefficient and an index list
-	void addTerm(std::complex<double> coeff, std::vector<int> list) {
+	void addTerm(polyType coeff, std::vector<int> list) {
 
 		// Convert the vector to a string
 		std::string asString = "";
@@ -55,8 +110,8 @@ public:
 
 	}
 
-	// Substitute a variable for a value TODO
-	Polynomial substitute(int ind, std::complex<double> toReplace) {
+	// Substitute a variable for a value
+	Polynomial substitute(int ind, polyType toReplace) {
 
 		// Cache the ind to replace as a string
 		std::string indString = std::to_string(ind);
@@ -68,7 +123,7 @@ public:
 
 			// Remove any instances of this index
 			std::string newKey = "";
-			std::complex<double> newVal = pair.second;
+			polyType newVal = pair.second;
 			for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
 				if (pair.first.substr(i, digitsPerInd) == indString) {
 					newVal *= toReplace;
@@ -94,7 +149,7 @@ public:
 	}	
 
 	// Substitute several variables for several values 
-	Polynomial substitute(std::vector<int> ind, std::vector<std::complex<double>> toReplace) {
+	Polynomial substitute(std::vector<int> ind, std::vector<polyType> toReplace) {
 		Polynomial newPoly = substitute(ind[0], toReplace[0]);
 		for (int i=1; i<ind.size(); i++) {
 			newPoly = newPoly.substitute(ind[i], toReplace[i]);
@@ -253,6 +308,12 @@ public:
 		return *this;
 	}
 
+	// The in-place multiplication operator (inefficient and lazy)
+	Polynomial operator*=(const Polynomial& other) {
+		*this = (*this) * other;
+		return *this;
+	}
+
 	// Overload the multiplication operator
 	Polynomial operator*(const Polynomial& other) {
 
@@ -300,16 +361,33 @@ public:
 		return con;
 	}
 
+	// Get the real part of the polynomial
+	Polynomial real() {
+		Polynomial con(numVars);
+		for (auto const &pair: coeffs) {
+			con.coeffs[pair.first] = std::real(pair.second);
+		}
+		return con.prune();
+	}
+
+	// Get the imaginary part of the polynomial
+	Polynomial imag() {
+		Polynomial con(numVars);
+		for (auto const &pair: coeffs) {
+			con.coeffs[pair.first] = std::imag(pair.second);
+		}
+		return con.prune();
+	}
+
 	// Evaluate a polynomial with x values
-	template <typename type>
-	std::complex<double> eval(type x) {
+	polyType eval(std::vector<polyType> x) {
 
 		// For each term being added
-		std::complex<double> soFar = 0;
+		polyType soFar = 0;
 		for (auto const &pair: coeffs) {
 
 			// Multiply all the values
-			std::complex<double> sub = 1;
+			polyType sub = 1;
 			for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
 				sub *= x[std::stoi(pair.first.substr(j, digitsPerInd))];
 			}
@@ -320,6 +398,46 @@ public:
 		}
 
 		return soFar;
+
+	}
+
+	// Go from a1*a2 = 0 TODO this is real slow
+	//         -> f = (a1+ib1)*(a2+ib2)
+	//         -> real(f)**2 + imag(f)**2 = 0
+	Polynomial<double> getComplexRelaxation() {
+
+		// First convert this poly to complex
+		Polynomial<std::complex<double>> complexPoly(numVars*2);
+
+		// For each term in the original
+		for (auto const &pair: coeffs) {
+
+			// Start with the coefficient
+			Polynomial<std::complex<double>> newTerm(numVars*2);
+			newTerm.addTerm(pair.second, {});
+
+			// Then for every index
+			for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
+
+				// Go from c -> a+ib
+				Polynomial<std::complex<double>> thisTerm(numVars*2);
+				int ind = std::stoi(pair.first.substr(j, digitsPerInd));
+				thisTerm.addTerm(1, {ind});
+				thisTerm.addTerm(1i, {ind+numVars});
+
+				// If there's c1*c2 need (a1+ib1)*(a2+ib2)
+				newTerm *= thisTerm;
+
+			}
+
+			// Add this term to the full equation
+			complexPoly += newTerm;
+
+		}
+
+		// Square the real and imag parts
+		Polynomial<double> newPoly = complexPoly.real()*complexPoly.real() + complexPoly.imag()*complexPoly.imag();
+		return newPoly;
 
 	}
 
@@ -351,14 +469,14 @@ public:
 
 	// Evaluate a polynomial with x values
 	template <typename type>
-	double evalFast(type x) {
+	polyType evalFast(type x) {
 
 		// For each term being added
-		double soFar = 0;
+		polyType soFar = 0;
 		for (int i=0; i<vals.size(); i++) {
 
 			// Multiply all the values
-			double sub = 1;
+			polyType sub = 1;
 			for (int j=0; j<inds[i].size(); j++) {
 				sub *= x[inds[i][j]];
 			}
@@ -417,18 +535,28 @@ public:
 		return true;
 	}
 
-	// Use a gradient-descent method to find a local minimum
-	std::vector<double> findLocalMinimum(double alpha=0.1, double tolerance=1e-10, int maxIters=10000000) {
+	// Try to find a root, with one variable bieng optimized towards zer0
+	std::vector<polyType> findRoot(int zeroInd=0, double alpha=0.1, double tolerance=1e-10, int maxIters=10000000) {
+		return integrate(zeroInd).findLocalMinimum(alpha, tolerance, maxIters, zeroInd);
+	}
 
-		// Get the gradient TODO openmp
-		std::cout << "Differentiating..." << std::endl;
+	// Use the Newton method to find a local minimum
+	std::vector<polyType> findLocalMinimum(double alpha=0.1, double tolerance=1e-10, int maxIters=10000000, int zeroInd=0, int threads=4) {
+
+		// Prepare everything for parallel computation
+		omp_set_num_threads(threads);
+		Eigen::setNbThreads(threads);
+
+		// Get the gradient
 		std::vector<Polynomial> gradient(numVars, Polynomial(numVars));
+		#pragma omp parallel for
 		for (int i=0; i<numVars; i++) {
 			gradient[i] = differentiate(i);
 		}
 
-		// Get the Hessian TODO openmp
+		// Get the Hessian
 		std::vector<std::vector<Polynomial>> hessian(numVars, std::vector<Polynomial>(numVars, Polynomial(numVars)));
+		#pragma omp parallel for
 		for (int i=0; i<numVars; i++) {
 			for (int j=i; j<numVars; j++) {
 				hessian[i][j] = gradient[i].differentiate(j);
@@ -436,8 +564,7 @@ public:
 		}
 
 		// Pre-cache things to allow for much faster evals
-		std::cout << "Optimizing polynomials for fast eval..." << std::endl;
-		prepareEvalFast();
+		#pragma omp parallel for
 		for (int i=0; i<numVars; i++) {
 			gradient[i].prepareEvalFast();
 			for (int j=i; j<numVars; j++) {
@@ -446,12 +573,9 @@ public:
 		}
 
 		// Random starting x
-		//std::srand(unsigned(std::time(nullptr)));
-		std::srand(0);
 		Eigen::VectorXd x = Eigen::VectorXd::Random(numVars);
 
 		// Perform gradient descent using this info
-		std::cout << "Minimizing..." << std::endl;
 		Eigen::MatrixXd inv(numVars, numVars);
 		Eigen::VectorXd p(numVars);
 		Eigen::MatrixXd H(numVars, numVars);
@@ -461,12 +585,14 @@ public:
 		double norm = 1;
 		for (iter=0; iter<maxIters; iter++) {
 
-			// Calculate the gradient TODO openmp
+			// Calculate the gradient
+			#pragma omp parallel for
 			for (int i=0; i<numVars; i++) {
 				g(i) = gradient[i].evalFast(x);
 			}
 
-			// Calculate the Hessian TODO openmp
+			// Calculate the Hessian
+			#pragma omp parallel for
 			for (int i=0; i<numVars; i++) {
 				for (int j=i; j<numVars; j++) {
 					H(i,j) = hessian[i][j].evalFast(x);
@@ -475,52 +601,16 @@ public:
 			}
 
 			// Determine the direction
-			//p = H.inverse()*g;
-			//p = H.partialPivLu().solve(g);
-			p = H.householderQr().solve(g);
-
-			for (int i=0; i<numVars; i++) {
-				if (isnan(p(i))) {
-					p(i) = 0;
-					x(i) = 0;
-				}
-			}
-
-			//std::cout << p.transpose() << std::endl;
-			//return std::vector<double>(1);
-
-			//alpha = 0.1;
-			//for (int i=0; i<100; i++) {
-				//if (gradient[0].evalFast(x-alpha*p) - g(0) < alpha) {
-					//break;
-				//}
-				//alpha *= 0.9;
-			//}
-			
-			// Perform a line search
-			//alpha = 0.1;
-			//double c = 0.0;
-			//double tau = 0.9;
-			//double m = g.dot(p);
-			//double t = -c*m;
-			//for (int i=0; i<10; i++) {
-
-				//// Keep going until the Wolfe conditions hold
-				//if (std::real(eval(this, x)) - std::real(eval(this, x+alpha*p)) >= t*alpha) {
-					//break;
-				//}
-
-				//// Reduce alpha
-				//alpha *= tau;
-
-			//}
+			//p = H.householderQr().solve(-g);
+			p = H.colPivHouseholderQr().solve(-g);
+			//p = (H.transpose() * H).ldlt().solve(H.transpose() * (-g));
 
 			// Perform the update
-			x -= alpha*p;
+			x += alpha*p;
 
 			// Per-iteration output
 			norm = std::abs(g.norm());
-			std::cout << iter << " " << norm << " " << alpha << "          \r" << std::flush;
+			std::cout << iter << " " << norm << " " << x(zeroInd) << " " << alpha << "          \r" << std::flush;
 
 			// Convergence criteria
 			if (norm < tolerance) {
@@ -531,6 +621,9 @@ public:
 
 		// Final output
 		std::cout << "Finished in " << iter << " iterations" << std::endl;
+		if (iter == maxIters) {
+			std::cout << "WARNING - reached iteration limit" << std::endl;
+		}
 		std::cout << "Final x = ";
 		std::cout << "{ ";
 		for (int i=0; i<numVars; i++) {
@@ -543,7 +636,7 @@ public:
 		std::cout << "Final gradient = " << g(0) << std::endl;
 
 		// Convert the eigen vec into a normal vec
-		std::vector<double> toReturn(numVars);
+		std::vector<polyType> toReturn(numVars);
 		for (int i=0; i<numVars; i++) {
 			toReturn[i] = x(i);
 		}
