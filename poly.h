@@ -1,6 +1,7 @@
 #ifndef _poly
 #define _poly
 
+#include <limits>
 #include <iostream>
 #include <vector>
 #include <complex>
@@ -25,6 +26,7 @@ class Polynomial {
 public:
 
 	// General poly properties
+	double zeroTol = 1e-15;
 	int numVars = 1;
 	int digitsPerInd = 1;
 	std::unordered_map<std::string, polyType> coeffs;
@@ -116,7 +118,7 @@ public:
 		}
 
 		// Sort and return
-		std::sort(listToReturn.begin(), listToReturn.begin());
+		std::sort(listToReturn.begin(), listToReturn.end());
 		return listToReturn;
 
 	}
@@ -152,7 +154,9 @@ public:
 			}
 
 			// Add this new term
-			newPoly.coeffs[newInd] = coeff;
+			if (std::abs(coeff) > zeroTol) {
+				newPoly.coeffs[newInd] = coeff;
+			}
 
 		}
 
@@ -174,7 +178,7 @@ public:
 		// Add it, combining it if the term already exists
 		if (coeffs.find(asString) != coeffs.end()) {
 			coeffs[asString] += coeff;
-			if (std::abs(coeffs[asString]) < 1e-10) {
+			if (std::abs(coeffs[asString]) < zeroTol) {
 				coeffs.erase(asString);
 			}
 		} else {
@@ -208,7 +212,7 @@ public:
 			// Then add or create this new term
 			if (newPoly.coeffs.find(newKey) != newPoly.coeffs.end()) {
 				newPoly.coeffs[newKey] += newVal;
-				if (std::abs(newPoly.coeffs[newKey]) < 1e-10) {
+				if (std::abs(newPoly.coeffs[newKey]) < zeroTol) {
 					newPoly.coeffs.erase(newKey);
 				}
 			} else {
@@ -223,6 +227,9 @@ public:
 
 	// Substitute several variables for several values 
 	Polynomial substitute(std::vector<int> ind, std::vector<polyType> toReplace) {
+		if (ind.size() == 0) {
+			return *this;
+		}
 		Polynomial newPoly = substitute(ind[0], toReplace[0]);
 		for (int i=1; i<ind.size(); i++) {
 			newPoly = newPoly.substitute(ind[i], toReplace[i]);
@@ -234,7 +241,7 @@ public:
 	Polynomial prune() {
 		Polynomial newPoly(numVars);
 		for (auto const &pair: coeffs) {
-			if (std::abs(pair.second) > 1e-8) {
+			if (std::abs(pair.second) > zeroTol) {
 				newPoly.coeffs[pair.first] = pair.second;
 			}
 		}
@@ -346,7 +353,7 @@ public:
 			// If it's new add it, otherwise combine with the existing
 			if (result.coeffs.find(pair.first) != result.coeffs.end()) {
 				result.coeffs[pair.first] += pair.second;
-				if (std::abs(result.coeffs[pair.first]) < 1e-10) {
+				if (std::abs(result.coeffs[pair.first]) < zeroTol) {
 					result.coeffs.erase(pair.first);
 				}
 			} else {
@@ -369,7 +376,7 @@ public:
 			// If it's new add it, otherwise combine with the existing
 			if (coeffs.find(pair.first) != coeffs.end()) {
 				coeffs[pair.first] += pair.second;
-				if (std::abs(coeffs[pair.first]) < 1e-10) {
+				if (std::abs(coeffs[pair.first]) < zeroTol) {
 					coeffs.erase(pair.first);
 				}
 			} else {
@@ -608,6 +615,33 @@ public:
 		return true;
 	}
 
+	// Return true if the polynomial contains this variable
+	bool contains(int varInd) {
+
+		// Cache the ind to find as a string
+		std::string indString = std::to_string(varInd);
+		indString.insert(0, digitsPerInd-indString.size(), ' ');
+
+		// For each coefficient
+		for (auto const &pair: coeffs) {
+
+			// Get the indices as a std::vector TODO
+			for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
+
+				// Check if this index is the correct
+				if (pair.first.substr(j, digitsPerInd) == indString) {
+					return true;
+				}
+
+			}
+
+		}
+
+		// Default false
+		return false;
+
+	}
+
 	// Try to find a root, with one variable bieng optimized towards zer0
 	std::vector<polyType> findRoot(int zeroInd=0, double alpha=0.1, double tolerance=1e-10, int maxIters=10000000) {
 		return integrate(zeroInd).findLocalMinimum(alpha, tolerance, maxIters, zeroInd);
@@ -683,7 +717,7 @@ public:
 
 			// Per-iteration output
 			norm = std::abs(g.norm());
-			std::cout << iter << " " << norm << " " << alpha << "          \r" << std::flush;
+			std::cout << iter << " " << norm << " " << g(zeroInd) << " " << x(zeroInd) << "          \r" << std::flush;
 
 			// Convergence criteria
 			if (norm < tolerance) {
@@ -691,8 +725,10 @@ public:
 			}
 
 		}
+		std::cout << iter << " " << norm << " " << g(zeroInd) << " " << x(zeroInd) << std::endl;
 
 		// Final output
+		std::cout.precision(std::numeric_limits<double>::max_digits10);
 		std::cout << "Finished in " << iter << " iterations       " << std::endl;
 		if (iter == maxIters) {
 			std::cout << "WARNING - reached iteration limit" << std::endl;
