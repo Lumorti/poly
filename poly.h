@@ -8,6 +8,7 @@
 #include <chrono>
 #include <math.h>
 #include <unordered_map>
+#include <set>
 
 // Use Eigen for matrix/vector ops
 #include <Eigen/Dense>
@@ -84,6 +85,78 @@ public:
 		for (int i=0; i<other.vals.size(); i++) {
 			vals[i] = polyType(std::real(other.vals[i]));
 		}
+
+	}
+
+	// Get a list of all the variable indices
+	std::vector<int> getVars() {
+		std::vector<int> listToReturn;
+
+		// For each term
+		for (auto const &pair: coeffs) {
+
+			// Check each var
+			for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
+				int varInd = std::stoi(pair.first.substr(i, digitsPerInd));
+
+				// Check if this ind is already in the list
+				bool found = false;
+				for (int j=0; j<listToReturn.size(); j++) {
+					if (listToReturn[j] == varInd) {
+						found = true;
+					}
+				}
+
+				// If it's not, add it
+				if (!found) {
+					listToReturn.push_back(varInd);
+				}
+
+			}
+		}
+
+		// Sort and return
+		std::sort(listToReturn.begin(), listToReturn.begin());
+		return listToReturn;
+
+	}
+
+	// Given a list of pairs, map variables to different indices
+	Polynomial changeVars(std::vector<int> from, std::vector<int> to) {
+
+		// Count the number of unique new indices
+		std::set<int> uniques(to.begin(), to.end());
+
+		// Create a new polynomial with this number of vars
+		Polynomial newPoly(uniques.size());
+
+		// Turn the int vecs into string vec
+		std::unordered_map<std::string,std::string> mapString;
+		for (int i=0; i<from.size(); i++) {
+			std::string fromString = std::to_string(from[i]);
+			std::string toString = std::to_string(to[i]);
+			fromString.insert(0, digitsPerInd-fromString.size(), ' ');
+			toString.insert(0, newPoly.digitsPerInd-toString.size(), ' ');
+			mapString[fromString] = toString;
+		}
+
+		// For each term
+		for (auto const &pair: coeffs) {
+
+			std::string newInd = "";
+			polyType coeff = pair.second;
+
+			// For each var in the original term
+			for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
+				newInd += mapString[pair.first.substr(i, digitsPerInd)];
+			}
+
+			// Add this new term
+			newPoly.coeffs[newInd] = coeff;
+
+		}
+
+		return newPoly;
 
 	}
 
@@ -610,7 +683,7 @@ public:
 
 			// Per-iteration output
 			norm = std::abs(g.norm());
-			std::cout << iter << " " << norm << " " << x(zeroInd) << " " << alpha << "          \r" << std::flush;
+			std::cout << iter << " " << norm << " " << alpha << "          \r" << std::flush;
 
 			// Convergence criteria
 			if (norm < tolerance) {
@@ -620,7 +693,7 @@ public:
 		}
 
 		// Final output
-		std::cout << "Finished in " << iter << " iterations" << std::endl;
+		std::cout << "Finished in " << iter << " iterations       " << std::endl;
 		if (iter == maxIters) {
 			std::cout << "WARNING - reached iteration limit" << std::endl;
 		}

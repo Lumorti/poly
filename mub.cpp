@@ -80,15 +80,19 @@ int main(int argc, char ** argv) {
 		std::vector<int> indsToReplace = {};
 		std::vector<double> valsToReplace = {};
 
-		// 2 for 2
+		// 1 for 2
 		if (d == 2 && n == 2) {
-			indsToReplace = {0,1,2,3,4,5,6,7,  8,9,10,11,12,13,14,15};
-			valsToReplace = {1, 0, 0, 1, rt2, rt2, rt2, -rt2, 0, 0, 0, 0, 0, 0, 0, 0};
+			indsToReplace = {0,1,2,3,  8,9,10,11};
+			valsToReplace = {1, 0, 0, 1,    0, 0, 0, 0};
+			//indsToReplace = {0,1,2,3,4,5,6,7,  8,9,10,11,12,13,14,15};
+			//valsToReplace = {1, 0, 0, 1, rt2, rt2, rt2, -rt2, 0, 0, 0, 0, 0, 0, 0, 0};
 
-		// 3 for 3
+		// 2 for 3
 		} else if (d == 2 && n == 3) {
-			indsToReplace = {0,1,2,3,  4,5,6,7, 8,9,10,11,    12,13,14,15,16,17,18,19,20,21,22,23};
-			valsToReplace = {1,0,0,1,  rt2,rt2,rt2,-rt2,  rt2,0,rt2,0,    0,0,0,0,    0,0,0,0,    0,rt2,0,-rt2};
+			indsToReplace = {0,1,2,3,  4,5,6,7,     12,13,14,15,16,17,18,19};
+			valsToReplace = {1,0,0,1,  rt2,rt2,rt2,-rt2,      0,0,0,0,    0,0,0,0};
+			//indsToReplace = {0,1,2,3,  4,5,6,7, 8,9,10,11,    12,13,14,15,16,17,18,19,20,21,22,23};
+			//valsToReplace = {1,0,0,1,  rt2,rt2,rt2,-rt2,  rt2,0,rt2,0,    0,0,0,0,    0,0,0,0,    0,rt2,0,-rt2};
 
 		// 3 for 4
 		} else if (d == 2 && n == 4) {
@@ -98,7 +102,8 @@ int main(int argc, char ** argv) {
 		}
 
 		for (int i=0; i<eqns.size(); i++) {
-			std::cout << "0 = " << eqns[i].substitute(indsToReplace, valsToReplace) << std::endl;
+			eqns[i] = eqns[i].substitute(indsToReplace, valsToReplace);
+			std::cout << "0 = " << eqns[i] << std::endl;
 		}
 
 	}
@@ -110,25 +115,34 @@ int main(int argc, char ** argv) {
 		poly += eqns[i]*eqns[i];
 	}
 
-	// Get the complex relaxation of this TODO
-	//std::cout << "Attempting to find a relaxed root..." << std::endl;
-	//Polynomial<double> relaxed = poly.getComplexRelaxation();
-	//relaxed.numVars += 1;
-	//std::vector<double> x2 = relaxed.findRoot(numVars);
-	//std::cout << "Testing this x = " << relaxed.eval(x2) << std::endl;
+	std::vector<int> varList = poly.getVars();
+	std::vector<int> mapTo = {};
+	for (int i=0; i<varList.size(); i++) {
+		mapTo.push_back(i);
+	}
+	poly = poly.changeVars(varList, mapTo); 
+
+	std::cout << poly << std::endl;
 
 	// Find a root of this
 	std::cout << "Attempting to find a root..." << std::endl;
-	std::vector<double> x = poly.findRoot();
+	std::vector<double> x = poly.findRoot(0, 0.1, 1e-8, 10000);
 	std::cout << "Testing this x = " << poly.eval(x) << std::endl;
 
-	// Find a root of this when using partial data TODO
+	// Get the complex relaxation of this TODO
+	std::cout << "Attempting to find a relaxed root..." << std::endl;
+	Polynomial<double> relaxed = poly.getComplexRelaxation();
+	int origVars = poly.numVars;
+	relaxed.numVars += 1;
+	std::vector<double> x2 = relaxed.findRoot(relaxed.numVars-1);
+	std::vector<std::complex<double>> xComp(origVars);
+	for (int i=0; i<origVars; i++) {
+		xComp[i] = std::complex<double>(x2[i], x2[i+origVars]);
+		std::cout << xComp[i] << " " << xComp[i]*xComp[i] << std::endl;
+	}
+	std::cout << "Testing this x = " << relaxed.eval(x2) << std::endl;
 
-	// Form a system of poly equations and try to solve that instead
-	//std::cout << std::endl;
-	//PolynomialSystem<double> sys(eqns);
-	//std::vector<double> x2 = sys.findRoot();
-	//std::cout << "Testing this x = " << poly.eval(x2) << std::endl;
+	// Maybe a Groebner basis? TODO
 
 	return 0;
 
