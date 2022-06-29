@@ -1,6 +1,25 @@
 #include "poly.h"
 #include <time.h>
 
+// Generalised Pauli X matrix
+Eigen::MatrixXcd generalPauliX(int d) {
+	Eigen::MatrixXcd generalX = Eigen::MatrixXcd::Zero(d, d);
+	for (int i=0; i<d; i++) {
+		generalX((i+1)%d, i) = 1;
+	}
+	return generalX;
+}
+
+// Generalised Pauli Z matrix
+Eigen::MatrixXcd generalPauliZ(int d) {
+	Eigen::MatrixXcd generalZ = Eigen::MatrixXcd::Zero(d, d);
+	double s = (d-1) / 2.0;
+	for (int i=0; i<d; i++) {
+		generalZ(i, i) = (s-i);
+	}
+	return generalZ;
+}
+
 // Standard cpp entry point 
 int main(int argc, char ** argv) {
 
@@ -10,7 +29,6 @@ int main(int argc, char ** argv) {
 	// Get the problem from the args
 	int d = 2;
 	int n = 2;
-	int knownBases = 0;
 	int level = 2;
 	if (argc > 1) {
 		d = std::stoi(argv[1]);
@@ -18,6 +36,7 @@ int main(int argc, char ** argv) {
 	if (argc > 2) {
 		n = std::stoi(argv[2]);
 	}
+	int knownBases = n-1;
 	if (argc > 3) {
 		knownBases = std::stoi(argv[3]);
 	}
@@ -77,66 +96,117 @@ int main(int argc, char ** argv) {
 	// For replacing variables with known ideal values
 	std::vector<std::vector<double>> toAdd = {};
 
-	// For d == 2
-	if (d == 2) {
-		if (knownBases >= 1) {
-			toAdd.push_back({1, 0, 0, 1, 0, 0, 0, 0});
-		} 
-		if (knownBases >= 2) {
-			toAdd.push_back({rt2, rt2, rt2, -rt2, 0, 0, 0, 0});
-		} 
-		if (knownBases >= 3) {
-			toAdd.push_back({rt2, 0, rt2, 0, 0, rt2, 0, -rt2});
-		}
-	}
-
-	// For d == 4
-	if (d == 4) {
-		if (knownBases >= 1) {
-			toAdd.push_back({1, 0, 0, 0,    0, 1, 0, 0,    0, 0, 1, 0,   0, 0, 0, 1,      
-							 0, 0, 0, 0,    0, 0, 0, 0,   0, 0, 0, 0,  0, 0, 0, 0,});
-		} 
-		if (knownBases >= 2) {
-			toAdd.push_back({0.5, 0.5, 0.5, 0.5,    0.5, 0.5, -0.5, -0.5,    0.5, -0.5, -0.5, 0.5,   0.5, -0.5, 0.5, -0.5,      
-							 0, 0, 0, 0,    0, 0, 0, 0,   0, 0, 0, 0,  0, 0, 0, 0,});
-		} 
-		if (knownBases >= 3) {
-			toAdd.push_back({0.5, -0.5, 0, 0,    0.5, -0.5, 0, 0,    0.5, 0.5, 0, 0,   	0.5, 0.5, 0, 0,      
-					         0, 0, -0.5, -0.5,     0, 0, 0.5, 0.5,    0, 0, 0.5, -0.5,   0, 0, -0.5, 0.5,});
-		}
-		if (knownBases >= 4) {
-			toAdd.push_back({0.5, 0, 0, -0.5,    0.5, 0, 0, 0.5,    0.5, 0, 0, -0.5,   0.5, 0, 0, 0.5,    
-				  	         0, -0.5, -0.5, 0,   0, -0.5, 0.5, 0,   0, 0.5, 0.5, 0,   0, 0.5, -0.5, 0,});
-		}
-		if (knownBases >= 5) {
-			toAdd.push_back({0.5, 0, -0.5, 0,    0.5, 0, 0.5, 0,    0.5, 0, -0.5, 0,   0.5, 0, 0.5, 0,    
-				  	         0, -0.5, 0, -0.5,   0, -0.5, 0, 0.5,    0, 0.5, 0, 0.5,   0, 0.5, 0, -0.5,});
-		}
-	}
-
-	// For d == 6 TODO
-	if (d == 6) {
-		if (knownBases >= 1) {
-			toAdd.push_back({1,0,0,0,0,0,  0,1,0,0,0,0,  0,0,1,0,0,0,  0,0,0,1,0,0,  0,0,0,0,1,0,  0,0,0,0,0,1,  0,0,0,0,0,0,  0,0,0,0,0,0,  0,0,0,0,0,0,  0,0,0,0,0,0,  0,0,0,0,0,0,  0,0,0,0,0,0});
-		} 
-		if (knownBases >= 2) {
-			//toAdd.push_back({});
-		} 
-		if (knownBases >= 3) {
-			//toAdd.push_back({});
-		}
-	}
-
-	// Combine the real and imag vecs
-	std::vector<double> valsToReplace = {};
+	// General known bases (eigenbasis of Z, X, XZ) TODO
 	std::vector<double> valsToReplaceReal = {};
 	std::vector<double> valsToReplaceImag = {};
-	for (int i=0; i<toAdd.size(); i++) {
-		valsToReplaceReal.insert(valsToReplaceReal.end(), toAdd[i].begin(), toAdd[i].begin()+d*d);
-		valsToReplaceImag.insert(valsToReplaceImag.end(), toAdd[i].begin()+d*d, toAdd[i].end());
+	std::vector<Eigen::VectorXcd> set1;
+	std::vector<Eigen::VectorXcd> set2;
+	if (knownBases >= 1) {
+		Eigen::ComplexEigenSolver<Eigen::MatrixXcd> eigensolver;
+		eigensolver.compute(generalPauliZ(d));
+		Eigen::MatrixXcd vecs = eigensolver.eigenvectors();
+		std::cout << generalPauliZ(d) << std::endl << std::endl;
+		std::cout << vecs << std::endl << std::endl;
+		for (int j=0; j<vecs.cols(); j++) {
+			set1.push_back(vecs.col(j));
+			for (int i=0; i<vecs.rows(); i++) {
+				valsToReplaceReal.push_back(vecs(i,j).real());
+				valsToReplaceImag.push_back(vecs(i,j).imag());
+			}
+		}
+	} 
+	if (knownBases >= 2) {
+		Eigen::ComplexEigenSolver<Eigen::MatrixXcd> eigensolver;
+		eigensolver.compute(generalPauliX(d));
+		Eigen::MatrixXcd vecs = eigensolver.eigenvectors();
+		std::cout << generalPauliX(d) << std::endl << std::endl;
+		std::cout << vecs << std::endl << std::endl;
+		for (int j=0; j<vecs.cols(); j++) {
+			set2.push_back(vecs.col(j));
+			for (int i=0; i<vecs.rows(); i++) {
+				valsToReplaceReal.push_back(vecs(i,j).real());
+				valsToReplaceImag.push_back(vecs(i,j).imag());
+			}
+		}
+	} 
+	if (knownBases >= 3) {
+		Eigen::ComplexEigenSolver<Eigen::MatrixXcd> eigensolver;
+		eigensolver.compute(generalPauliX(d)*generalPauliZ(d));
+		Eigen::MatrixXcd vecs = eigensolver.eigenvectors();
+		std::cout << vecs << std::endl << std::endl;
+		for (int j=0; j<vecs.cols(); j++) {
+			for (int i=0; i<vecs.rows(); i++) {
+				valsToReplaceReal.push_back(vecs(i,j).real());
+				valsToReplaceImag.push_back(vecs(i,j).imag());
+			}
+		}
 	}
+
+	// Reals at the start, imaginaries at the end
+	std::vector<double> valsToReplace= {};
 	valsToReplace.insert(valsToReplace.end(), valsToReplaceReal.begin(), valsToReplaceReal.end());
 	valsToReplace.insert(valsToReplace.end(), valsToReplaceImag.begin(), valsToReplaceImag.end());
+
+	// d == 2
+	//if (d == 2) {
+		//if (knownBases >= 1) {
+			//toAdd.push_back({1, 0, 0, 1, 0, 0, 0, 0});
+		//} 
+		//if (knownBases >= 2) {
+			//toAdd.push_back({rt2, rt2, rt2, -rt2, 0, 0, 0, 0});
+		//} 
+		//if (knownBases >= 3) {
+			//toAdd.push_back({rt2, 0, rt2, 0, 0, rt2, 0, -rt2});
+		//}
+	//}
+
+	// For d == 4
+	//if (d == 4) {
+		//if (knownBases >= 1) {
+			//toAdd.push_back({1, 0, 0, 0,    0, 1, 0, 0,    0, 0, 1, 0,   0, 0, 0, 1,      
+							 //0, 0, 0, 0,    0, 0, 0, 0,   0, 0, 0, 0,  0, 0, 0, 0,});
+		//} 
+		//if (knownBases >= 2) {
+			//toAdd.push_back({0.5, 0.5, 0.5, 0.5,    0.5, 0.5, -0.5, -0.5,    0.5, -0.5, -0.5, 0.5,   0.5, -0.5, 0.5, -0.5,      
+							 //0, 0, 0, 0,    0, 0, 0, 0,   0, 0, 0, 0,  0, 0, 0, 0,});
+		//} 
+		//if (knownBases >= 3) {
+			//toAdd.push_back({0.5, -0.5, 0, 0,    0.5, -0.5, 0, 0,    0.5, 0.5, 0, 0,   	0.5, 0.5, 0, 0,      
+							 //0, 0, -0.5, -0.5,     0, 0, 0.5, 0.5,    0, 0, 0.5, -0.5,   0, 0, -0.5, 0.5,});
+		//}
+		//if (knownBases >= 4) {
+			//toAdd.push_back({0.5, 0, 0, -0.5,    0.5, 0, 0, 0.5,    0.5, 0, 0, -0.5,   0.5, 0, 0, 0.5,    
+							   //0, -0.5, -0.5, 0,   0, -0.5, 0.5, 0,   0, 0.5, 0.5, 0,   0, 0.5, -0.5, 0,});
+		//}
+		//if (knownBases >= 5) {
+			//toAdd.push_back({0.5, 0, -0.5, 0,    0.5, 0, 0.5, 0,    0.5, 0, -0.5, 0,   0.5, 0, 0.5, 0,    
+							   //0, -0.5, 0, -0.5,   0, -0.5, 0, 0.5,    0, 0.5, 0, 0.5,   0, 0.5, 0, -0.5,});
+		//}
+	//}
+
+	// For d == 6
+	//if (d == 6) {
+		//if (knownBases >= 1) {
+			//toAdd.push_back({1,0,0,0,0,0,  0,1,0,0,0,0,  0,0,1,0,0,0,  0,0,0,1,0,0,  0,0,0,0,1,0,  0,0,0,0,0,1,  0,0,0,0,0,0,  0,0,0,0,0,0,  0,0,0,0,0,0,  0,0,0,0,0,0,  0,0,0,0,0,0,  0,0,0,0,0,0});
+		//} 
+		//if (knownBases >= 2) {
+			////toAdd.push_back({});
+		//} 
+		//if (knownBases >= 3) {
+			////toAdd.push_back({});
+		//}
+	//}
+
+	// Combine the real and imag vecs
+	//std::vector<double> valsToReplace = {};
+	//std::vector<double> valsToReplaceReal = {};
+	//std::vector<double> valsToReplaceImag = {};
+	//for (int i=0; i<toAdd.size(); i++) {
+		//valsToReplaceReal.insert(valsToReplaceReal.end(), toAdd[i].begin(), toAdd[i].begin()+d*d);
+		//valsToReplaceImag.insert(valsToReplaceImag.end(), toAdd[i].begin()+d*d, toAdd[i].end());
+	//}
+	//valsToReplace.insert(valsToReplace.end(), valsToReplaceReal.begin(), valsToReplaceReal.end());
+	//valsToReplace.insert(valsToReplace.end(), valsToReplaceImag.begin(), valsToReplaceImag.end());
 
 	// The indices to change
 	std::vector<int> indsToReplace = {};
@@ -160,7 +230,9 @@ int main(int argc, char ** argv) {
 			toKeep.push_back(i);
 		}
 	}
-	PolynomialSystem<double> reducedEqns = simpEqns.withVariables(toKeep).removeDuplicates().simplify().prune();
+	//PolynomialSystem<double> reducedEqns = simpEqns.withVariables(toKeep).removeDuplicates().simplify().prune();
+	//PolynomialSystem<double> reducedEqns = simpEqns.withOnlyVariables(toKeep).removeDuplicates().simplify().prune();
+	PolynomialSystem<double> reducedEqns = simpEqns.removeDuplicates().simplify().prune();
 
 	// Output the system
 	std::cout << "has solutions if MUBs exist:" << std::endl;

@@ -977,11 +977,9 @@ public:
 			// Check if there's any overlap with these two lists
 			bool valid = true;
 			for (int j=0; j<varList.size(); j++) {
-				for (int k=0; k<toRemove.size(); k++) {
-					if (varList[j] == toRemove[k]) {
-						valid = false;
-						break;
-					}
+				if (std::find(toRemove.begin(), toRemove.end(), varList[j]) != toRemove.end()) {
+					valid = false;
+					break;
 				}
 			}
 
@@ -1011,11 +1009,9 @@ public:
 			// Check if there's any overlap with these two lists
 			bool valid = false;
 			for (int j=0; j<varList.size(); j++) {
-				for (int k=0; k<toKeep.size(); k++) {
-					if (varList[j] == toKeep[k]) {
-						valid = true;
-						break;
-					}
+				if (std::find(toKeep.begin(), toKeep.end(), varList[j]) != toKeep.end()) {
+					valid = true;
+					break;
 				}
 			}
 
@@ -1030,6 +1026,37 @@ public:
 
 	}
 
+	// Only keep equations which only contain these variables
+	PolynomialSystem withOnlyVariables(std::vector<int> toKeep) {
+
+		// Start with a blank poly system
+		PolynomialSystem newPolySystem;
+
+		// Copy each equation if it doesn't contain this variable
+		for (int i=0; i<system.size(); i++) {
+
+			// Get the list of vars for this equation
+			std::vector<int> varList = system[i].getVariables();
+
+			// Check if there's any overlap with these two lists
+			bool valid = true;
+			for (int j=0; j<varList.size(); j++) {
+				if (std::find(toKeep.begin(), toKeep.end(), varList[j]) == toKeep.end()) {
+					valid = false;
+					break;
+				}
+			}
+
+			// If there isn't, add it
+			if (valid) {
+				newPolySystem.system.push_back(system[i]);
+			}
+
+		}
+
+		return newPolySystem;
+
+	}
 	// Acting like a normal c++ container
 	int size() {
 		return system.size();
@@ -1145,8 +1172,13 @@ public:
 		Eigen::VectorXd cert = solver.solve(b);
 
 		double res = (A*cert-b).norm();
-		std::cout << cert.transpose() << std::endl;
 		std::cout << res << std::endl;
+
+		//for (int i=0; i<cert.size(); i++) {
+			//if (std::abs(cert(i)) > 1e-5) {
+				//std::cout << cert(i) << " " << newSys[i] << std::endl;
+			//}
+		//}
 
 		//std::vector<Eigen::Triplet<double>> tripsletsAPlus;
 		//tripsletsAPlus = tripsletsA;
