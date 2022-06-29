@@ -9,10 +9,12 @@
 #include <chrono>
 #include <math.h>
 #include <unordered_map>
-#include <set>
+#include <unordered_set>
 
 // Use Eigen for matrix/vector ops
 #include <Eigen/Dense>
+#include <Eigen/IterativeLinearSolvers>
+#include<Eigen/SparseQR>
 
 // OpenMP for parallelisation
 #include <omp.h>
@@ -27,7 +29,7 @@ public:
 
 	// General poly properties
 	double zeroTol = 1e-15;
-	int numVars = 1;
+	int maxVariables = 1;
 	int digitsPerInd = 1;
 	std::unordered_map<std::string, polyType> coeffs;
 
@@ -37,9 +39,9 @@ public:
 	std::vector<polyType> vals;
 
 	// Default constructor
-	Polynomial(int numVars_) {
-		numVars = numVars_;
-		digitsPerInd = std::ceil(std::log10(numVars+1));
+	Polynomial(int maxVariables_) {
+		maxVariables = maxVariables_;
+		digitsPerInd = std::ceil(std::log10(maxVariables+1));
 	}
 
 	// Contructor from another poly
@@ -47,7 +49,7 @@ public:
 	Polynomial(Polynomial<type2> other) {
 
 		// Copy metadata
-		numVars = other.numVars;
+		maxVariables = other.maxVariables;
 		digitsPerInd = other.digitsPerInd;
 		fastEvalReady = other.fastEvalReady;
 
@@ -71,7 +73,7 @@ public:
 	Polynomial(Polynomial<std::complex<type2>> other) {
 
 		// Copy metadata
-		numVars = other.numVars;
+		maxVariables = other.maxVariables;
 		digitsPerInd = other.digitsPerInd;
 		fastEvalReady = other.fastEvalReady;
 
@@ -90,8 +92,17 @@ public:
 
 	}
 
+	// Get a list of all the monomials
+	std::vector<std::string> getMonomials() {
+		std::vector<std::string> monoms;
+		for (auto const &pair: coeffs) {
+			monoms.push_back(pair.first);
+		}
+		return monoms;
+	}
+
 	// Get a list of all the variable indices
-	std::vector<int> getVars() {
+	std::vector<int> getVariables() {
 		std::vector<int> listToReturn;
 
 		// For each term
@@ -118,16 +129,15 @@ public:
 		}
 
 		// Sort and return
-		std::sort(listToReturn.begin(), listToReturn.end());
 		return listToReturn;
 
 	}
 
 	// Given a list of pairs, map variables to different indices
-	Polynomial changeVars(std::vector<int> from, std::vector<int> to) {
+	Polynomial changeVariables(std::vector<int> from, std::vector<int> to) {
 
 		// Count the number of unique new indices
-		std::set<int> uniques(to.begin(), to.end());
+		std::unordered_set<int> uniques(to.begin(), to.end());
 
 		// Create a new polynomial with this number of vars
 		Polynomial newPoly(uniques.size());
@@ -195,7 +205,7 @@ public:
 		indString.insert(0, digitsPerInd-indString.size(), ' ');
 
 		// For each element in this polynomial
-		Polynomial newPoly(numVars);
+		Polynomial newPoly(maxVariables);
 		for (auto const &pair: coeffs) {
 
 			// Remove any instances of this index
@@ -234,12 +244,12 @@ public:
 		for (int i=1; i<ind.size(); i++) {
 			newPoly = newPoly.substitute(ind[i], toReplace[i]);
 		}
-		return newPoly.prune();
+		return newPoly;
 	}
 
 	// Remove zeros from a polynomial
 	Polynomial prune() {
-		Polynomial newPoly(numVars);
+		Polynomial newPoly(maxVariables);
 		for (auto const &pair: coeffs) {
 			if (std::abs(pair.second) > zeroTol) {
 				newPoly.coeffs[pair.first] = pair.second;
@@ -256,7 +266,7 @@ public:
 		indString.insert(0, digitsPerInd-indString.size(), ' ');
 
 		// Process each term
-		Polynomial result(numVars);
+		Polynomial result(maxVariables);
 		for (auto const &pair: coeffs) {
 
 			// Count the number of times the variable appears here
@@ -287,8 +297,7 @@ public:
 
 		}
 
-		// Remove any zero terms and return
-		return result.prune();
+		return result;
 
 	}
 
@@ -300,7 +309,7 @@ public:
 		indString.insert(0, digitsPerInd-indString.size(), ' ');
 
 		// Process each term
-		Polynomial result(numVars);
+		Polynomial result(maxVariables);
 		for (auto const &pair: coeffs) {
 
 			// Count the number of times the variable appears here
@@ -336,8 +345,7 @@ public:
 
 		}
 
-		// Remove any zero terms and return
-		return result.prune();
+		return result;
 
 	}
 
@@ -362,7 +370,6 @@ public:
 
 		}
 
-		// Remove any zeros and return
 		return result;
 
 	}
@@ -388,6 +395,52 @@ public:
 		return *this;
 	}
 
+	// Overload the subtraction operator
+	Polynomial operator-(const Polynomial& other) {
+
+		// Start with one equation
+		Polynomial result = other;
+
+		// For each term of the other
+		for (auto const &pair: coeffs) {
+
+			// If it's new add it, otherwise combine with the existing
+			if (result.coeffs.find(pair.first) != result.coeffs.end()) {
+				result.coeffs[pair.first] -= pair.second;
+				if (std::abs(result.coeffs[pair.first]) < zeroTol) {
+					result.coeffs.erase(pair.first);
+				}
+			} else {
+				result.coeffs[pair.first] = pair.second;
+			}
+
+		}
+
+		return result;
+
+	}
+
+	// Overload for in-place subtraction (-=)
+	Polynomial& operator-=(const Polynomial& other){
+
+		// For each term of the other
+		for (auto const &pair: other.coeffs) {
+
+			// If it's new add it, otherwise combine with the existing
+			if (coeffs.find(pair.first) != coeffs.end()) {
+				coeffs[pair.first] -= pair.second;
+				if (std::abs(coeffs[pair.first]) < zeroTol) {
+					coeffs.erase(pair.first);
+				}
+			} else {
+				coeffs[pair.first] = pair.second;
+			}
+
+		}
+
+		return *this;
+	}
+
 	// The in-place multiplication operator (inefficient and lazy)
 	Polynomial operator*=(const Polynomial& other) {
 		*this = (*this) * other;
@@ -398,7 +451,7 @@ public:
 	Polynomial operator*(const Polynomial& other) {
 
 		// For each term of both equations
-		Polynomial result(numVars);
+		Polynomial result(maxVariables);
 		for (auto const &pair1: coeffs) {
 			for (auto const &pair2: other.coeffs) {
 
@@ -427,14 +480,13 @@ public:
 			}
 		}
 
-		// Remove any zeros and return
-		return result.prune();
+		return result;
 
 	}
 
 	// Get the conjugate of the polynomial
 	Polynomial conjugate() {
-		Polynomial con(numVars);
+		Polynomial con(maxVariables);
 		for (auto const &pair: coeffs) {
 			con.coeffs[pair.first] = std::conj(pair.second);
 		}
@@ -443,20 +495,20 @@ public:
 
 	// Get the real part of the polynomial
 	Polynomial real() {
-		Polynomial con(numVars);
+		Polynomial con(maxVariables);
 		for (auto const &pair: coeffs) {
 			con.coeffs[pair.first] = std::real(pair.second);
 		}
-		return con.prune();
+		return con;
 	}
 
 	// Get the imaginary part of the polynomial
 	Polynomial imag() {
-		Polynomial con(numVars);
+		Polynomial con(maxVariables);
 		for (auto const &pair: coeffs) {
 			con.coeffs[pair.first] = std::imag(pair.second);
 		}
-		return con.prune();
+		return con;
 	}
 
 	// Evaluate a polynomial with x values
@@ -481,29 +533,29 @@ public:
 
 	}
 
-	// Go from a1*a2 = 0 TODO this is real slow
+	// Go from a1*a2 = 0
 	//         -> f = (a1+ib1)*(a2+ib2)
 	//         -> real(f)**2 + imag(f)**2 = 0
 	Polynomial<double> getComplexRelaxation() {
 
 		// First convert this poly to complex
-		Polynomial<std::complex<double>> complexPoly(numVars*2);
+		Polynomial<std::complex<double>> complexPoly(maxVariables*2);
 
 		// For each term in the original
 		for (auto const &pair: coeffs) {
 
 			// Start with the coefficient
-			Polynomial<std::complex<double>> newTerm(numVars*2);
+			Polynomial<std::complex<double>> newTerm(maxVariables*2);
 			newTerm.addTerm(pair.second, {});
 
 			// Then for every index
 			for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
 
 				// Go from c -> a+ib
-				Polynomial<std::complex<double>> thisTerm(numVars*2);
+				Polynomial<std::complex<double>> thisTerm(maxVariables*2);
 				int ind = std::stoi(pair.first.substr(j, digitsPerInd));
 				thisTerm.addTerm(1, {ind});
-				thisTerm.addTerm(1i, {ind+numVars});
+				thisTerm.addTerm(1i, {ind+maxVariables});
 
 				// If there's c1*c2 need (a1+ib1)*(a2+ib2)
 				newTerm *= thisTerm;
@@ -625,7 +677,7 @@ public:
 		// For each coefficient
 		for (auto const &pair: coeffs) {
 
-			// Get the indices as a std::vector TODO
+			// Get the indices as a std::vector
 			for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
 
 				// Check if this index is the correct
@@ -642,7 +694,7 @@ public:
 
 	}
 
-	// Try to find a root, with one variable bieng optimized towards zer0
+	// Try to find a root, with one variable being optimized towards zero
 	std::vector<polyType> findRoot(int zeroInd=0, double alpha=0.1, double tolerance=1e-10, int maxIters=10000000) {
 		return integrate(zeroInd).findLocalMinimum(alpha, tolerance, maxIters, zeroInd);
 	}
@@ -655,38 +707,38 @@ public:
 		Eigen::setNbThreads(threads);
 
 		// Get the gradient
-		std::vector<Polynomial> gradient(numVars, Polynomial(numVars));
+		std::vector<Polynomial> gradient(maxVariables, Polynomial(maxVariables));
 		#pragma omp parallel for
-		for (int i=0; i<numVars; i++) {
+		for (int i=0; i<maxVariables; i++) {
 			gradient[i] = differentiate(i);
 		}
 
 		// Get the Hessian
-		std::vector<std::vector<Polynomial>> hessian(numVars, std::vector<Polynomial>(numVars, Polynomial(numVars)));
+		std::vector<std::vector<Polynomial>> hessian(maxVariables, std::vector<Polynomial>(maxVariables, Polynomial(maxVariables)));
 		#pragma omp parallel for
-		for (int i=0; i<numVars; i++) {
-			for (int j=i; j<numVars; j++) {
+		for (int i=0; i<maxVariables; i++) {
+			for (int j=i; j<maxVariables; j++) {
 				hessian[i][j] = gradient[i].differentiate(j);
 			}
 		}
 
 		// Pre-cache things to allow for much faster evals
 		#pragma omp parallel for
-		for (int i=0; i<numVars; i++) {
+		for (int i=0; i<maxVariables; i++) {
 			gradient[i].prepareEvalFast();
-			for (int j=i; j<numVars; j++) {
+			for (int j=i; j<maxVariables; j++) {
 				hessian[i][j].prepareEvalFast();
 			}
 		}
 
 		// Random starting x
-		Eigen::VectorXd x = Eigen::VectorXd::Random(numVars);
+		Eigen::VectorXd x = Eigen::VectorXd::Random(maxVariables);
 
 		// Perform gradient descent using this info
-		Eigen::MatrixXd inv(numVars, numVars);
-		Eigen::VectorXd p(numVars);
-		Eigen::MatrixXd H(numVars, numVars);
-		Eigen::VectorXd g(numVars);
+		Eigen::MatrixXd inv(maxVariables, maxVariables);
+		Eigen::VectorXd p(maxVariables);
+		Eigen::MatrixXd H(maxVariables, maxVariables);
+		Eigen::VectorXd g(maxVariables);
 		double maxX = 0;
 		int iter = 0;
 		double norm = 1;
@@ -694,14 +746,14 @@ public:
 
 			// Calculate the gradient
 			#pragma omp parallel for
-			for (int i=0; i<numVars; i++) {
+			for (int i=0; i<maxVariables; i++) {
 				g(i) = gradient[i].evalFast(x);
 			}
 
 			// Calculate the Hessian
 			#pragma omp parallel for
-			for (int i=0; i<numVars; i++) {
-				for (int j=i; j<numVars; j++) {
+			for (int i=0; i<maxVariables; i++) {
+				for (int j=i; j<maxVariables; j++) {
 					H(i,j) = hessian[i][j].evalFast(x);
 					H(j,i) = H(i,j);
 				}
@@ -735,7 +787,7 @@ public:
 		}
 		std::cout << "Final x = ";
 		std::cout << "{ ";
-		for (int i=0; i<numVars; i++) {
+		for (int i=0; i<maxVariables; i++) {
 			std::cout << x(i);
 			if (i < x.size()-1) {
 				std::cout << ", ";
@@ -745,11 +797,372 @@ public:
 		std::cout << "Final gradient = " << g(0) << std::endl;
 
 		// Convert the eigen vec into a normal vec
-		std::vector<polyType> toReturn(numVars);
-		for (int i=0; i<numVars; i++) {
+		std::vector<polyType> toReturn(maxVariables);
+		for (int i=0; i<maxVariables; i++) {
 			toReturn[i] = x(i);
 		}
 		return toReturn;
+
+	}
+
+};
+
+// For manipulating a whole system of equations at once
+template <class polyType>
+class PolynomialSystem {
+public:
+
+	// Contains the list of polynomials
+	std::vector<Polynomial<polyType>> system;
+
+	// Default constructor
+	PolynomialSystem() {}
+
+	// Init with a vector of equations
+	PolynomialSystem(std::vector<Polynomial<polyType>> system_) {
+		system = system_;
+	}
+
+	// Add a polynomial
+	void addPolynomial(Polynomial<polyType> newPoly) {
+		system.push_back(newPoly);
+	}
+
+	// Overload index operator
+	Polynomial<polyType>& operator[](int index) {
+		return system[index];
+	}
+
+	// Get a list of all the monomials
+	std::vector<std::string> getMonomials() {
+
+		// Use an unordered set to get the unique monomial list
+		std::unordered_set<std::string> monoms;
+		for (int i=0; i<system.size(); i++) {
+			std::vector<std::string> tempList = system[i].getMonomials();
+			monoms.insert(tempList.begin(), tempList.end());
+		}
+
+		// Turn this into a vector
+		std::vector<std::string> monomList;
+		for (const std::string& mon: monoms) {
+			monomList.push_back(mon);
+		}
+
+		return monomList;
+
+	}
+
+	// Return a sorted list of var indices
+	std::vector<int> getVariables() {
+
+		// Use an unordered set to get the unique var list
+		std::unordered_set<int> varList;
+		for (int i=0; i<system.size(); i++) {
+			std::vector<int> tempList = system[i].getVariables();
+			varList.insert(tempList.begin(), tempList.end());
+		}
+
+		// Turn this into a vector
+		std::vector<int> varListVec;
+		for (const int& var: varList) {
+			varListVec.push_back(var);
+		}
+
+		// Ensure this keeps the same order
+		std::sort(varListVec.begin(), varListVec.end());
+
+		return varListVec;
+
+	}
+
+	// Given a poly system of vars 2,5,6, return poly system of 0,1,2
+	PolynomialSystem simplify() {
+
+		// Start with a blank system
+		PolynomialSystem newPolySystem;
+
+		// Turn this into a vector
+		std::vector<int> varList = getVariables();
+
+		// Map to the simplest indices
+		std::vector<int> mapTo;
+		for (int i=0; i<varList.size(); i++) {
+			mapTo.push_back(i);
+		}
+
+		// Replace each var and copy to the new system
+		for (int i=0; i<system.size(); i++) {
+			newPolySystem.system.push_back(system[i].changeVariables(varList, mapTo));
+		}
+
+		return newPolySystem;
+
+	}
+
+	// Remove any equations which are exactly equal
+	PolynomialSystem removeDuplicates() {
+
+		// Start with a blank system
+		PolynomialSystem newPolySystem;
+
+		// Replace each var and copy to the new system
+		for (int i=0; i<system.size(); i++) {
+
+			// See if there exists a copy already
+			bool valid = true;
+			for (int j=0; j<newPolySystem.system.size(); j++) {
+				if (newPolySystem.system[j] == system[i]) {
+					valid = false;
+					break;
+				}
+			}
+
+			// If it's not a duplicate, add it
+			if (valid) {
+				newPolySystem.system.push_back(system[i]);
+			}
+
+		}
+
+		return newPolySystem;
+
+	}
+
+	// Given a list of var indices and vals, replace everything
+	PolynomialSystem substitute(std::vector<int> indsToReplace, std::vector<polyType> valsToReplace) {
+
+		// Start with a blank poly system
+		PolynomialSystem newPolySystem;
+
+		// Copy each equation, substituting
+		for (int i=0; i<system.size(); i++) {
+			newPolySystem.system.push_back(system[i].substitute(indsToReplace, valsToReplace));
+		}
+
+		return newPolySystem;
+
+	}
+
+	// Remove zeros and zero equations from the system
+	PolynomialSystem prune() {
+
+		// Start with a blank poly system
+		PolynomialSystem newPolySystem;
+
+		// Copy each equation if it has at least one term
+		for (int i=0; i<system.size(); i++) {
+			Polynomial<polyType> pruned = system[i].prune();
+			if (pruned.coeffs.size() > 0) {
+				newPolySystem.system.push_back(pruned);
+			}
+		}
+
+		return newPolySystem;
+
+	}
+
+	// Discard equations which contain these variables
+	PolynomialSystem withoutVariables(std::vector<int> toRemove) {
+
+		// Start with a blank poly system
+		PolynomialSystem newPolySystem;
+
+		// Copy each equation if it doesn't contain this variable
+		for (int i=0; i<system.size(); i++) {
+
+			// Get the list of vars for this equation
+			std::vector<int> varList = system[i].getVariables();
+
+			// Check if there's any overlap with these two lists
+			bool valid = true;
+			for (int j=0; j<varList.size(); j++) {
+				for (int k=0; k<toRemove.size(); k++) {
+					if (varList[j] == toRemove[k]) {
+						valid = false;
+						break;
+					}
+				}
+			}
+
+			// If there isn't, add it
+			if (valid) {
+				newPolySystem.system.push_back(system[i]);
+			}
+
+		}
+
+		return newPolySystem;
+
+	}
+
+	// Only keep equations which contain these variables
+	PolynomialSystem withVariables(std::vector<int> toKeep) {
+
+		// Start with a blank poly system
+		PolynomialSystem newPolySystem;
+
+		// Copy each equation if it doesn't contain this variable
+		for (int i=0; i<system.size(); i++) {
+
+			// Get the list of vars for this equation
+			std::vector<int> varList = system[i].getVariables();
+
+			// Check if there's any overlap with these two lists
+			bool valid = false;
+			for (int j=0; j<varList.size(); j++) {
+				for (int k=0; k<toKeep.size(); k++) {
+					if (varList[j] == toKeep[k]) {
+						valid = true;
+						break;
+					}
+				}
+			}
+
+			// If there isn't, add it
+			if (valid) {
+				newPolySystem.system.push_back(system[i]);
+			}
+
+		}
+
+		return newPolySystem;
+
+	}
+
+	// Acting like a normal c++ container
+	int size() {
+		return system.size();
+	}
+
+	// When doing std::cout << PolynomialSystem
+	friend std::ostream &operator<<(std::ostream &output, const PolynomialSystem &other) {
+
+		// For each polynomial
+		int numSoFar = 0;
+		for (int i=0; i<other.system.size(); i++) {
+
+			// Output this poly plus a space
+			output << other.system[i] << std::endl;
+
+		}
+
+		return output;
+
+	}
+
+	// Use Hilbert's Nullstellesatz to attempt to prove infeasibility TODO 
+	double proveInfeasible(int level=2, int threads=4) {
+
+		// Start with the minimum amount of monomials
+		std::vector<int> varList = getVariables();
+
+		// Start with our system of equations
+		PolynomialSystem newSys;
+		newSys.system = system;
+
+		// For each level, figure out the terms to multiply by
+		std::vector<Polynomial<polyType>> toMultiply;
+		if (level >= 1) {
+			for (int i=0; i<varList.size(); i++) {
+				Polynomial<polyType> termToMult(system[0].maxVariables);
+				termToMult.addTerm(1, {varList[i]});
+				toMultiply.push_back(termToMult);
+			}
+		}
+		if (level >= 2) {
+			for (int i=0; i<varList.size(); i++) {
+				for (int j=0; j<varList.size(); j++) {
+					Polynomial<polyType> termToMult(system[0].maxVariables);
+					termToMult.addTerm(1, {varList[i], varList[j]});
+					toMultiply.push_back(termToMult);
+				}
+			}
+		}
+		if (level >= 3) {
+			for (int i=0; i<varList.size(); i++) {
+				for (int j=0; j<varList.size(); j++) {
+					for (int k=0; k<varList.size(); k++) {
+						Polynomial<polyType> termToMult(system[0].maxVariables);
+						termToMult.addTerm(1, {varList[i], varList[j], varList[k]});
+						toMultiply.push_back(termToMult);
+					}
+				}
+			}
+		}
+		if (level >= 4) {
+			for (int i=0; i<varList.size(); i++) {
+				for (int j=0; j<varList.size(); j++) {
+					for (int k=0; k<varList.size(); k++) {
+						for (int l=0; l<varList.size(); l++) {
+							Polynomial<polyType> termToMult(system[0].maxVariables);
+							termToMult.addTerm(1, {varList[i], varList[j], varList[k], varList[l]});
+							toMultiply.push_back(termToMult);
+						}
+					}
+				}
+			}
+		}
+
+		// Multiply everything
+		for (int i=0; i<toMultiply.size(); i++) {
+			for (int j=0; j<system.size(); j++) {
+				newSys.addPolynomial(system[j]*toMultiply[i]);
+			}
+		}
+
+		// Get mapping of monomials
+		std::vector<std::string> monomialList = newSys.getMonomials();
+		std::unordered_map<std::string,int> monomialMap;
+		for (int i=0; i<monomialList.size(); i++) {
+			monomialMap[monomialList[i]] = i;
+		}
+
+		// Convert everything into a linear system
+		std::vector<Eigen::Triplet<double>> tripsletsA;
+		for (int i=0; i<newSys.system.size(); i++) {
+			for (auto const &pair: newSys.system[i].coeffs) {
+				tripsletsA.push_back(Eigen::Triplet<double>(monomialMap[pair.first], i, pair.second));
+			}
+		}
+		Eigen::SparseMatrix<double> A(monomialList.size(), newSys.size());
+		A.setFromTriplets(tripsletsA.begin(), tripsletsA.end());
+
+		// We want this to be able to reach 1
+		Eigen::SparseVector<double> b(monomialList.size());
+		b.insert(monomialMap[""]) = 1.0;
+
+		// Prepare everything for parallel computation
+		omp_set_num_threads(threads);
+		Eigen::setNbThreads(threads);
+
+		// Try to solve the linear system
+		std::cout << A.rows() << " " << A.cols() << " " << A.nonZeros() << std::endl;
+		//Eigen::VectorXd cert = A.colPivHouseholderQr().solve(b);
+		//Eigen::VectorXd cert = (A.transpose() * A).ldlt().solve(A.transpose() * b);
+		//Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> spqr(A);
+		Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> solver(A);
+		Eigen::VectorXd cert = solver.solve(b);
+
+		double res = (A*cert-b).norm();
+		std::cout << cert.transpose() << std::endl;
+		std::cout << res << std::endl;
+
+		//std::vector<Eigen::Triplet<double>> tripsletsAPlus;
+		//tripsletsAPlus = tripsletsA;
+		//tripsletsAPlus.push_back(Eigen::Triplet<double>(monomialMap[""], newSys.size(), 1.0));
+		//Eigen::SparseMatrix<double> APlus(monomialList.size(), newSys.size()+1);
+		//APlus.setFromTriplets(tripsletsAPlus.begin(), tripsletsAPlus.end());
+		//Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> spqr2(APlus);
+		//spqr.setPivotThreshold(1e-15);
+		//spqr2.setPivotThreshold(1e-15);
+		//int rankOrig = spqr.rank();
+		//int rankPlus = spqr2.rank();
+		//std::cout << rankOrig << " " << rankPlus << std::endl;
+		//std::cout << A.cols() << " " << APlus.cols() << std::endl;
+
+
+		return res;
 
 	}
 
