@@ -44,7 +44,7 @@ public:
 		digitsPerInd = std::ceil(std::log10(maxVariables+1));
 	}
 
-	// Contructor from another poly
+	// Constructor from another poly
 	template <typename type2>
 	Polynomial(Polynomial<type2> other) {
 
@@ -929,7 +929,7 @@ public:
 
 	}
 
-	// Given a list of var indices and vals, replace everything
+	// Given a list of var indices and values, replace everything
 	PolynomialSystem substitute(std::vector<int> indsToReplace, std::vector<polyType> valsToReplace) {
 
 		// Start with a blank poly system
@@ -1062,7 +1062,7 @@ public:
 		return system.size();
 	}
 
-	// When doing std::cout << PolynomialSystem
+	// When doing stream output
 	friend std::ostream &operator<<(std::ostream &output, const PolynomialSystem &other) {
 
 		// For each polynomial
@@ -1078,7 +1078,7 @@ public:
 
 	}
 
-	// Use Hilbert's Nullstellesatz to attempt to prove infeasibility TODO 
+	// Use Hilbert's Nullstellensatz to attempt to prove infeasibility
 	double proveInfeasible(int level=2, int threads=4) {
 
 		// Start with the minimum amount of monomials
@@ -1164,36 +1164,12 @@ public:
 		Eigen::setNbThreads(threads);
 
 		// Try to solve the linear system
-		std::cout << A.rows() << " " << A.cols() << " " << A.nonZeros() << std::endl;
-		//Eigen::VectorXd cert = A.colPivHouseholderQr().solve(b);
-		//Eigen::VectorXd cert = (A.transpose() * A).ldlt().solve(A.transpose() * b);
 		//Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> spqr(A);
 		Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> solver(A);
 		Eigen::VectorXd cert = solver.solve(b);
 
+		// Calculate the residuals
 		double res = (A*cert-b).norm();
-		std::cout << res << std::endl;
-
-		//for (int i=0; i<cert.size(); i++) {
-			//if (std::abs(cert(i)) > 1e-5) {
-				//std::cout << cert(i) << " " << newSys[i] << std::endl;
-			//}
-		//}
-
-		//std::vector<Eigen::Triplet<double>> tripsletsAPlus;
-		//tripsletsAPlus = tripsletsA;
-		//tripsletsAPlus.push_back(Eigen::Triplet<double>(monomialMap[""], newSys.size(), 1.0));
-		//Eigen::SparseMatrix<double> APlus(monomialList.size(), newSys.size()+1);
-		//APlus.setFromTriplets(tripsletsAPlus.begin(), tripsletsAPlus.end());
-		//Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> spqr2(APlus);
-		//spqr.setPivotThreshold(1e-15);
-		//spqr2.setPivotThreshold(1e-15);
-		//int rankOrig = spqr.rank();
-		//int rankPlus = spqr2.rank();
-		//std::cout << rankOrig << " " << rankPlus << std::endl;
-		//std::cout << A.cols() << " " << APlus.cols() << std::endl;
-
-
 		return res;
 
 	}

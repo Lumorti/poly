@@ -1,28 +1,31 @@
 
-# LMD - Low Memory Nullstellensatz
+# poly.h
 
-This is a small executable for finding an effective Hilbert's Nullstellensatz for a system of polynomial equations. Rather than creating an exponentially growing linear system (of which only a few rows might be needed), it iteratively performs a low-memory Guassian elimation on the system of equations.
+This is a small library for dealing with polynomials in c++.
+
+### Features
+
+- create polynomials or systems of polynomials of abritrary degree
+- real and complex polynomials supported
+- easy stream output
+- perform addition, subtraction and multiplication
+- root finding algorithm
+- symbolic integration and differentiation
+- Hilbert's Nullstellensatz for systems of polynomials
 
 ### Compiling
 
-You'll need basic compiling stuff, although you probably already have it:
+This depends on Eigen (for matrix manipulations) and openmp (for parallel root finding).
 ```bash
-sudo apt-get install make g++
+sudo apt install libeigen3-dev libomp-dev
 ```
 
-Then simply clone the repo, enter the repo, then run:
+Then you need to simply mention "poly.h" in your cpp includes. So you can put "poly.h" in a location with other c++ headers or simply refer directly to the header file. 
+
+A more useful example shows how this library can be used to find mutually unbiased bases using the polynomial version of this problem:
 ```bash
-make
+make mub
+./mub
 ```
 
-### Usage
 
-To run the example:
-```bash
-./lmd example.eqn
-```
-
-To view the help:
-```bash
-./lmd -h
-```
