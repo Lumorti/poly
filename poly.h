@@ -1198,6 +1198,34 @@ public:
 		system = std::vector<std::vector<Polynomial<polyType>>>(rows, std::vector<Polynomial<polyType>>(columns, Polynomial<polyType>(maxVariables)));
 	}
 
+	// Constructor from an Eigen matrix
+	PolynomialMatrix(Eigen::MatrixXd other) {
+		rows = other.rows();
+		columns = other.cols();
+		maxVariables = 1;
+		system = std::vector<std::vector<Polynomial<polyType>>>(rows, std::vector<Polynomial<polyType>>(columns, Polynomial<polyType>(maxVariables)));
+		for (int i=0; i<rows; i++) {
+			for (int j=0; j<rows; j++) {
+				if (other(i,j) > 0) {
+					system[i][j].addTerm(other(i,j), {});
+				}
+			}
+		}
+	}
+
+	// Constructor from a PolynomialMatrix
+	PolynomialMatrix(const PolynomialMatrix &other) {
+		rows = other.rows;
+		columns = other.columns;
+		maxVariables = other.maxVariables;
+		system = std::vector<std::vector<Polynomial<polyType>>>(rows, std::vector<Polynomial<polyType>>(columns, Polynomial<polyType>(maxVariables)));
+		for (int i=0; i<rows; i++) {
+			for (int j=0; j<rows; j++) {
+				system[i][j] = other.system[i][j];
+			}
+		}
+	}
+
 	// Overload index operator
 	std::vector<Polynomial<polyType>>& operator[](int index) {
 		return system[index];
@@ -1220,6 +1248,9 @@ public:
 			w += pair.first.size();
 
 		}
+
+		// We have (size-1) of " + "
+		w += (other.coeffs.size()-1)*3;
 
 		return w;
 
@@ -1274,7 +1305,7 @@ public:
 
 	}
 
-	// Overload the multiplication operator
+	// Overload the multiplication operator with another matrix
 	PolynomialMatrix operator*(const PolynomialMatrix& other) {
 
 		// (n x m) * (m x l) = (n x l)
@@ -1336,6 +1367,15 @@ public:
 
 	}
 
+	// Return the identity as a PolynomialMatrix
+	static PolynomialMatrix identity(int matSize) {
+		PolynomialMatrix iden(1, matSize, matSize);
+		for (int i=0; i<matSize; i++) {
+			iden[i][i].addTerm(1, {});
+		}
+		return iden;
+	}
+
 	// Get a list of all the monomials
 	std::vector<std::string> getMonomials() {
 
@@ -1359,6 +1399,48 @@ public:
 	}
 
 };
+
+// Overload the multiplication operator with a polynomial
+template <class polyType>
+PolynomialMatrix<polyType> operator*(const PolynomialMatrix<polyType>& mat, const Polynomial<polyType>& poly) {
+
+	// Matrix doesn't change shape
+	PolynomialMatrix<polyType> result(mat.maxVariables, mat.rows, mat.columns);
+
+	// Needed because otherwise const Poly * const Poly apparently isn't valid
+	Polynomial<polyType> polyCopy = poly;
+
+	// For each element
+	for (int i=0; i<mat.rows; i++) {
+		for (int j=0; j<mat.columns; j++) {
+			result[i][j] = mat[i][j] * polyCopy;
+		}
+	}
+
+	return result;
+
+}
+
+// Overload the multiplication operator with a polynomial
+template <class polyType>
+PolynomialMatrix<polyType> operator*(const Polynomial<polyType>& poly, const PolynomialMatrix<polyType>& mat) {
+
+	// Matrix doesn't change shape
+	PolynomialMatrix<polyType> result(mat.maxVariables, mat.rows, mat.columns);
+
+	// Needed because otherwise const Poly * const Poly apparently isn't valid
+	Polynomial<polyType> polyCopy = poly;
+
+	// For each element
+	for (int i=0; i<mat.rows; i++) {
+		for (int j=0; j<mat.columns; j++) {
+			result[i][j] = polyCopy*mat.system[i][j];
+		}
+	}
+
+	return result;
+
+}
 
 #endif
 	
