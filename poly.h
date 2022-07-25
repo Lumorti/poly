@@ -14,7 +14,7 @@
 // Use Eigen for matrix/vector ops
 #include <Eigen/Dense>
 #include <Eigen/IterativeLinearSolvers>
-#include<Eigen/SparseQR>
+#include <Eigen/SparseQR>
 
 // OpenMP for parallelisation
 #include <omp.h>
@@ -1171,6 +1171,190 @@ public:
 		// Calculate the residuals
 		double res = (A*cert-b).norm();
 		return res;
+
+	}
+
+};
+
+
+// For manipulating matrices of polynomials
+template <class polyType>
+class PolynomialMatrix {
+public:
+
+	// Contains the list of polynomials
+	std::vector<std::vector<Polynomial<polyType>>> system;
+
+	// Matrix info
+	int columns = 1;
+	int rows = 1;
+	int maxVariables = 1;
+
+	// Default constructor
+	PolynomialMatrix(int maxVariables_=1, int rows_=1, int columns_=1) {
+		rows = rows_;
+		columns = columns_;
+		maxVariables = maxVariables_;
+		system = std::vector<std::vector<Polynomial<polyType>>>(rows, std::vector<Polynomial<polyType>>(columns, Polynomial<polyType>(maxVariables)));
+	}
+
+	// Overload index operator
+	std::vector<Polynomial<polyType>>& operator[](int index) {
+		return system[index];
+	}
+
+	// Get the output width of the polynomial
+	static int getOutputWidth(Polynomial<polyType> other) {
+
+		// For each element in this polynomial
+		int w = 0;
+		for (auto const &pair: other.coeffs) {
+
+			// The fixed width elements "*", "{" and "}"
+			w += 3;
+
+			// The width of the coefficient
+			w += 1+std::floor(std::log10(pair.second));
+			
+			// The width of the variable list
+			w += pair.first.size();
+
+		}
+
+		return w;
+
+	}
+
+	// Get the max output width of the polynomial matrix
+	static std::vector<int> getOutputWidths(PolynomialMatrix<polyType> other) {
+
+		// For each column, figure out the output widths
+		std::vector<int> columnWidths(other.columns, 0);
+		for (int j=0; j<other.columns; j++) {
+			for (int i=0; i<other.rows; i++) {
+
+				// Each column should be the max width of any element
+				columnWidths[j] = std::max(columnWidths[j], getOutputWidth(other.system[i][j])+2);
+
+			}
+		}
+
+		return columnWidths;
+
+	}
+
+	// When doing std::cout << PolynomialMatrix
+	friend std::ostream &operator<<(std::ostream &output, const PolynomialMatrix &other) {
+
+		// Get the widths of each column
+		std::vector<int> columnWidths = getOutputWidths(other);
+
+		// For each row
+		for (int i=0; i<other.rows; i++) {
+
+			// Start the row with a symbol
+			output << "( ";
+
+			// Output each column
+			for (int j=0; j<other.columns; j++) {
+				output << other.system[i][j];
+
+				// Add padding if needed
+				int paddingNeeded = columnWidths[j]-getOutputWidth(other.system[i][j]);
+				output << std::string(paddingNeeded, ' ');
+
+			}
+
+			// Then a newline
+			output << ")" << std::endl;
+
+		}
+
+		return output;
+
+	}
+
+	// Overload the multiplication operator
+	PolynomialMatrix operator*(const PolynomialMatrix& other) {
+
+		// (n x m) * (m x l) = (n x l)
+		PolynomialMatrix result(maxVariables, rows, other.columns);
+
+		// For each element of the new matrix
+		for (int i=0; i<result.rows; i++) {
+			for (int j=0; j<result.columns; j++) {
+
+				// For each element in the multiplication
+				for (int k=0; k<columns; k++) {
+					result[i][j] += (system[i][k]*other.system[k][j]);
+				}
+
+			}
+		}
+
+		return result;
+
+	}
+
+	// Overload the addition operator
+	PolynomialMatrix operator+(const PolynomialMatrix& other) {
+
+		// Same size as the original
+		PolynomialMatrix result(maxVariables, rows, columns);
+
+		// For each element of the new matrix
+		for (int i=0; i<rows; i++) {
+			for (int j=0; j<columns; j++) {
+
+				// Perform the operation
+				result[i][j] = system[i][j] + other.system[i][j];
+
+			}
+		}
+
+		return result;
+
+	}
+
+	// Overload the addition operator
+	PolynomialMatrix operator-(const PolynomialMatrix& other) {
+
+		// Same size as the original
+		PolynomialMatrix result(maxVariables, rows, columns);
+
+		// For each element of the new matrix
+		for (int i=0; i<rows; i++) {
+			for (int j=0; j<columns; j++) {
+
+				// Perform the operation
+				result[i][j] = system[i][j] - other.system[i][j];
+
+			}
+		}
+
+		return result;
+
+	}
+
+	// Get a list of all the monomials
+	std::vector<std::string> getMonomials() {
+
+		// Use an unordered set to get the unique monomial list
+		std::unordered_set<std::string> monoms;
+		for (int i=0; i<rows; i++) {
+			for (int j=0; j<columns; j++) {
+				std::vector<std::string> tempList = system[i][j].getMonomials();
+				monoms.insert(tempList.begin(), tempList.end());
+			}
+		}
+
+		// Turn this into a vector
+		std::vector<std::string> monomList;
+		for (const std::string& mon: monoms) {
+			monomList.push_back(mon);
+		}
+
+		return monomList;
 
 	}
 
