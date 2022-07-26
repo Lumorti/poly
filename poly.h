@@ -5,8 +5,6 @@
 #include <iostream>
 #include <vector>
 #include <complex>
-#include <random>
-#include <chrono>
 #include <math.h>
 #include <unordered_map>
 #include <unordered_set>
@@ -14,7 +12,6 @@
 // Use Eigen for matrix/vector ops
 #include <Eigen/Dense>
 #include <Eigen/IterativeLinearSolvers>
-#include <Eigen/SparseQR>
 
 // OpenMP for parallelisation
 #include <omp.h>
@@ -133,7 +130,7 @@ public:
 
 	}
 
-	// Given a list of pairs, map variables to different indices
+	// Given a list of input and a list of output, map variables to different indices
 	Polynomial changeVariables(std::vector<int> from, std::vector<int> to) {
 
 		// Count the number of unique new indices
@@ -163,9 +160,29 @@ public:
 				newInd += mapString[pair.first.substr(i, digitsPerInd)];
 			}
 
-			// Add this new term
+			// Add this new term if it's non-zero
 			if (std::abs(coeff) > zeroTol) {
 				newPoly.coeffs[newInd] = coeff;
+			}
+
+		}
+
+		return newPoly;
+
+	}
+
+	// Given a list of input and a list of output, map variables to different indices TODO
+	Polynomial changeVariables(std::unordered_map<std::string,std::string> mapping) {
+
+		// Create a new polynomial with this number of vars
+		Polynomial newPoly(mapping.size());
+
+		// For each term
+		for (auto const &pair: coeffs) {
+
+			// Add this new term if it's non-zero
+			if (std::abs(pair.second) > zeroTol) {
+				newPoly.coeffs[mapping[pair.first]] = pair.second;
 			}
 
 		}
@@ -625,6 +642,12 @@ public:
 	// When doing std::cout << Polynomial
 	friend std::ostream &operator<<(std::ostream &output, const Polynomial &other) {
 
+		// If empty
+		if (other.coeffs.size() == 0) {
+			output << "0*{}";
+			return output;
+		}
+
 		// For each term
 		int numSoFar = 0;
 		for (auto const &pair: other.coeffs) {
@@ -697,6 +720,11 @@ public:
 	// Try to find a root, with one variable being optimized towards zero
 	std::vector<polyType> findRoot(int zeroInd=0, double alpha=0.1, double tolerance=1e-10, int maxIters=10000000) {
 		return integrate(zeroInd).findLocalMinimum(alpha, tolerance, maxIters, zeroInd);
+	}
+
+	// Size operator (returns number of non-zero monomials)
+	long int size() {
+		return coeffs.size();
 	}
 
 	// Use the Newton method to find a local minimum
@@ -1164,7 +1192,6 @@ public:
 		Eigen::setNbThreads(threads);
 
 		// Try to solve the linear system
-		//Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> spqr(A);
 		Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> solver(A);
 		Eigen::VectorXd cert = solver.solve(b);
 
@@ -1198,6 +1225,17 @@ public:
 		system = std::vector<std::vector<Polynomial<polyType>>>(rows, std::vector<Polynomial<polyType>>(columns, Polynomial<polyType>(maxVariables)));
 	}
 
+	// Constructor from brace-enclosed list
+	PolynomialMatrix(std::vector<double> vec) {
+		rows = vec.size();
+		columns = 1;
+		maxVariables = 1;
+		system = std::vector<std::vector<Polynomial<polyType>>>(rows, std::vector<Polynomial<polyType>>(columns, Polynomial<polyType>(maxVariables)));
+		for (int i=0; i<rows; i++) {
+			system[i][0].addTerm(vec[i], {});
+		}
+	}
+
 	// Constructor from an Eigen matrix
 	PolynomialMatrix(Eigen::MatrixXd other) {
 		rows = other.rows();
@@ -1220,10 +1258,24 @@ public:
 		maxVariables = other.maxVariables;
 		system = std::vector<std::vector<Polynomial<polyType>>>(rows, std::vector<Polynomial<polyType>>(columns, Polynomial<polyType>(maxVariables)));
 		for (int i=0; i<rows; i++) {
-			for (int j=0; j<rows; j++) {
+			for (int j=0; j<columns; j++) {
 				system[i][j] = other.system[i][j];
 			}
 		}
+	}
+
+	// Assignment from a PolynomialMatrix
+	PolynomialMatrix& operator=(const PolynomialMatrix& other) {
+		rows = other.rows;
+		columns = other.columns;
+		maxVariables = other.maxVariables;
+		system = std::vector<std::vector<Polynomial<polyType>>>(rows, std::vector<Polynomial<polyType>>(columns, Polynomial<polyType>(maxVariables)));
+		for (int i=0; i<rows; i++) {
+			for (int j=0; j<columns; j++) {
+				system[i][j] = other.system[i][j];
+			}
+		}
+		return *this;
 	}
 
 	// Overload index operator
@@ -1233,6 +1285,11 @@ public:
 
 	// Get the output width of the polynomial
 	static int getOutputWidth(Polynomial<polyType> other) {
+
+		// If poly is empty
+		if (other.size() == 0) {
+			return 4;
+		}
 
 		// For each element in this polynomial
 		int w = 0;
@@ -1284,7 +1341,7 @@ public:
 		for (int i=0; i<other.rows; i++) {
 
 			// Start the row with a symbol
-			output << "( ";
+			output << "(  ";
 
 			// Output each column
 			for (int j=0; j<other.columns; j++) {
@@ -1331,7 +1388,7 @@ public:
 	PolynomialMatrix operator+(const PolynomialMatrix& other) {
 
 		// Same size as the original
-		PolynomialMatrix result(maxVariables, rows, columns);
+		PolynomialMatrix result(std::max(maxVariables, other.maxVariables), rows, columns);
 
 		// For each element of the new matrix
 		for (int i=0; i<rows; i++) {
@@ -1351,7 +1408,7 @@ public:
 	PolynomialMatrix operator-(const PolynomialMatrix& other) {
 
 		// Same size as the original
-		PolynomialMatrix result(maxVariables, rows, columns);
+		PolynomialMatrix result(std::max(maxVariables, other.maxVariables), rows, columns);
 
 		// For each element of the new matrix
 		for (int i=0; i<rows; i++) {
@@ -1395,6 +1452,26 @@ public:
 		}
 
 		return monomList;
+
+	}
+
+	// Set each to a new variable TODO
+	PolynomialMatrix changeVariables(std::unordered_map<std::string,std::string> mapping) {
+		
+		// The new matrix may have more variables
+		PolynomialMatrix newMat(mapping.size(), rows, columns);
+
+		// For each element
+		for (int i=0; i<rows; i++) {
+			for (int j=0; j<columns; j++) {
+
+				// Apply the mapping
+				newMat[i][j] = system[i][j].changeVariables(mapping);
+
+			}
+		}
+
+		return newMat;
 
 	}
 
