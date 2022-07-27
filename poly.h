@@ -130,6 +130,41 @@ public:
 
 	}
 
+	// Get the output width of the polynomial
+	int getOutputWidth() const {
+
+		// If poly is empty
+		if (coeffs.size() == 0) {
+			return 4;
+		}
+
+		// For each element in this polynomial
+		int w = 0;
+		for (auto const &pair: coeffs) {
+
+			// The fixed width elements "*", "{" and "}"
+			w += 3;
+
+			// The width of the coefficient
+			w += 1+std::floor(std::log10(std::abs(pair.second)));
+
+			// An extra if it's negative
+			if (pair.second < 0) {
+				w += 1;
+			}
+			
+			// The width of the variable list
+			w += pair.first.size();
+
+		}
+
+		// We have (size-1) of " + "
+		w += (coeffs.size()-1)*3;
+
+		return w;
+
+	}
+
 	// Given a list of input and a list of output, map variables to different indices
 	Polynomial changeVariables(std::vector<int> from, std::vector<int> to) {
 
@@ -171,7 +206,7 @@ public:
 
 	}
 
-	// Given a list of input and a list of output, map variables to different indices TODO
+	// Given a list of input and a list of output, map variables to different indices
 	Polynomial changeVariables(std::unordered_map<std::string,std::string> mapping) {
 
 		// Create a new polynomial with this number of vars
@@ -201,6 +236,21 @@ public:
 			padded.insert(0, digitsPerInd-padded.size(), ' ');
 			asString += padded;
 		}
+
+		// Add it, combining it if the term already exists
+		if (coeffs.find(asString) != coeffs.end()) {
+			coeffs[asString] += coeff;
+			if (std::abs(coeffs[asString]) < zeroTol) {
+				coeffs.erase(asString);
+			}
+		} else {
+			coeffs[asString] = coeff;
+		}
+
+	}
+
+	// Add a term given a coefficient and an index string
+	void addTermString(polyType coeff, std::string asString) {
 
 		// Add it, combining it if the term already exists
 		if (coeffs.find(asString) != coeffs.end()) {
@@ -367,7 +417,7 @@ public:
 	}
 
 	// Overload the addition operator
-	Polynomial operator+(const Polynomial& other) {
+	Polynomial operator+(const Polynomial& other) const {
 
 		// Start with one equation
 		Polynomial result = other;
@@ -391,75 +441,34 @@ public:
 
 	}
 
-	// Overload for in-place addition (+=)
-	Polynomial& operator+=(const Polynomial& other){
-
-		// For each term of the other
-		for (auto const &pair: other.coeffs) {
-
-			// If it's new add it, otherwise combine with the existing
-			if (coeffs.find(pair.first) != coeffs.end()) {
-				coeffs[pair.first] += pair.second;
-				if (std::abs(coeffs[pair.first]) < zeroTol) {
-					coeffs.erase(pair.first);
-				}
-			} else {
-				coeffs[pair.first] = pair.second;
-			}
-
-		}
-
-		return *this;
-	}
-
-	// Overload the subtraction operator
-	Polynomial operator-(const Polynomial& other) {
-
-		// Start with one equation
-		Polynomial result = other;
-
-		// For each term of the other
+	// Overload the self-subtraction operator
+	Polynomial operator-() const {
+		Polynomial negPoly(maxVariables);
 		for (auto const &pair: coeffs) {
-
-			// If it's new add it, otherwise combine with the existing
-			if (result.coeffs.find(pair.first) != result.coeffs.end()) {
-				result.coeffs[pair.first] -= pair.second;
-				if (std::abs(result.coeffs[pair.first]) < zeroTol) {
-					result.coeffs.erase(pair.first);
-				}
-			} else {
-				result.coeffs[pair.first] = pair.second;
-			}
-
+			negPoly.coeffs[pair.first] = -pair.second;
 		}
-
-		return result;
-
+		return negPoly;
 	}
 
-	// Overload for in-place subtraction (-=)
-	Polynomial& operator-=(const Polynomial& other){
+	// Overload the subtraction operator (using the addition)
+	Polynomial operator-(const Polynomial& other) const {
+		return (*this + (-other));
+	}
 
-		// For each term of the other
-		for (auto const &pair: other.coeffs) {
-
-			// If it's new add it, otherwise combine with the existing
-			if (coeffs.find(pair.first) != coeffs.end()) {
-				coeffs[pair.first] -= pair.second;
-				if (std::abs(coeffs[pair.first]) < zeroTol) {
-					coeffs.erase(pair.first);
-				}
-			} else {
-				coeffs[pair.first] = pair.second;
-			}
-
-		}
-
+	// Overload for in-place addition
+	Polynomial& operator+=(const Polynomial& other) {
+		*this = (*this) + other;
 		return *this;
 	}
 
-	// The in-place multiplication operator (inefficient and lazy)
-	Polynomial operator*=(const Polynomial& other) {
+	// Overload for in-place subtraction
+	Polynomial& operator-=(const Polynomial& other) {
+		*this = (*this) - other;
+		return *this;
+	}
+
+	// Overload for in-place multiplication 
+	Polynomial& operator*=(const Polynomial& other) {
 		*this = (*this) * other;
 		return *this;
 	}
@@ -468,7 +477,7 @@ public:
 	Polynomial operator*(const Polynomial& other) {
 
 		// For each term of both equations
-		Polynomial result(maxVariables);
+		Polynomial result(std::max(maxVariables, other.maxVariables));
 		for (auto const &pair1: coeffs) {
 			for (auto const &pair2: other.coeffs) {
 
@@ -485,7 +494,12 @@ public:
 						ind2 += digitsPerInd;
 					}
 				}
-				combined += pair1.first.substr(ind1) + pair2.first.substr(ind2);
+				if (ind1 < pair1.first.size()) {
+					combined += pair1.first.substr(ind1);
+				}
+				if (ind2 < pair2.first.size()) {
+					combined += pair2.first.substr(ind2);
+				}
 
 				// If it's new add it, otherwise combine with the existing
 				if (result.coeffs.find(combined) != result.coeffs.end()) {
@@ -723,8 +737,13 @@ public:
 	}
 
 	// Size operator (returns number of non-zero monomials)
-	long int size() {
+	long int size() const {
 		return coeffs.size();
+	}
+
+	// Overload index operator
+	std::string& operator[](int index) {
+		return coeffs[index];
 	}
 
 	// Use the Newton method to find a local minimum
@@ -1283,46 +1302,18 @@ public:
 		return system[index];
 	}
 
-	// Get the output width of the polynomial
-	static int getOutputWidth(Polynomial<polyType> other) {
-
-		// If poly is empty
-		if (other.size() == 0) {
-			return 4;
-		}
-
-		// For each element in this polynomial
-		int w = 0;
-		for (auto const &pair: other.coeffs) {
-
-			// The fixed width elements "*", "{" and "}"
-			w += 3;
-
-			// The width of the coefficient
-			w += 1+std::floor(std::log10(pair.second));
-			
-			// The width of the variable list
-			w += pair.first.size();
-
-		}
-
-		// We have (size-1) of " + "
-		w += (other.coeffs.size()-1)*3;
-
-		return w;
-
-	}
+	
 
 	// Get the max output width of the polynomial matrix
-	static std::vector<int> getOutputWidths(PolynomialMatrix<polyType> other) {
+	std::vector<int> getOutputWidths() const {
 
 		// For each column, figure out the output widths
-		std::vector<int> columnWidths(other.columns, 0);
-		for (int j=0; j<other.columns; j++) {
-			for (int i=0; i<other.rows; i++) {
+		std::vector<int> columnWidths(columns, 0);
+		for (int j=0; j<columns; j++) {
+			for (int i=0; i<rows; i++) {
 
 				// Each column should be the max width of any element
-				columnWidths[j] = std::max(columnWidths[j], getOutputWidth(other.system[i][j])+2);
+				columnWidths[j] = std::max(columnWidths[j], system[i][j].getOutputWidth()+2);
 
 			}
 		}
@@ -1335,7 +1326,7 @@ public:
 	friend std::ostream &operator<<(std::ostream &output, const PolynomialMatrix &other) {
 
 		// Get the widths of each column
-		std::vector<int> columnWidths = getOutputWidths(other);
+		std::vector<int> columnWidths = other.getOutputWidths();
 
 		// For each row
 		for (int i=0; i<other.rows; i++) {
@@ -1348,7 +1339,7 @@ public:
 				output << other.system[i][j];
 
 				// Add padding if needed
-				int paddingNeeded = columnWidths[j]-getOutputWidth(other.system[i][j]);
+				int paddingNeeded = columnWidths[j]-other.system[i][j].getOutputWidth();
 				output << std::string(paddingNeeded, ' ');
 
 			}
@@ -1455,7 +1446,7 @@ public:
 
 	}
 
-	// Set each to a new variable TODO
+	// Set each to a new variable
 	PolynomialMatrix changeVariables(std::unordered_map<std::string,std::string> mapping) {
 		
 		// The new matrix may have more variables
