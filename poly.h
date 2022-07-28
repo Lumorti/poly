@@ -416,7 +416,31 @@ public:
 
 	}
 
-	// Overload the addition operator
+	// Overload the addition operator with a constant
+	template <class otherType>
+	Polynomial operator+(const otherType& other) const {
+
+		// Create an equation for the constant
+		Polynomial con(maxVariables);
+		con.addTerm(polyType(other), {});
+
+		return (*this) + con;
+
+	}
+
+	// Overload the addition operator with a constant
+	template <class otherType>
+	Polynomial operator-(const otherType& other) const {
+
+		// Create an equation for the constant
+		Polynomial con(maxVariables);
+		con.addTerm(-polyType(other), {});
+
+		return (*this) + con;
+
+	}
+
+	// Overload the addition operator with another polynomial
 	Polynomial operator+(const Polynomial& other) const {
 
 		// Start with one equation
@@ -473,8 +497,26 @@ public:
 		return *this;
 	}
 
-	// Overload the multiplication operator
-	Polynomial operator*(const Polynomial& other) {
+	// Overload the multiplication operator with a constant
+	template <class otherType>
+	Polynomial operator*(const otherType& other) const {
+
+		// For each term of both equations
+		Polynomial result(maxVariables);
+		polyType otherConverted = polyType(other);
+		for (auto const &pair: coeffs) {
+
+			// Multiply by the constant
+			result.coeffs[pair.first] = otherConverted*pair.second;
+
+		}
+
+		return result;
+
+	}
+	
+	// Overload the multiplication operator with another poly
+	Polynomial operator*(const Polynomial& other) const {
 
 		// For each term of both equations
 		Polynomial result(std::max(maxVariables, other.maxVariables));
@@ -1508,6 +1550,24 @@ PolynomialMatrix<polyType> operator*(const Polynomial<polyType>& poly, const Pol
 
 	return result;
 
+}
+
+// Switch the order
+template <class polyType, class otherType>
+Polynomial<polyType> operator*(const otherType& other, const Polynomial<polyType>& poly) {
+	return poly*other;
+}
+
+// Switch the order
+template <class polyType, class otherType>
+Polynomial<polyType> operator+(const otherType& other, const Polynomial<polyType>& poly) {
+	return poly+other;
+}
+
+// Switch the order
+template <class polyType, class otherType>
+Polynomial<polyType> operator-(const otherType& other, const Polynomial<polyType>& poly) {
+	return poly-other;
 }
 
 #endif
