@@ -1,15 +1,21 @@
 CXX=g++
 CXXFLAGS=-Wfatal-errors -O3
 LIBS=-I/usr/include/eigen3 -fopenmp
+HDIR=${MSKHOME}/mosek/9.2/tools/platform/linux64x86/h
+LIBDIR=${MSKHOME}/mosek/9.2/tools/platform/linux64x86/bin
+LDLIBSMOSEK= -I$(HDIR) -L$(LIBDIR) -Wl,-rpath-link,$(LIBDIR) -Wl,-rpath=$(LIBDIR) -lmosek64 -lfusion64
 
-all: mub simple matrices
+all: mub simple matrices sos
 
 mub:
-	$(CXX) $(CXXFLAGS) -o mub mub.cpp $(LIBS)
+	$(CXX) $(CXXFLAGS) -o mub mub.cpp $(LIBS) $(LDLIBSMOSEK)
 
 simple:
-	$(CXX) $(CXXFLAGS) -o simple simple.cpp $(LIBS)
+	$(CXX) $(CXXFLAGS) -o simple simple.cpp $(LIBS) $(LDLIBSMOSEK)
 
 matrices:
-	$(CXX) $(CXXFLAGS) -o matrices matrices.cpp $(LIBS)
+	$(CXX) $(CXXFLAGS) -o matrices matrices.cpp $(LIBS) $(LDLIBSMOSEK)
+
+sos:
+	$(CXX) $(CXXFLAGS) -o sos sos.cpp $(LIBS) $(LDLIBSMOSEK)
 

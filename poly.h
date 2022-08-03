@@ -16,12 +16,64 @@
 // OpenMP for parallelisation
 #include <omp.h>
 
+// MOSEK for SOS checking
+#include "fusion.h"
+
 // Allow complex literals like 1i
 using namespace std::complex_literals;
 
 // Class allowing manipulation of polynomials
 template <class polyType>
 class Polynomial {
+
+private:
+
+	// Return combinations with repeats
+	// choose 2 from {0,1} = 00, 01, 10, 11, 0, 1
+	std::vector<std::vector<int>> getAllMonomials(int numVars, int dimension) {
+
+		// Stop when asking for single order monomials
+		std::vector<std::vector<int>> toReturn;
+		if (dimension == 1) {
+			for (int i=0; i<numVars; i++) {
+				toReturn.push_back({i});
+			}
+			return toReturn;
+		}
+
+		// For each var, consider this var as the first and then recurse
+		for (int i=0; i<numVars; i++) {
+			std::vector<std::vector<int>> y = getAllMonomials(numVars, dimension-1);
+			for (int j=0; j<y.size(); j++) {
+				y[j].insert(y[j].begin(), i);
+			}
+			toReturn.insert(toReturn.end(), y.begin(), y.end());
+		}
+
+		return toReturn;
+
+	}
+
+	// Same as above but converts to Polynomial
+	std::vector<Polynomial> getAllMonomialsAsPoly(int numVars, int dimension) {
+
+		// Get the monomials
+		std::vector<std::vector<int>> toReturn;
+		for (int d=1; d<=dimension; d++) {
+			std::vector<std::vector<int>> nextDim = getAllMonomials(numVars, d);
+			toReturn.insert(toReturn.end(), nextDim.begin(), nextDim.end());
+		}
+
+		// Convert to Polynomial
+		std::vector<Polynomial> toReturnPoly(toReturn.size(), Polynomial(numVars));
+		for (int i=0; i<toReturn.size(); i++) {
+			toReturnPoly[i].addTerm(1, toReturn[i]);
+		}
+
+		return toReturnPoly;
+
+	}
+	
 public:
 
 	// General poly properties
@@ -260,6 +312,57 @@ public:
 			}
 		} else {
 			coeffs[asString] = coeff;
+		}
+
+	}
+
+	// Return the max power of any monomial
+	int getDegree() const {
+		int maxDegree = 0;
+		for (auto const &pair: coeffs) {
+			maxDegree = std::max(maxDegree, int(pair.first.size()) / digitsPerInd);
+		}
+		return maxDegree;
+	}
+
+	// Check if the polynomial can be represented as a sum-of-squares
+	bool isSOS() {
+
+		// Get the degree and half it
+		int d = getDegree();
+		int dHalf = d / 2;
+
+		// Generate the vector of monoms
+		std::vector<int> vars = getVariables();
+		std::vector<Polynomial> x = getAllMonomialsAsPoly(vars.size(), dHalf);
+
+		// Which matrix elements must sum to each coefficient
+		std::unordered_map<std::string,std::vector<std::vector<int>>> cons;
+		for (int i=0; i<x.size(); i++) {
+			for (int j=0; j<x.size(); j++) {
+				cons[(x[i]*x[j]).getMonomials()[0]].push_back({i,j});
+			}
+		}
+
+		// Create a model
+		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
+
+		// Create the variable
+		mosek::fusion::Variable::t xM = M->variable(mosek::fusion::Domain::inPSDCone(x.size()));
+
+		// For each el + el + el = coeff
+		for (auto const &pair: cons) {
+			M->constraint(mosek::fusion::Expr::sum(xM->pick(monty::new_array_ptr(pair.second))), mosek::fusion::Domain::equalsTo(coeffs[pair.first]));
+		}
+
+		// Solve the problem
+		M->solve();
+
+		// If it's infeasible, it's not SOS
+		if (M->getProblemStatus() == mosek::fusion::ProblemStatus::PrimalInfeasible) {
+			return false;
+		} else {
+			return true;
 		}
 
 	}
