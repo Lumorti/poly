@@ -5,7 +5,7 @@ int main(int argc, char ** argv) {
 
 	// Get the problem from the args
 	int d = 2;
-	int n = 4;
+	int n = 2;
 	int level = 2;
 	if (argc > 1) {
 		d = std::stoi(argv[1]);
