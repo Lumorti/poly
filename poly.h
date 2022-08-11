@@ -22,6 +22,20 @@
 // Allow complex literals like 1i
 using namespace std::complex_literals;
 
+// Generic overload for outputting vector
+template <class T>
+std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
+    os << "{";
+    for (typename std::vector<T>::const_iterator ii = v.begin(); ii != v.end(); ++ii) {
+        os << *ii;
+		if (ii+1 != v.end()) {
+			os << ", ";
+		}
+    }
+    os << "}";
+    return os;
+}
+
 // Class allowing manipulation of polynomials
 template <class polyType>
 class Polynomial {
@@ -88,9 +102,22 @@ public:
 	std::vector<polyType> vals;
 
 	// Default constructor
+	Polynomial() {
+		maxVariables = 1000;
+		digitsPerInd = std::ceil(std::log10(maxVariables+1));
+	}
+
+	// Main constructor
 	Polynomial(int maxVariables_) {
 		maxVariables = maxVariables_;
 		digitsPerInd = std::ceil(std::log10(maxVariables+1));
+	}
+
+	// Constructor with a single term
+	Polynomial(int maxVariables_, polyType coeff, std::vector<int> inds) {
+		maxVariables = maxVariables_;
+		digitsPerInd = std::ceil(std::log10(maxVariables+1));
+		addTerm(coeff, inds);
 	}
 
 	// Constructor from another poly
@@ -405,7 +432,7 @@ public:
 
 	}	
 
-	// Substitute several variables for several values 
+	// Substitute several variables for several values
 	Polynomial substitute(std::vector<int> ind, std::vector<polyType> toReplace) {
 		if (ind.size() == 0) {
 			return *this;
@@ -522,25 +549,15 @@ public:
 	// Overload the addition operator with a constant
 	template <class otherType>
 	Polynomial operator+(const otherType& other) const {
-
-		// Create an equation for the constant
-		Polynomial con(maxVariables);
-		con.addTerm(polyType(other), {});
-
+		Polynomial con(maxVariables, polyType(other), {});
 		return (*this) + con;
-
 	}
 
 	// Overload the addition operator with a constant
 	template <class otherType>
 	Polynomial operator-(const otherType& other) const {
-
-		// Create an equation for the constant
-		Polynomial con(maxVariables);
-		con.addTerm(-polyType(other), {});
-
+		Polynomial con(maxVariables, -polyType(other), {});
 		return (*this) + con;
-
 	}
 
 	// Overload the addition operator with another polynomial
@@ -583,19 +600,22 @@ public:
 	}
 
 	// Overload for in-place addition
-	Polynomial& operator+=(const Polynomial& other) {
+	template <class otherType>
+	Polynomial& operator+=(const otherType& other) {
 		*this = (*this) + other;
 		return *this;
 	}
 
 	// Overload for in-place subtraction
-	Polynomial& operator-=(const Polynomial& other) {
+	template <class otherType>
+	Polynomial& operator-=(const otherType& other) {
 		*this = (*this) - other;
 		return *this;
 	}
 
-	// Overload for in-place multiplication 
-	Polynomial& operator*=(const Polynomial& other) {
+	// Overload for in-place multiplication
+	template <class otherType>
+	Polynomial& operator*=(const otherType& other) {
 		*this = (*this) * other;
 		return *this;
 	}
@@ -887,7 +907,7 @@ public:
 	}
 
 	// Overload index operator
-	std::string& operator[](int index) {
+	polyType& operator[](std::string index) {
 		return coeffs[index];
 	}
 
@@ -1367,7 +1387,6 @@ public:
 
 };
 
-
 // For manipulating matrices of polynomials
 template <class polyType>
 class PolynomialMatrix {
@@ -1673,19 +1692,444 @@ Polynomial<polyType> operator-(const otherType& other, const Polynomial<polyType
 	return poly-other;
 }
 
-// Generic overload for outputting vector
-template <class T>
-std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
-    os << "{";
-    for (typename std::vector<T>::const_iterator ii = v.begin(); ii != v.end(); ++ii) {
-        os << *ii;
-		if (ii != v.end()) {
-			os << ", ";
+// For minimizing a polynomial of binary vars subject to constraints
+template <class polyType>
+class PolynomialBinaryProblem {
+public:
+
+	// The things definiting the problem
+	Polynomial<polyType> obj;
+	std::vector<Polynomial<polyType>> conZero;
+
+	// Default constructor
+	PolynomialBinaryProblem() {}
+
+	// Constructor with everything
+	PolynomialBinaryProblem(Polynomial<polyType> obj_, std::vector<Polynomial<polyType>> conZero_) {
+		obj = obj_;
+		conZero = conZero_;
+	}
+
+	// Get a list of all the monomials
+	std::vector<std::string> getMonomials() {
+
+		// Use an unordered set to get the unique monomial list
+		std::unordered_set<std::string> monoms(obj.getMonomials());
+		for (int i=0; i<conZero.size(); i++) {
+			std::vector<std::string> tempList = conZero[i].getMonomials();
+			monoms.insert(tempList.begin(), tempList.end());
 		}
-    }
-    os << "}";
-    return os;
-}
+
+		// Turn this into a vector
+		std::vector<std::string> monomList;
+		for (const std::string& mon: monoms) {
+			monomList.push_back(mon);
+		}
+
+		return monomList;
+
+	}
+
+	// Given a list of var indices and values, replace everything
+	template <typename otherType>
+	PolynomialBinaryProblem substitute(std::vector<int> indsToReplace, std::vector<otherType> valsToReplace) {
+
+		// Convert the list to the correct type
+		std::vector<polyType> convertedList(valsToReplace.size());
+		for (int i=0; i<valsToReplace.size(); i++) {
+			convertedList[i] = polyType(valsToReplace[i]);
+		}
+
+		// Start with a blank poly system
+		PolynomialBinaryProblem newPolyProblem;
+
+		// Copy each equation, substituting
+		newPolyProblem.obj = obj.substitute(indsToReplace, convertedList);
+		for (int i=0; i<conZero.size(); i++) {
+			newPolyProblem.conZero.push_back(conZero[i].substitute(indsToReplace, convertedList));
+		}
+
+		return newPolyProblem;
+
+	}
+
+	// When doing std::cout << PolynomialBinaryProblem
+	friend std::ostream &operator<<(std::ostream &output, const PolynomialBinaryProblem &other) {
+
+		// Output the objective
+		output << "Minimize: " << std::endl;
+		output << other.obj << std::endl << std::endl;
+
+		// Output each constraint
+		int numSoFar = 0;
+		output << "Subject to: " << std::endl << std::endl;
+		for (int i=0; i<other.conZero.size(); i++) {
+			output << other.conZero[i] << " = 0 ";
+			if (i < other.conZero.size()-1) {
+				output << std::endl << std::endl;
+			}
+		}
+
+		return output;
+
+	}
+
+	// Returns true if all of the constraints are satisfied
+	bool isSatisfied() {
+
+		// Check each constraint
+		for (int i=0; i<conZero.size(); i++) {
+			if (abs(conZero[i][""]) > conZero[i].zeroTol) {
+				return false;
+			}
+		}
+
+		// If we got to the end, it's satisfied
+		return true;
+
+	}
+
+	// Find the exact solution through brute force
+	std::pair<polyType,std::vector<int>> bruteForce() {
+
+		// Create a vector listing all the variables
+		int numVars = obj.getVariables().size();
+		std::vector<int> inds(numVars);
+		for (int i=0; i<numVars; i++) {
+			inds[i] = i;
+		}
+
+		// For each possible set of variables
+		int numCombs = std::pow(2, obj.maxVariables);
+		polyType bestVal = 10000000;
+		std::vector<int> bestSol(numVars);
+		for (int k=0; k<numCombs; k++) {
+
+			// Convert to -1/1
+			std::vector<int> sol(numVars, -1);
+			for (int i=0; i<numVars; i++) {
+				if ((k >> i) & 1) {
+					sol[numVars-i-1] = 1;
+				}
+			}
+
+			// Substitute all the values
+			PolynomialBinaryProblem testing = substitute(inds, sol);
+
+			// If it's a valid interior point
+			if (testing.isSatisfied()) {
+
+				// See if this objective is better
+				bestVal = std::min(bestVal, testing.obj[""]);
+				bestSol = sol;
+
+			}
+
+		}
+
+		return {bestVal, bestSol};
+	
+	}
+	
+	// Get a lower bound TODO
+	//polyType lowerBound() {
+
+		//// Get the monomial list and sort it
+		//std::vector<std::string> monoms = getMonomials();
+		//int numLinearVars = monoms.size();
+		//std::sort(monoms.begin(), monoms.end(), [](const std::string& first, const std::string& second){return first.size() < second.size();});
+
+		//// Create the mapping from monomials to indices (to linearize)
+		//std::unordered_map<std::string,std::string> mapping;
+		//int digitsPerInd = std::ceil(std::log10(numLinearVars+1));
+		//mapping[""] = "";
+		//for (int i=1; i<monoms.size(); i++) {
+			//std::string newInd = std::to_string(i);
+			//newInd.insert(0, digitsPerInd-newInd.size(), ' ');
+			//mapping[monoms[i]] = newInd;
+			//if (verbose) {
+				//std::cout << "\"" << monoms[i] << "\" -> \"" << newInd << "\"" << std::endl;
+			//}
+		//}
+
+		//// Linearize the problem
+		//PolynomialMatrix<double> linearMat = mainMatrix.changeVariables(mapping);
+
+		//std::vector<std::pair<std::string,std::string>> momentPairs;
+
+		////std::vector<std::vector<int>> matTypes = {
+			////{2, 1, 1},
+			////{3, 1, 2},
+			////{4, 2, 2},
+			////{4, 1, 3},
+			////{5, 2, 3},
+			////{5, 1, 4},
+			////{6, 3, 3},
+			////{6, 4, 2},
+			////{6, 5, 1},
+			////{7, 3, 4},
+			////{7, 5, 2},
+			////{7, 6, 1},
+			////{8, 4, 4},
+			////{8, 5, 3},
+			////{8, 6, 2},
+			////{8, 7, 1},
+			////{9, 4, 5},
+			////{10, 5, 5},
+			////{11, 5, 6},
+			////{12, 6, 6},
+		////};	
+		////// Generate the matrices of indices which should be PSD
+		////std::cout << std::endl;
+		////std::cout << "--------------------------" << std::endl;
+		////std::cout << "      PSD conditions" << std::endl;
+		////std::cout << "--------------------------" << std::endl;
+		////int matPSDWidth = 4;
+		////int varsTotal = numLinearVars;
+		////std::unordered_set<int> momentsUsed;
+		////for (int k=0; k<matTypes.size(); k++) {
+			////for (int i=0; i<1000000; i++) {
+
+				////// Only up to the level we want
+				////if (matTypes[k][0] > maxOrderPSD) {
+					////break;
+				////}
+
+				////// Find a higher order moment
+				////std::string monomSecondString = "";
+				////int monomSecond = -2;
+				////for (int j=0; j<monoms.size(); j++) {
+					////if (momentsUsed.find(j) == momentsUsed.end() && monoms[j].size() == matTypes[k][0]*digitsPerIndOrig) {
+						////monomSecond = j;
+						////monomSecondString = monoms[j];
+						////momentsUsed.insert(j);
+						////break;
+					////}
+				////}
+
+				////// Stop once we can't find anything of this order
+				////if (monomSecond == -2) {
+					////std::cout << "ran out of moments for " << matTypes[k][0] << " -> " << matTypes[k][1] << " + " << matTypes[k][2] << " (now have " << momentPairs.size() << " mats)" << std::endl;
+					////break;
+				////}
+
+				////// Generate all possible splits
+				////std::vector<std::pair<std::string,std::string>> splits = splitMonom(monomSecondString, matTypes[k][1], matTypes[k][2], digitsPerIndOrig);
+
+				////// For each split
+				////for (int j=0; j<splits.size(); j++) {
+
+					////std::string firstMapped = splits[j].first;
+					////std::string secondMapped = splits[j].second;
+
+					////// Check if the first component exists
+					////std::string monomFirst1String = "";
+					////int monomFirst1 = -2;
+					////for (int l=0; l<monoms.size(); l++) {
+						////if (monoms[l] == firstMapped) {
+							////monomFirst1 = l;
+							////monomFirst1String = monoms[l];
+							////break;
+						////}
+					////}
+
+					////// Check if the second component exists
+					////std::string monomFirst2String = "";
+					////int monomFirst2 = -2;
+					////for (int l=0; l<monoms.size(); l++) {
+						////if (monoms[l] == secondMapped) {
+							////monomFirst2 = l;
+							////monomFirst2String = monoms[l];
+							////break;
+						////}
+					////}
+
+					////// If couldn't find both, don't bother
+					////if (monomFirst1 != -2 && monomFirst2 != -2) {
+						////momentPairs.push_back(splits[j]);
+					////}
+
+				////}
+
+			////}
+		////}
+
+		//// Create the PSD matrices
+		//std::vector<std::vector<std::vector<int>>> matsPSD;
+		//for (int j=0; j<momentPairs.size(); j++) {
+
+			//std::string firstMapped = momentPairs[j].first;
+			//std::string secondMapped = momentPairs[j].second;
+			//std::string combinedMapped = addStrings(firstMapped, secondMapped, digitsPerIndOrig);
+
+			//// Check if the first component exists
+			//std::string monomFirst1String = "";
+			//int monomFirst1 = -2;
+			//for (int l=0; l<monoms.size(); l++) {
+				//if (monoms[l] == firstMapped) {
+					//monomFirst1 = l;
+					//monomFirst1String = monoms[l];
+					//break;
+				//}
+			//}
+
+			//// Check if the second component exists
+			//std::string monomFirst2String = "";
+			//int monomFirst2 = -2;
+			//for (int l=0; l<monoms.size(); l++) {
+				//if (monoms[l] == secondMapped) {
+					//monomFirst2 = l;
+					//monomFirst2String = monoms[l];
+					//break;
+				//}
+			//}
+
+			//// Find the higher order moment
+			//std::string monomSecondString = "";
+			//int monomSecond = -2;
+			//for (int l=0; l<monoms.size(); l++) {
+				//if (monoms[l] == combinedMapped) {
+					//monomSecond = l;
+					//monomSecondString = monoms[l];
+					//break;
+				//}
+			//}
+
+			//// Construct the matrix
+			//std::vector<std::vector<int>> matPSD(matPSDWidth, std::vector<int>(matPSDWidth, -1));
+			//std::vector<std::vector<std::string>> matPSDStrings(matPSDWidth, std::vector<std::string>(matPSDWidth));
+			//matPSD = {
+				//{-1,          monomFirst1, monomFirst2, monomSecond},
+				//{monomFirst1, -1,          monomSecond, monomFirst2},
+				//{monomFirst2, monomSecond, -1,          monomFirst1},
+				//{monomSecond, monomFirst2, monomFirst1, -1          }
+			//};
+			//matPSDStrings = {
+				//{"",                monomFirst1String, monomFirst2String, monomSecondString},
+				//{monomFirst1String, "",                monomSecondString, monomFirst2String},
+				//{monomFirst2String, monomSecondString, "",                monomFirst1String},
+				//{monomSecondString, monomFirst2String, monomFirst1String, ""         }
+			//};
+
+			//if (verbose) {
+				//std::cout << matPSDStrings << std::endl;
+			//}
+
+			//// Add this to the list
+			//matsPSD.push_back(matPSD);
+
+		//}
+
+		//// Check this is satisfied for known circuits that work
+		//// 0, 2 = 1
+		//// 1, 3 = -1
+		////std::cout << std::endl;
+		////std::cout << "------------------------------" << std::endl;
+		////std::cout << "    testing known optimum " << std::endl;
+		////std::cout << "------------------------------" << std::endl;
+		////std::vector<int> inds =    { 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11};
+		////std::vector<double> vals = { 1, -1, -1,  1,  1, -1, -1,  -1,  1, 1,  -1, 1};
+		////std::cout << std::endl;
+		////for (int i=0; i<zeroPolynomials.size(); i++) {
+			////std::cout << zeroPolynomials[i].substitute(inds, vals) << std::endl;
+		////}
+
+		//std::cout << std::endl;
+		//std::cout << "--------------------------" << std::endl;
+		//std::cout << "        solving SDP " << std::endl;
+		//std::cout << "--------------------------" << std::endl;
+
+		//// Convert the linear constraint to MOSEK form
+		//int oneIndex = 0;
+		//std::vector<int> ARows;
+		//std::vector<int> ACols;
+		//std::vector<double> AVals;
+		//for (int i=0; i<zeroPolynomials.size(); i++) {
+			//for (auto const &pair: zeroPolynomials[i].coeffs) {
+				//ARows.push_back(i);
+				//if (pair.first == "") {
+					//ACols.push_back(oneIndex);
+				//} else {
+					//ACols.push_back(std::stoi(pair.first));
+				//}
+				//AVals.push_back(pair.second);
+			//}
+		//}
+		//auto AM = mosek::fusion::Matrix::sparse(zeroPolynomials.size(), varsTotal, monty::new_array_ptr<int>(ARows), monty::new_array_ptr<int>(ACols), monty::new_array_ptr<double>(AVals));
+
+		//// Convert the PSD constraints to MOSEK form
+		//std::vector<std::shared_ptr<monty::ndarray<int,1>>> indexMatsM;
+		//for (int k=0; k<matsPSD.size(); k++) {
+			//std::vector<int> indexMat;
+			//for (int i=0; i<matPSDWidth; i++) {
+				//for (int j=0; j<matPSDWidth; j++) {
+					//if (matsPSD[k][i][j] == -1) {
+						//indexMat.push_back(oneIndex);
+					//} else {
+						//indexMat.push_back(matsPSD[k][i][j]);
+					//}
+				//}
+			//}
+			//indexMatsM.push_back(monty::new_array_ptr<int>(indexMat));
+		//}
+
+		//// Convert the objective to MOSEK form
+		//std::vector<double> c(varsTotal);
+		//int numOrigLinear = 0;
+		//for (int i=0; i<monoms.size(); i++) {
+			//if (monoms[i].size() == digitsPerIndOrig) {
+				//c[i] = 0.5;
+				//numOrigLinear += 1;
+			//}
+		//}
+		//c[0] = numOrigLinear/2.0;
+		//auto cM = monty::new_array_ptr<double>(c);
+
+		//// Create a model
+		//mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
+		//M->setLogHandler([=](const std::string & msg){std::cout << msg << std::flush;});
+
+		//// Create the variable
+		//mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(-1, 1));
+
+		//// Last element of the vector should be one
+		//M->constraint(xM->index(oneIndex), mosek::fusion::Domain::equalsTo(1.0));
+
+		//// Linear constraint
+		//M->constraint(mosek::fusion::Expr::mul(AM, xM), mosek::fusion::Domain::equalsTo(0.0));
+
+		//// PSD constraints
+		//for (int i=0; i<indexMatsM.size(); i++) {
+			//M->constraint((xM->pick(indexMatsM[i]))->reshape(matPSDWidth, matPSDWidth), mosek::fusion::Domain::inPSDCone(matPSDWidth));
+		//}
+
+		//// Objective is to minimize the sum of the original linear terms
+		//M->objective(mosek::fusion::ObjectiveSense::Minimize, mosek::fusion::Expr::dot(cM, xM));
+
+		//// Solve the problem
+		//M->solve();
+
+		//// Get the solution values
+		//auto sol = *(xM->level());
+		//double outer = M->primalObjValue();
+
+		//// Output the relevent moments
+		//std::cout << std::endl;
+		//std::cout << "--------------------------" << std::endl;
+		//std::cout << "      final results" << std::endl;
+		//std::cout << "--------------------------" << std::endl;
+		//std::vector<double> solVec(xM->getSize());
+		//std::cout << std::endl;
+		//for (int i=0; i<solVec.size(); i++) {
+			//solVec[i] = sol[i];
+			//if ((c[i] != 0 && i > 0) || verbose) {
+				//std::cout << monoms[i] << " = " << solVec[i] << std::endl;
+			//}
+		//}
+
+	//}
+
+};
 
 #endif
 	
