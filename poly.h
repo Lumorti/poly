@@ -230,6 +230,15 @@ public:
 		return monoms;
 	}
 
+	// Get a list of all the monomials as Polynomials
+	std::vector<Polynomial<polyType>> getMonomialsAsPolynomials() const {
+		std::vector<Polynomial<polyType>> monoms;
+		for (auto const &pair: coeffs) {
+			monoms.push_back(Polynomial<polyType>(maxVariables, pair.first));
+		}
+		return monoms;
+	}
+
 	// Get a list of all the variable indices
 	std::vector<int> getVariables() {
 		std::vector<int> listToReturn;
@@ -257,7 +266,7 @@ public:
 			}
 		}
 
-		// Sort and return
+		// Just return (no sorting)
 		return listToReturn;
 
 	}
@@ -928,7 +937,7 @@ public:
 	}
 
 	// Prepares this equation for rapid eval by caching things
-	void prepareEvalFast() {
+	void prepareEvalMixed() {
 
 		// For each coefficient
 		for (auto const &pair: coeffs) {
@@ -945,11 +954,19 @@ public:
 
 		}
 
-		// Free some space
-		coeffs.clear();
-
 		// Flag that ready for fast eval now
 		fastEvalReady = true;
+
+	}
+
+	// Prepares this equation for ONLY fast eval (saves memory)
+	void prepareEvalFast() {
+		
+		// Prepare for fast eval
+		prepareEvalMixed();
+
+		// Free some space
+		coeffs.clear();
 
 	}
 
@@ -1885,16 +1902,17 @@ class PolynomialBinaryProblem {
 public:
 
 	// The things definiting the problem
+	int maxVariables = 1;
+	int digitsPerInd = 1;
 	Polynomial<polyType> obj;
 	std::vector<Polynomial<polyType>> conZero;
-
-	// Default constructor
-	PolynomialBinaryProblem() {}
 
 	// Constructor with everything
 	PolynomialBinaryProblem(Polynomial<polyType> obj_, std::vector<Polynomial<polyType>> conZero_) {
 		obj = obj_;
 		conZero = conZero_;
+		maxVariables = obj.maxVariables;
+		digitsPerInd = obj.digitsPerInd;
 	}
 
 	// Get a list of all the monomials
@@ -2021,83 +2039,91 @@ public:
 	}
 
 	// Given a linearized objective, constraints and a list of SD matrices, form the SDP and solve
-	std::pair<polyType,std::vector<polyType>> solveSDP(Polynomial<polyType>& objLinear, std::vector<Polynomial<polyType>>& conZeroLinear, std::vector<std::string>& monoms, std::vector<std::pair<std::string,std::string>>& monomPairs) {
-
-		// Extract some info
-		int numVarsOrig = obj.maxVariables;
-		int digitsPerIndOrig = obj.digitsPerInd;
+	std::pair<polyType,std::vector<polyType>> solveLinearizedSDP(Polynomial<polyType>& objLinear, std::vector<Polynomial<polyType>>& conZeroLinear, std::vector<std::string>& monoms, std::vector<std::tuple<int,int,int>>& monomPairs) {
 
 		// Create the PSD matrices from this list
 		int matPSDWidth = 4;
 		std::vector<std::vector<std::vector<int>>> matsPSD;
 		for (int j=0; j<monomPairs.size(); j++) {
 
-			std::string monomFirstString = monomPairs[j].first;
-			std::string monomSecondString = monomPairs[j].second;
-			std::string monomCombinedString = (Polynomial<polyType>(obj.maxVariables, monomFirstString)*Polynomial<polyType>(obj.maxVariables, monomSecondString)).getMonomials()[0];
+			//std::string monomFirstString = monomPairs[j].first;
+			//std::string monomSecondString = monomPairs[j].second;
+			//std::string monomCombinedString = (Polynomial<polyType>(obj.maxVariables, monomFirstString)*Polynomial<polyType>(obj.maxVariables, monomSecondString)).getMonomials()[0];
 
 			// Check if the first component exists
-			int monomFirst = -2;
-			for (int l=0; l<monoms.size(); l++) {
-				if (monoms[l] == monomFirstString) {
-					monomFirst = l;
-					break;
-				}
-			}
+			//int monomFirst = -2;
+			//for (int l=0; l<monoms.size(); l++) {
+				//if (monoms[l] == monomFirstString) {
+					//monomFirst = l;
+					//break;
+				//}
+			//}
 
 			// Add it if it doesn't exist
-			if (monomFirst == -2) {
-				monomFirst = monoms.size();
-				monoms.push_back(monomFirstString);
-			}
+			//if (monomFirst == -2) {
+				//monomFirst = monoms.size();
+				//monoms.push_back(monomFirstString);
+			//}
 
 			// Check if the second component exists
-			int monomSecond = -2;
-			for (int l=0; l<monoms.size(); l++) {
-				if (monoms[l] == monomSecondString) {
-					monomSecond = l;
-					break;
-				}
-			}
+			//int monomSecond = -2;
+			//for (int l=0; l<monoms.size(); l++) {
+				//if (monoms[l] == monomSecondString) {
+					//monomSecond = l;
+					//break;
+				//}
+			//}
 
 			// Add it if it doesn't exist
-			if (monomSecond == -2) {
-				monomSecond = monoms.size();
-				monoms.push_back(monomSecondString);
-			}
+			//if (monomSecond == -2) {
+				//monomSecond = monoms.size();
+				//monoms.push_back(monomSecondString);
+			//}
 
 			// Find the higher order moment
-			int monomCombined = -2;
-			for (int l=0; l<monoms.size(); l++) {
-				if (monoms[l] == monomCombinedString) {
-					monomCombined = l;
-					break;
-				}
-			}
+			//int monomCombined = -2;
+			//for (int l=0; l<monoms.size(); l++) {
+				//if (monoms[l] == monomCombinedString) {
+					//monomCombined = l;
+					//break;
+				//}
+			//}
 
 			// Add it if it doesn't exist
-			if (monomCombined == -2) {
-				monomCombined = monoms.size();
-				monoms.push_back(monomCombinedString);
-			}
+			//if (monomCombined == -2) {
+				//monomCombined = monoms.size();
+				//monoms.push_back(monomCombinedString);
+			//}
 
 			// Construct the matrix
+			//std::vector<std::vector<int>> matPSD(matPSDWidth, std::vector<int>(matPSDWidth, -1));
+			//std::vector<std::vector<std::string>> matPSDStrings(matPSDWidth, std::vector<std::string>(matPSDWidth));
+			//matPSD = {
+				//{-1,          monomFirst, monomSecond, monomCombined},
+				//{monomFirst, -1,          monomCombined, monomSecond},
+				//{monomSecond, monomCombined, -1,          monomFirst},
+				//{monomCombined, monomSecond, monomFirst, -1          }
+			//};
+			//matPSDStrings = {
+				//{"",                  monomFirstString,    monomSecondString,    monomCombinedString},
+				//{monomFirstString,    "",                  monomCombinedString,  monomSecondString},
+				//{monomSecondString,   monomCombinedString, "",                   monomFirstString},
+				//{monomCombinedString, monomSecondString,   monomFirstString,     ""}
+			//};
+
+			//std::cout << matPSDStrings << std::endl;
+
+			// Extract the vals and construct the matrix
+			int monomFirst = std::get<0>(monomPairs[j]);
+			int monomSecond = std::get<1>(monomPairs[j]);
+			int monomCombined = std::get<2>(monomPairs[j]);
 			std::vector<std::vector<int>> matPSD(matPSDWidth, std::vector<int>(matPSDWidth, -1));
-			std::vector<std::vector<std::string>> matPSDStrings(matPSDWidth, std::vector<std::string>(matPSDWidth));
 			matPSD = {
 				{-1,          monomFirst, monomSecond, monomCombined},
 				{monomFirst, -1,          monomCombined, monomSecond},
 				{monomSecond, monomCombined, -1,          monomFirst},
 				{monomCombined, monomSecond, monomFirst, -1          }
 			};
-			matPSDStrings = {
-				{"",                  monomFirstString,    monomSecondString,    monomCombinedString},
-				{monomFirstString,    "",                  monomCombinedString,  monomSecondString},
-				{monomSecondString,   monomCombinedString, "",                   monomFirstString},
-				{monomCombinedString, monomSecondString,   monomFirstString,     ""}
-			};
-
-			//std::cout << matPSDStrings << std::endl;
 
 			// Add this to the list
 			matsPSD.push_back(matPSD);
@@ -2109,7 +2135,7 @@ public:
 		std::vector<polyType> c(varsTotal);
 		int numOrigLinear = 0;
 		for (int i=0; i<monoms.size(); i++) {
-			if (monoms[i].size() == digitsPerIndOrig) {
+			if (monoms[i].size() == digitsPerInd) {
 				c[i] = 0.5;
 				numOrigLinear += 1;
 			}
@@ -2164,7 +2190,7 @@ public:
 		// Linear constraint
 		M->constraint(mosek::fusion::Expr::mul(AM, xM), mosek::fusion::Domain::equalsTo(0.0));
 
-		// PSD constraints
+		// PSD constraints TODO to linear
 		for (int i=0; i<indexMatsM.size(); i++) {
 			M->constraint((xM->pick(indexMatsM[i]))->reshape(matPSDWidth, matPSDWidth), mosek::fusion::Domain::inPSDCone(matPSDWidth));
 		}
@@ -2191,51 +2217,46 @@ public:
 	}
 
 	// Given the data from the previous run, guess the next best combo of monoms
-	std::pair<std::string,std::string> getBestPair(std::vector<std::string>& monoms, std::vector<std::pair<std::string,std::string>>& usedPairs, std::pair<polyType,std::vector<polyType>> prevRes) {
+	std::tuple<int,int,int> getBestPair(std::vector<std::string>& monoms, std::vector<Polynomial<polyType>>& monomsAsPolys, std::vector<std::pair<std::string,std::string>>& usedPairs, std::pair<polyType,std::vector<polyType>> prevRes) {
 
 		// Get the list of linear monoms and their values
-		std::vector<std::string> linMonoms;
-		std::vector<polyType> linVals;
+		std::vector<polyType> linVals(maxVariables);
+		int numDone = 0;
 		for (int i=0; i<monoms.size(); i++) {
-			if (monoms[i].size() == obj.digitsPerInd) {
-				linMonoms.push_back(monoms[i]);
-				linVals.push_back(prevRes.second[i]);
-				if (linMonoms.size() > obj.maxVariables) {
+			if (monoms[i].size() == digitsPerInd) {
+				linVals[std::stoi(monoms[i])] = prevRes.second[i];
+				numDone++;
+				if (numDone > maxVariables) {
 					break;
 				}
 			}
 		}
 
-		// Convert the monomial list to a list of polynomials
-		std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
+		// Get the probabilities based on the error for each monomial
 		std::vector<polyType> monomResults(monoms.size());
-		for (int i=0; i<monoms.size(); i++) {
-			monomsAsPolys[i] = Polynomial<polyType>(obj.maxVariables, monoms[i]);
-			monomResults[i] = std::abs(prevRes.second[i] - monomsAsPolys[i].substitute(linMonoms, linVals)[""]);
-		}
-
-		// Determine the probability distribution
-		double totalProb = 0;
 		std::vector<double> monomProbs(monoms.size());
+		double totalProb = 0;
 		for (int i=0; i<monoms.size(); i++) {
+			monomResults[i] = std::abs(prevRes.second[i] - monomsAsPolys[i].evalFast(linVals));
 			monomProbs[i] = std::exp(30*monomResults[i]);
 			totalProb += monomProbs[i];
 		}
+
+		// Readjust the probability distribution
 		for (int i=0; i<monoms.size(); i++) {
 			monomProbs[i] /= totalProb;
-			//std::cout << monoms[i] << " " << monomResults[i] << " " << monomProbs[i] << std::endl;
 		}
 
 		// Get the index permutation
-		std::vector<int> orderedIndices(monoms.size(), 0);
-		for (int i=0; i<orderedIndices.size(); i++) {
-			orderedIndices[i] = i;
-		}
-		std::sort(orderedIndices.begin(), orderedIndices.end(),
-			[&](const int& a, const int& b) {
-				return (monomResults[a] > monomResults[b]);
-			}
-		);
+		//std::vector<int> orderedIndices(monoms.size(), 0);
+		//for (int i=0; i<orderedIndices.size(); i++) {
+			//orderedIndices[i] = i;
+		//}
+		//std::sort(orderedIndices.begin(), orderedIndices.end(),
+			//[&](const int& a, const int& b) {
+				//return (monomResults[a] > monomResults[b]);
+			//}
+		//);
 
 		//for (int i=0; i<monoms.size(); i++) {
 			//std::cout << monoms[orderedIndices[i]] << " " << monomResults[orderedIndices[i]] << std::endl;
@@ -2255,6 +2276,8 @@ public:
 					break;
 				}
 			}
+
+			// TODO pick two bad moments and multiply them
 
 			//int i = orderedIndices[i2];
 
@@ -2277,8 +2300,9 @@ public:
 					if (!otherPoly.isNaN) {
 
 						// Get the monoms to add
-						std::string firstString = monomsAsPolys[j].getMonomials()[0];
+						std::string firstString = monoms[j];
 						std::string secondString = otherPoly.getMonomials()[0];
+						std::string combinedString = monoms[i];
 
 						// Ensure it's new
 						bool found = false;
@@ -2290,7 +2314,25 @@ public:
 
 						// If it's new, add it
 						if (!found) {
-							return {firstString, secondString};
+
+							// We know where the first and combined are
+							int firstLoc = j;
+							int combinedLoc = i;
+
+							// Add the second if needed
+							auto secondIter = std::find(monoms.begin(), monoms.end(), secondString);
+							int secondLoc = -1;
+							if (secondIter != monoms.end()) {
+								secondLoc = secondIter - monoms.begin();
+							} else {
+								secondLoc = monoms.size();
+								monoms.push_back(secondString);
+								monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, secondString));
+								monomsAsPolys[monomsAsPolys.size()-1].prepareEvalMixed();
+							}
+
+							return std::make_tuple(firstLoc, secondLoc, combinedLoc);
+
 						}
 
 					}
@@ -2302,7 +2344,8 @@ public:
 		}
 
 		// This should never happen
-		return {"", ""};
+		std::cout << "ERROR" << std::endl;
+		return std::make_tuple(0, 0, 0);
 
 	}
 	
@@ -2312,6 +2355,13 @@ public:
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
 		std::sort(monoms.begin(), monoms.end(), [](const std::string& first, const std::string& second){return first.size() < second.size();});
+
+		// Also get the monomials as polynomials and prepare for fast eval
+		std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
+		for (int i=0; i<monoms.size(); i++) {
+			monomsAsPolys[i] = Polynomial<polyType>(maxVariables, monoms[i]);
+			monomsAsPolys[i].prepareEvalMixed();
+		}
 
 		// Create the mapping from monomials to indices (to linearize)
 		std::unordered_map<std::string,std::string> mapping;
@@ -2331,11 +2381,11 @@ public:
 		}
 
 		// List of semdefinite matrices
-		std::vector<std::pair<std::string,std::string>> monomPairs;
+		std::vector<std::tuple<int,int,int>> monomPairs;
 		std::vector<std::pair<std::string,std::string>> usedPairs;
 
 		// Initial solve
-		auto prevRes = solveSDP(objLinear, conZeroLinear, monoms, monomPairs);
+		auto prevRes = solveLinearizedSDP(objLinear, conZeroLinear, monoms, monomPairs);
 
 		// Keep iterating
 		std::pair<polyType,std::vector<polyType>> bestVal = {0, {}};
@@ -2343,21 +2393,21 @@ public:
 		int numAdded = 0;
 		for (int i=0; i<1001; i++) {
 
-			// Add a monom pair to the list TODO
+			// Add a monom pair to the list
 			int numAdded = 0;
 			if (i >= 1) {
-				std::pair<std::string,std::string> monomPairToTry = getBestPair(monoms, usedPairs, prevRes);
+				std::tuple<int,int,int> monomPairToTry = getBestPair(monoms, monomsAsPolys, usedPairs, prevRes);
 				monomPairs.push_back(monomPairToTry);
-				usedPairs.push_back(monomPairToTry);
+				usedPairs.push_back({monoms[std::get<0>(monomPairToTry)], monoms[std::get<1>(monomPairToTry)]});
 				//std::cout << "adding: " << monomPairToTry.first << " | " << monomPairToTry.second << std::endl;
 				numAdded = 1;
 			}
 
 			// Solve this SDP
-			int numMonomsBefore = monoms.size();
-			auto res = solveSDP(objLinear, conZeroLinear, monoms, monomPairs);
+			//int numMonomsBefore = monoms.size();
+			auto res = solveLinearizedSDP(objLinear, conZeroLinear, monoms, monomPairs);
 			prevRes = res;
-			int numMonomsAdded = monoms.size()-numMonomsBefore;
+			//int numMonomsAdded = monoms.size()-numMonomsBefore;
 
 			// Output
 			std::cout << res.first << " " << bestVal.first << " " << monomPairs.size() << " " << monoms.size() << std::endl;
