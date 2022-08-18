@@ -1906,11 +1906,13 @@ public:
 	int digitsPerInd = 1;
 	Polynomial<polyType> obj;
 	std::vector<Polynomial<polyType>> conZero;
+	std::vector<Polynomial<polyType>> conPositive;
 
 	// Constructor with everything
-	PolynomialBinaryProblem(Polynomial<polyType> obj_, std::vector<Polynomial<polyType>> conZero_) {
+	PolynomialBinaryProblem(Polynomial<polyType> obj_, std::vector<Polynomial<polyType>> conZero_, std::vector<Polynomial<polyType>> conPositive_) {
 		obj = obj_;
 		conZero = conZero_;
+		conPositive = conPositive_;
 		maxVariables = obj.maxVariables;
 		digitsPerInd = obj.digitsPerInd;
 	}
@@ -1924,6 +1926,10 @@ public:
 		monoms.insert(tempList.begin(), tempList.end());
 		for (int i=0; i<conZero.size(); i++) {
 			tempList = conZero[i].getMonomials();
+			monoms.insert(tempList.begin(), tempList.end());
+		}
+		for (int i=0; i<conPositive.size(); i++) {
+			tempList = conPositive[i].getMonomials();
 			monoms.insert(tempList.begin(), tempList.end());
 		}
 
@@ -1955,6 +1961,9 @@ public:
 		for (int i=0; i<conZero.size(); i++) {
 			newPolyProblem.conZero.push_back(conZero[i].substitute(indsToReplace, convertedList));
 		}
+		for (int i=0; i<conPositive.size(); i++) {
+			newPolyProblem.conPositive.push_back(conPositive[i].substitute(indsToReplace, convertedList));
+		}
 
 		return newPolyProblem;
 
@@ -1976,6 +1985,12 @@ public:
 				output << std::endl << std::endl;
 			}
 		}
+		for (int i=0; i<other.conPositive.size(); i++) {
+			output << other.conPositive[i] << " > 0 ";
+			if (i < other.conPositive.size()-1) {
+				output << std::endl << std::endl;
+			}
+		}
 
 		return output;
 
@@ -1987,6 +2002,11 @@ public:
 		// Check each constraint
 		for (int i=0; i<conZero.size(); i++) {
 			if (abs(conZero[i][""]) > conZero[i].zeroTol) {
+				return false;
+			}
+		}
+		for (int i=0; i<conPositive.size(); i++) {
+			if (conZero[i][""] > conZero[i].zeroTol) {
 				return false;
 			}
 		}
@@ -2039,10 +2059,14 @@ public:
 	}
 
 	// Given a linearized objective, constraints and a list of SD matrices, form the SDP and solve
-	std::pair<polyType,std::vector<polyType>> solveLinearizedSDP(Polynomial<polyType>& objLinear, std::vector<Polynomial<polyType>>& conZeroLinear, std::vector<std::string>& monoms, std::vector<std::tuple<int,int,int>>& monomPairs) {
+	std::pair<polyType,std::vector<polyType>> solveLinearizedSDP(Polynomial<polyType>& objLinear, std::vector<Polynomial<polyType>>& conZeroLinear, std::vector<Polynomial<polyType>> conPositiveLinear, std::vector<std::string>& monoms, std::vector<std::tuple<int,int,int>>& monomPairs) {
+
+		// Set some vars
+		int oneIndex = 0;
+		int matPSDWidth = 4;
+		int varsTotal = monoms.size();
 
 		// Create the PSD matrices from this list
-		int matPSDWidth = 4;
 		std::vector<std::vector<std::vector<int>>> matsPSD;
 		for (int j=0; j<monomPairs.size(); j++) {
 
@@ -2117,6 +2141,8 @@ public:
 			int monomFirst = std::get<0>(monomPairs[j]);
 			int monomSecond = std::get<1>(monomPairs[j]);
 			int monomCombined = std::get<2>(monomPairs[j]);
+
+			// Construct the matrix
 			std::vector<std::vector<int>> matPSD(matPSDWidth, std::vector<int>(matPSDWidth, -1));
 			matPSD = {
 				{-1,          monomFirst, monomSecond, monomCombined},
@@ -2128,8 +2154,40 @@ public:
 			// Add this to the list
 			matsPSD.push_back(matPSD);
 
+			// x-y-z+1
+			Polynomial<polyType> poly1(varsTotal);
+			poly1.addTerm(1, {monomFirst});
+			poly1.addTerm(-1, {monomSecond});
+			poly1.addTerm(-1, {monomCombined});
+			poly1.addTerm(1, {oneIndex});
+
+			// -x+y-z+1
+			Polynomial<polyType> poly2(varsTotal);
+			poly2.addTerm(-1, {monomFirst});
+			poly2.addTerm(1, {monomSecond});
+			poly2.addTerm(-1, {monomCombined});
+			poly2.addTerm(1, {oneIndex});
+
+			// -x-y+z+1
+			Polynomial<polyType> poly3(varsTotal);
+			poly3.addTerm(-1, {monomFirst});
+			poly3.addTerm(-1, {monomSecond});
+			poly3.addTerm(1, {monomCombined});
+			poly3.addTerm(1, {oneIndex});
+
+			// x+y+z+1
+			Polynomial<polyType> poly4(varsTotal);
+			poly4.addTerm(1, {monomFirst});
+			poly4.addTerm(1, {monomSecond});
+			poly4.addTerm(1, {monomCombined});
+			poly4.addTerm(1, {oneIndex});
+
+			conPositiveLinear.push_back(poly1);
+			conPositiveLinear.push_back(poly2);
+			conPositiveLinear.push_back(poly3);
+			conPositiveLinear.push_back(poly4);
+
 		}
-		int varsTotal = monoms.size();
 
 		// Convert the objective to MOSEK form
 		std::vector<polyType> c(varsTotal);
@@ -2143,8 +2201,7 @@ public:
 		c[0] = numOrigLinear/2.0;
 		auto cM = monty::new_array_ptr<polyType>(c);
 
-		// Convert the linear constraints to MOSEK form
-		int oneIndex = 0;
+		// Convert the linear equality constraints to MOSEK form
 		std::vector<int> ARows;
 		std::vector<int> ACols;
 		std::vector<polyType> AVals;
@@ -2160,6 +2217,23 @@ public:
 			}
 		}
 		auto AM = mosek::fusion::Matrix::sparse(conZeroLinear.size(), varsTotal, monty::new_array_ptr<int>(ARows), monty::new_array_ptr<int>(ACols), monty::new_array_ptr<polyType>(AVals));
+
+		// Convert the linear positivity constraints to MOSEK form
+		std::vector<int> BRows;
+		std::vector<int> BCols;
+		std::vector<polyType> BVals;
+		for (int i=0; i<conPositiveLinear.size(); i++) {
+			for (auto const &pair: conPositiveLinear[i].coeffs) {
+				BRows.push_back(i);
+				if (pair.first == "") {
+					BCols.push_back(oneIndex);
+				} else {
+					BCols.push_back(std::stoi(pair.first));
+				}
+				BVals.push_back(pair.second);
+			}
+		}
+		auto BM = mosek::fusion::Matrix::sparse(conPositiveLinear.size(), varsTotal, monty::new_array_ptr<int>(BRows), monty::new_array_ptr<int>(BCols), monty::new_array_ptr<polyType>(BVals));
 
 		// Convert the PSD constraints to MOSEK form
 		std::vector<std::shared_ptr<monty::ndarray<int,1>>> indexMatsM;
@@ -2187,13 +2261,16 @@ public:
 		// One element of the vector should be one
 		M->constraint(xM->index(oneIndex), mosek::fusion::Domain::equalsTo(1.0));
 
-		// Linear constraint
+		// Linear equality constraint
 		M->constraint(mosek::fusion::Expr::mul(AM, xM), mosek::fusion::Domain::equalsTo(0.0));
 
-		// PSD constraints TODO to linear
-		for (int i=0; i<indexMatsM.size(); i++) {
-			M->constraint((xM->pick(indexMatsM[i]))->reshape(matPSDWidth, matPSDWidth), mosek::fusion::Domain::inPSDCone(matPSDWidth));
-		}
+		// Linear positivity constraint TODO weird
+		M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(-1e-15));
+
+		// PSD constraints
+		//for (int i=0; i<indexMatsM.size(); i++) {
+			//M->constraint((xM->pick(indexMatsM[i]))->reshape(matPSDWidth, matPSDWidth), mosek::fusion::Domain::inPSDCone(matPSDWidth));
+		//}
 
 		// Objective is to minimize the sum of the original linear terms
 		M->objective(mosek::fusion::ObjectiveSense::Minimize, mosek::fusion::Expr::dot(cM, xM));
@@ -2238,13 +2315,14 @@ public:
 		double totalProb = 0;
 		for (int i=0; i<monoms.size(); i++) {
 			monomResults[i] = std::abs(prevRes.second[i] - monomsAsPolys[i].evalFast(linVals));
-			monomProbs[i] = std::exp(30*monomResults[i]);
+			monomProbs[i] = std::exp(20*monomResults[i]);
 			totalProb += monomProbs[i];
 		}
 
-		// Readjust the probability distribution
+		// Readjust the probability distribution TODO
 		for (int i=0; i<monoms.size(); i++) {
 			monomProbs[i] /= totalProb;
+			//std::cout << monoms[i] << " " << monomResults[i] << std::endl;
 		}
 
 		// Get the index permutation
@@ -2350,7 +2428,7 @@ public:
 	}
 	
 	// Get a lower bound
-	polyType lowerBound(int knownIdeal=100000000000) {
+	polyType lowerBound(int knownIdeal=100000000, int maxIters=100000000) {
 
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
@@ -2379,19 +2457,22 @@ public:
 		for (int i=0; i<conZero.size(); i++) {
 			conZeroLinear[i] = conZero[i].changeVariables(mapping);
 		}
+		std::vector<Polynomial<polyType>> conPositiveLinear(conPositive.size());
+		for (int i=0; i<conPositive.size(); i++) {
+			conPositiveLinear[i] = conPositive[i].changeVariables(mapping);
+		}
 
 		// List of semdefinite matrices
 		std::vector<std::tuple<int,int,int>> monomPairs;
 		std::vector<std::pair<std::string,std::string>> usedPairs;
 
 		// Initial solve
-		auto prevRes = solveLinearizedSDP(objLinear, conZeroLinear, monoms, monomPairs);
+		auto prevRes = solveLinearizedSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomPairs);
 
 		// Keep iterating
 		std::pair<polyType,std::vector<polyType>> bestVal = {0, {}};
-		std::vector<int> badMats;
 		int numAdded = 0;
-		for (int i=0; i<1001; i++) {
+		for (int i=0; i<maxIters; i++) {
 
 			// Add a monom pair to the list
 			int numAdded = 0;
@@ -2399,13 +2480,13 @@ public:
 				std::tuple<int,int,int> monomPairToTry = getBestPair(monoms, monomsAsPolys, usedPairs, prevRes);
 				monomPairs.push_back(monomPairToTry);
 				usedPairs.push_back({monoms[std::get<0>(monomPairToTry)], monoms[std::get<1>(monomPairToTry)]});
-				//std::cout << "adding: " << monomPairToTry.first << " | " << monomPairToTry.second << std::endl;
+				//std::cout << "adding: " << usedPairs[usedPairs.size()-1].first << " | " << usedPairs[usedPairs.size()-1].second << std::endl;
 				numAdded = 1;
 			}
 
 			// Solve this SDP
 			//int numMonomsBefore = monoms.size();
-			auto res = solveLinearizedSDP(objLinear, conZeroLinear, monoms, monomPairs);
+			auto res = solveLinearizedSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomPairs);
 			prevRes = res;
 			//int numMonomsAdded = monoms.size()-numMonomsBefore;
 
