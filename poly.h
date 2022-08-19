@@ -8,6 +8,8 @@
 #include <math.h>
 #include <unordered_map>
 #include <unordered_set>
+#include <random>
+#include <algorithm>
 
 // Use Eigen for matrix/vector ops
 #include <Eigen/Dense>
@@ -2269,8 +2271,9 @@ public:
 
 		// PSD constraints
 		//for (int i=0; i<indexMatsM.size(); i++) {
-			//M->constraint((xM->pick(indexMatsM[i]))->reshape(matPSDWidth, matPSDWidth), mosek::fusion::Domain::inPSDCone(matPSDWidth));
-		//}
+		for (int i=0; i<std::min(3,int(indexMatsM.size())); i++) {
+			M->constraint((xM->pick(indexMatsM[i]))->reshape(matPSDWidth, matPSDWidth), mosek::fusion::Domain::inPSDCone(matPSDWidth));
+		}
 
 		// Objective is to minimize the sum of the original linear terms
 		M->objective(mosek::fusion::ObjectiveSense::Minimize, mosek::fusion::Expr::dot(cM, xM));
@@ -2315,17 +2318,18 @@ public:
 		double totalProb = 0;
 		for (int i=0; i<monoms.size(); i++) {
 			monomResults[i] = std::abs(prevRes.second[i] - monomsAsPolys[i].evalFast(linVals));
-			monomProbs[i] = std::exp(20*monomResults[i]);
+			monomProbs[i] = std::exp(10*monomResults[i]);
+			//monomProbs[i] = std::pow(1-float(i)/monoms.size(),0)*std::exp(20*monomResults[i]);
+			//monomProbs[i] = (monoms[i].size())*std::exp(20*monomResults[i]);
 			totalProb += monomProbs[i];
 		}
 
-		// Readjust the probability distribution TODO
+		// Readjust the probability distribution
 		for (int i=0; i<monoms.size(); i++) {
-			monomProbs[i] /= totalProb;
-			//std::cout << monoms[i] << " " << monomResults[i] << std::endl;
+			monomProbs[i] = monomProbs[i]/totalProb;
 		}
 
-		// Get the index permutation
+		// Get the index permutation based on the delta
 		//std::vector<int> orderedIndices(monoms.size(), 0);
 		//for (int i=0; i<orderedIndices.size(); i++) {
 			//orderedIndices[i] = i;
@@ -2336,9 +2340,16 @@ public:
 			//}
 		//);
 
-		//for (int i=0; i<monoms.size(); i++) {
-			//std::cout << monoms[orderedIndices[i]] << " " << monomResults[orderedIndices[i]] << std::endl;
-		//}
+		// Get the index permutation based on the size
+		std::vector<int> orderedIndices(monoms.size(), 0);
+		for (int i=0; i<orderedIndices.size(); i++) {
+			orderedIndices[i] = i;
+		}
+		std::sort(orderedIndices.begin(), orderedIndices.end(),
+			[&](const int& a, const int& b) {
+				return (monoms[a].size() > monoms[b].size());
+			}
+		);
 
 		// Now check each monomial to find one that doesn't square up
 		for (int i2=0; i2<monoms.size(); i2++) {
@@ -2347,28 +2358,22 @@ public:
 			double probToReach = (double(rand()) / (RAND_MAX));
 			int i = -1;
 			double probSoFar = 0;
-			for (int j=0; j<monoms.size(); j++) {
-				probSoFar += monomProbs[j];
+			for (int k=0; k<monoms.size(); k++) {
+				probSoFar += monomProbs[k];
 				if (probSoFar > probToReach) {
-					i = j;
+					i = k;
 					break;
 				}
 			}
 
-			// TODO pick two bad moments and multiply them
-
-			//int i = orderedIndices[i2];
-
-			//std::cout << "chosen: " << monoms[i] << " with delta " << monomResults[i] << " with prob " << monomProbs[i] << std::endl;
-
+			// Find the highest order monom which this divides TODO 
+			
 			// Find the highest order monom which divides this
-			for (int j=monoms.size()-1; j>=0; j--) {
-			//for (int j2=monoms.size()-1; j2>=0; j2--) {
-			//for (int j2=0; j2<monoms.size(); j2++) {
-				//int j = orderedIndices[j2];
+			for (int j2=0; j2<monoms.size(); j2++) {
+				int j=orderedIndices[j2];
 
 				// If it's somewhat appropriate
-				if (monoms[j].size() < monoms[i].size()) {
+				if (monoms[j].size() > 0 && monoms[j].size() < monoms[i].size()) {
 
 					// Perform the division
 					Polynomial<polyType> otherPoly = monomsAsPolys[i] / monomsAsPolys[j];
@@ -2419,6 +2424,8 @@ public:
 
 			}
 
+			std::cout << "here" << std::endl;
+
 		}
 
 		// This should never happen
@@ -2443,11 +2450,11 @@ public:
 
 		// Create the mapping from monomials to indices (to linearize)
 		std::unordered_map<std::string,std::string> mapping;
-		int digitsPerInd = std::ceil(std::log10(monoms.size()+1));
+		int digitsPerIndAfterLinear = std::ceil(std::log10(monoms.size()+1));
 		mapping[""] = "";
 		for (int i=1; i<monoms.size(); i++) {
 			std::string newInd = std::to_string(i);
-			newInd.insert(0, digitsPerInd-newInd.size(), ' ');
+			newInd.insert(0, digitsPerIndAfterLinear-newInd.size(), ' ');
 			mapping[monoms[i]] = newInd;
 		}
 
@@ -2472,14 +2479,18 @@ public:
 		// Keep iterating
 		std::pair<polyType,std::vector<polyType>> bestVal = {0, {}};
 		int numAdded = 0;
+		int highestOrder = 0;
 		for (int i=0; i<maxIters; i++) {
 
 			// Add a monom pair to the list
 			int numAdded = 0;
+			std::string lastPair = "";
 			if (i >= 1) {
 				std::tuple<int,int,int> monomPairToTry = getBestPair(monoms, monomsAsPolys, usedPairs, prevRes);
 				monomPairs.push_back(monomPairToTry);
+				highestOrder = std::max(highestOrder, int(monoms[std::get<2>(monomPairToTry)].size())/digitsPerInd);
 				usedPairs.push_back({monoms[std::get<0>(monomPairToTry)], monoms[std::get<1>(monomPairToTry)]});
+				lastPair = usedPairs[usedPairs.size()-1].first + "|" + usedPairs[usedPairs.size()-1].second;
 				//std::cout << "adding: " << usedPairs[usedPairs.size()-1].first << " | " << usedPairs[usedPairs.size()-1].second << std::endl;
 				numAdded = 1;
 			}
@@ -2491,7 +2502,7 @@ public:
 			//int numMonomsAdded = monoms.size()-numMonomsBefore;
 
 			// Output
-			std::cout << res.first << " " << bestVal.first << " " << monomPairs.size() << " " << monoms.size() << std::endl;
+			std::cout << res.first << "   " << bestVal.first << "   " << monomPairs.size() << "   " << monoms.size() << "   " << highestOrder << "   " << lastPair << std::endl;
 			//for (int j=0; j<monoms.size(); j++) {
 				//std::cout << monoms[j] << " " << res.second[j] << std::endl;
 			//}
@@ -2507,6 +2518,7 @@ public:
 				//monoms.erase(monoms.end()-numMonomsAdded, monoms.end());
 			//}
 
+			// If we reach an optional limit
 			if (res.first >= knownIdeal) {
 				break;
 			}
@@ -2514,6 +2526,10 @@ public:
 		}
 
 		// See how many can be removed without affecting the value TODO
+
+		// Output final matrices used to try again with these TODO
+		//std::cout << monoms << std::endl;
+		//std::cout << monomPairs << std::endl;
 
 		return bestVal.first;
 
