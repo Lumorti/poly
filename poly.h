@@ -24,6 +24,19 @@
 // Allow complex literals like 1i
 using namespace std::complex_literals;
 
+// Generic overload for outputting vector of strings
+std::ostream& operator<<(std::ostream& os, const std::vector<std::string>& v) {
+    os << "{";
+    for (typename std::vector<std::string>::const_iterator ii = v.begin(); ii != v.end(); ++ii) {
+        os << "\"" << *ii << "\"";
+		if (ii+1 != v.end()) {
+			os << ", ";
+		}
+    }
+    os << "}";
+    return os;
+}
+
 // Generic overload for outputting vector
 template <class T>
 std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
@@ -2267,13 +2280,13 @@ public:
 		M->constraint(mosek::fusion::Expr::mul(AM, xM), mosek::fusion::Domain::equalsTo(0.0));
 
 		// Linear positivity constraint TODO weird
-		M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(-1e-15));
+		M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(0));
 
 		// PSD constraints
 		//for (int i=0; i<indexMatsM.size(); i++) {
-		for (int i=0; i<std::min(3,int(indexMatsM.size())); i++) {
-			M->constraint((xM->pick(indexMatsM[i]))->reshape(matPSDWidth, matPSDWidth), mosek::fusion::Domain::inPSDCone(matPSDWidth));
-		}
+		//for (int i=0; i<std::min(1000,int(indexMatsM.size())); i++) {
+			//M->constraint((xM->pick(indexMatsM[i]))->reshape(matPSDWidth, matPSDWidth), mosek::fusion::Domain::inPSDCone(matPSDWidth));
+		//}
 
 		// Objective is to minimize the sum of the original linear terms
 		M->objective(mosek::fusion::ObjectiveSense::Minimize, mosek::fusion::Expr::dot(cM, xM));
@@ -2297,7 +2310,7 @@ public:
 	}
 
 	// Given the data from the previous run, guess the next best combo of monoms
-	std::tuple<int,int,int> getBestPair(std::vector<std::string>& monoms, std::vector<Polynomial<polyType>>& monomsAsPolys, std::vector<std::pair<std::string,std::string>>& usedPairs, std::pair<polyType,std::vector<polyType>> prevRes) {
+	std::tuple<int,int,int> getBestPair(std::vector<std::string>& monoms, std::vector<Polynomial<polyType>>& monomsAsPolys, std::vector<std::pair<std::string,std::string>>& usedPairs, std::pair<polyType,std::vector<polyType>> prevRes, std::vector<int>& monomCounts) {
 
 		// Get the list of linear monoms and their values
 		std::vector<polyType> linVals(maxVariables);
@@ -2318,15 +2331,16 @@ public:
 		double totalProb = 0;
 		for (int i=0; i<monoms.size(); i++) {
 			monomResults[i] = std::abs(prevRes.second[i] - monomsAsPolys[i].evalFast(linVals));
-			monomProbs[i] = std::exp(10*monomResults[i]);
-			//monomProbs[i] = std::pow(1-float(i)/monoms.size(),0)*std::exp(20*monomResults[i]);
-			//monomProbs[i] = (monoms[i].size())*std::exp(20*monomResults[i]);
+			//monomProbs[i] = std::exp(monomCounts[i]*monomResults[i]);
+			//monomProbs[i] = monomCounts[i]*std::exp(monomResults[i]);
+			monomProbs[i] = std::pow(monoms.size()-i,0.5)*std::pow(monomCounts[i]+1,2)*std::pow(monomResults[i],10);
 			totalProb += monomProbs[i];
 		}
 
 		// Readjust the probability distribution
 		for (int i=0; i<monoms.size(); i++) {
 			monomProbs[i] = monomProbs[i]/totalProb;
+			//std::cout << monoms[i] << " " << monomCounts[i] << " " << monomResults[i] << " " << monomProbs[i] << std::endl;
 		}
 
 		// Get the index permutation based on the delta
@@ -2355,7 +2369,7 @@ public:
 		for (int i2=0; i2<monoms.size(); i2++) {
 
 			// Pick a random number and then add probs until we reach that number
-			double probToReach = (double(rand()) / (RAND_MAX));
+			double probToReach = (double(rand())/(RAND_MAX));
 			int i = -1;
 			double probSoFar = 0;
 			for (int k=0; k<monoms.size(); k++) {
@@ -2366,8 +2380,6 @@ public:
 				}
 			}
 
-			// Find the highest order monom which this divides TODO 
-			
 			// Find the highest order monom which divides this
 			for (int j2=0; j2<monoms.size(); j2++) {
 				int j=orderedIndices[j2];
@@ -2377,7 +2389,6 @@ public:
 
 					// Perform the division
 					Polynomial<polyType> otherPoly = monomsAsPolys[i] / monomsAsPolys[j];
-					//std::cout << monomsAsPolys[i] << "/" << monomsAsPolys[j] << " = " << otherPoly << std::endl;
 
 					// If it's a nice division
 					if (!otherPoly.isNaN) {
@@ -2389,8 +2400,8 @@ public:
 
 						// Ensure it's new
 						bool found = false;
-						for (int j=0; j<usedPairs.size(); j++) {
-							if ((usedPairs[j].first == firstString && usedPairs[j].second == secondString) || (usedPairs[j].first == secondString && usedPairs[j].second == firstString)) {
+						for (int k=0; k<usedPairs.size(); k++) {
+							if ((usedPairs[k].first == firstString && usedPairs[k].second == secondString) || (usedPairs[k].first == secondString && usedPairs[k].second == firstString)) {
 								found = true;
 							}
 						}
@@ -2410,9 +2421,14 @@ public:
 							} else {
 								secondLoc = monoms.size();
 								monoms.push_back(secondString);
+								monomCounts.push_back(1);
 								monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, secondString));
 								monomsAsPolys[monomsAsPolys.size()-1].prepareEvalMixed();
 							}
+
+							//monomCounts[firstLoc] += 1;
+							//monomCounts[secondLoc] += 1;
+							//monomCounts[combinedLoc] += 1;
 
 							return std::make_tuple(firstLoc, secondLoc, combinedLoc);
 
@@ -2424,7 +2440,68 @@ public:
 
 			}
 
-			std::cout << "here" << std::endl;
+			// Otherwise find the highest order monom which this divides
+			//std::cout << "trying other way round" << std::endl;
+			//for (int j2=0; j2<monoms.size(); j2++) {
+				//int j=orderedIndices[j2];
+
+				//// If it's somewhat appropriate
+				//if (monoms[j].size() > monoms[i].size()) {
+
+					//// Perform the division
+					//Polynomial<polyType> otherPoly = monomsAsPolys[j] / monomsAsPolys[i];
+
+					//// If it's a nice division
+					//if (!otherPoly.isNaN) {
+
+						//// Get the monoms to add
+						//std::string firstString = monoms[i];
+						//std::string secondString = otherPoly.getMonomials()[0];
+						//std::string combinedString = monoms[j];
+
+						//// Ensure it's new
+						//bool found = false;
+						//for (int k=0; k<usedPairs.size(); k++) {
+							//if ((usedPairs[k].first == firstString && usedPairs[k].second == secondString) || (usedPairs[k].first == secondString && usedPairs[k].second == firstString)) {
+								//found = true;
+							//}
+						//}
+
+						//// If it's new, add it
+						//if (!found) {
+
+							//// We know where the first and combined are
+							//int firstLoc = i;
+							//int combinedLoc = j;
+
+							//// Add the second if needed
+							//auto secondIter = std::find(monoms.begin(), monoms.end(), secondString);
+							//int secondLoc = -1;
+							//if (secondIter != monoms.end()) {
+								//secondLoc = secondIter - monoms.begin();
+							//} else {
+								//secondLoc = monoms.size();
+								//monoms.push_back(secondString);
+								//monomCounts.push_back(1);
+								//monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, secondString));
+								//monomsAsPolys[monomsAsPolys.size()-1].prepareEvalMixed();
+							//}
+
+							////monomCounts[firstLoc] += 1;
+							////monomCounts[secondLoc] += 5;
+							////monomCounts[combinedLoc] += 1;
+
+							//return std::make_tuple(firstLoc, secondLoc, combinedLoc);
+
+						//}
+
+					//}
+
+				//}
+
+			//}
+
+			//std::cout << "here" << std::endl;
 
 		}
 
@@ -2440,6 +2517,48 @@ public:
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
 		std::sort(monoms.begin(), monoms.end(), [](const std::string& first, const std::string& second){return first.size() < second.size();});
+
+		// List of semdefinite matrices
+		std::vector<std::tuple<int,int,int>> monomPairs;
+		std::vector<std::pair<std::string,std::string>> usedPairs;
+
+		// Random seed TODO
+		std::srand(time(0));
+		//monoms = {"", "5", "3", "1", "0", "2", "4", "6", "7", "07", "56", "05", "47", "57", "45", "12", "04", "15", "14", "34", "01", "17", "156", "145", "012", "056", "014", "347", "017", "045", "456", "047", "127", "157", "124", "034", "457", "134", "345", "015", "057", "125", "147", "0347", "0145", "1345", "0127", "0457", "0134", "0124", "1247", "0157", "0125", "0156", "1256", "0147", "1456", "1457", "0456", "0345", "1257", "3457", "1245", "1347", "01457", "01456", "12456", "01345", "12457", "03457", "01245", "13457", "01247", "01257", "01256", "01347", "012457", "012456", "013457", "01234567", "26", "37"};
+		//monomPairs = {{24,8,46},{54,6,66},{20,6,26},{39,6,44},{41,6,62},{7,1,10},{47,2,69},{9,6,31},{10,3,22},{40,3,51},{41,7,54},{56,5,66},{16,2,35},{48,8,75},{51,6,64},{27,4,43},{52,6,70},{50,4,72},{43,3,75},{24,6,49},{16,3,26},{6,4,16},{20,8,28},{22,6,56},{8,4,9},{4,1,11},{31,2,43},{3,1,17},{78,80,79},{7,5,80},{43,1,69},{44,8,64},{44,2,67},{11,6,29},{10,6,30},{26,8,55},{23,4,44},{77,81,79},{48,1,67},{20,1,39},{31,1,47},{4,3,20}};
+		//monomPairs = {{47,2,69},{8,4,9},{40,6,47},{64,2,78},{78,80,79},{7,5,80},{28,1,51},{31,3,55}};
+		//monomPairs = {{47,2,69},{8,4,9},{40,6,47},{64,2,78},{78,80,79},{28,1,51},{31,3,55}};
+		
+		// See how often each monomial appears in the cons TODO
+		std::vector<int> monomCounts(monoms.size(), 0);
+		for (int i=0; i<monoms.size(); i++) {
+			for (int j=0; j<conZero.size(); j++) {
+				if (conZero[j].coeffs.find(monoms[i]) != conZero[j].coeffs.end()) {
+					monomCounts[i]++;
+				}
+			}
+			std::cout << monoms[i] << "   " << monomCounts[i] << std::endl;
+		}
+
+		// TODO try my own choice
+		//std::vector<std::vector<std::string>> monomsToTest = {
+			//{"012456", "37", "01234567"},
+			//{"0145", "26", "012456"},
+			//{"0134", "5", "01345"},
+			//{"0145", "3", "01345"},
+			//{"01", "45", "0145"},
+			//{"5", "12", "125"},
+			//{"0", "1", "01"},
+			//{"4", "5", "45"},
+			//{"2", "6", "26"},
+			//{"3", "04", "034"}
+		//};
+		//for (int i=0; i<monomsToTest.size(); i++) {
+			//int ind1 = std::find(monoms.begin(), monoms.end(), monomsToTest[i][0])-monoms.begin();
+			//int ind2 = std::find(monoms.begin(), monoms.end(), monomsToTest[i][1])-monoms.begin();
+			//int ind3 = std::find(monoms.begin(), monoms.end(), monomsToTest[i][2])-monoms.begin();
+			//monomPairs.push_back({ind1,ind2,ind3});
+		//}
 
 		// Also get the monomials as polynomials and prepare for fast eval
 		std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
@@ -2469,10 +2588,6 @@ public:
 			conPositiveLinear[i] = conPositive[i].changeVariables(mapping);
 		}
 
-		// List of semdefinite matrices
-		std::vector<std::tuple<int,int,int>> monomPairs;
-		std::vector<std::pair<std::string,std::string>> usedPairs;
-
 		// Initial solve
 		auto prevRes = solveLinearizedSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomPairs);
 
@@ -2486,7 +2601,7 @@ public:
 			int numAdded = 0;
 			std::string lastPair = "";
 			if (i >= 1) {
-				std::tuple<int,int,int> monomPairToTry = getBestPair(monoms, monomsAsPolys, usedPairs, prevRes);
+				std::tuple<int,int,int> monomPairToTry = getBestPair(monoms, monomsAsPolys, usedPairs, prevRes, monomCounts);
 				monomPairs.push_back(monomPairToTry);
 				highestOrder = std::max(highestOrder, int(monoms[std::get<2>(monomPairToTry)].size())/digitsPerInd);
 				usedPairs.push_back({monoms[std::get<0>(monomPairToTry)], monoms[std::get<1>(monomPairToTry)]});
@@ -2510,12 +2625,22 @@ public:
 
 			// Update the best val
 			bestVal = res;
-			//if (res.first > bestVal.first) {
-				//bestVal = res;
-				//usedPairs = monomPairs;
-			//} else {
-				//monomPairs.erase(monomPairs.end()-numAdded, monomPairs.end());
-				//monoms.erase(monoms.end()-numMonomsAdded, monoms.end());
+			if (res.first > bestVal.first) {
+				bestVal = res;
+			}
+
+			// See how many can be removed without affecting the value TODO
+			//if (i > 400 && i%200 == 0) {
+				//for (int k=0; k<monomPairs.size(); k++) {
+					//auto monomPairsCopy = monomPairs;
+					//monomPairsCopy.erase(monomPairsCopy.begin()+k);
+					//auto tempRes = solveLinearizedSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomPairsCopy);
+					//if (std::abs(tempRes.first - bestVal.first) < 1e-5) {
+						//monomPairs.erase(monomPairs.begin()+k);
+						//usedPairs.erase(usedPairs.begin()+k);
+						//k--;
+					//}
+				//}
 			//}
 
 			// If we reach an optional limit
@@ -2526,10 +2651,44 @@ public:
 		}
 
 		// See how many can be removed without affecting the value TODO
+		//for (int k=0; k<monomPairs.size(); k++) {
+			//auto monomPairsCopy = monomPairs;
+			//monomPairsCopy.erase(monomPairsCopy.begin()+k);
+			//auto tempRes = solveLinearizedSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomPairsCopy);
+			//std::cout << k << " / " << monomPairs.size() << " = " << tempRes.first << std::endl;
+			//if (std::abs(tempRes.first - bestVal.first) < 1e-5) {
+				//monomPairs.erase(monomPairs.begin()+k);
+				//k--;
+			//}
+		//}
+		//auto finalRes = solveLinearizedSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomPairs);
+		//std::cout << "final with " << monomPairs.size() << ": " << finalRes.first << std::endl;
 
-		// Output final matrices used to try again with these TODO
+		// Output final moment list
+		//std::cout << std::endl << "final moments:" << std::endl;
 		//std::cout << monoms << std::endl;
-		//std::cout << monomPairs << std::endl;
+
+		// Output final matrix list
+		//std::cout << std::endl << "final mats:" << std::endl;
+		//std::cout << "{";
+		//for (int i=0; i<monomPairs.size(); i++) {
+			//std::cout << "{" << std::get<0>(monomPairs[i]) << "," << std::get<1>(monomPairs[i]) << "," << std::get<2>(monomPairs[i]) << "}";
+			//if (i < monomPairs.size()-1) {
+				//std::cout << ",";
+			//}
+		//}
+		//std::cout << "}" << std::endl;
+
+		// Output final matrix list expanded as monoms
+		//std::cout <<std::endl << "final mats as monoms:" << std::endl;
+		//std::cout << "{";
+		//for (int i=0; i<monomPairs.size(); i++) {
+			//std::cout << "{" << monoms[std::get<0>(monomPairs[i])] << "," << monoms[std::get<1>(monomPairs[i])] << "," << monoms[std::get<2>(monomPairs[i])] << "}";
+			//if (i < monomPairs.size()-1) {
+				//std::cout << ",";
+			//}
+		//}
+		//std::cout << "}" << std::endl;
 
 		return bestVal.first;
 
