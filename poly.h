@@ -10,6 +10,7 @@
 #include <unordered_set>
 #include <random>
 #include <algorithm>
+#include <iomanip>
 
 // Use Eigen for matrix/vector ops
 #include <Eigen/Dense>
@@ -186,6 +187,31 @@ public:
 		maxVariables = maxVariables_;
 		digitsPerInd = std::ceil(std::log10(maxVariables+1));
 		addTermString(1, inds);
+	}
+
+	// Change the digits per index
+	Polynomial changeMaxVariables(int newMaxVariables) {
+
+		// For each coefficient
+		Polynomial newPoly(newMaxVariables);
+		for (auto const &pair: coeffs) {
+
+			// Convert to the new size
+			std::string newIndString = "";
+			for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
+				int ind = std::stoi(pair.first.substr(j, digitsPerInd));
+				std::string padded = std::to_string(ind);
+				padded.insert(0, newPoly.digitsPerInd-padded.size(), ' ');
+				newIndString += padded;
+			}
+
+			// Update this coeff
+			newPoly.coeffs[newIndString] = pair.second;
+
+		}
+
+		return newPoly;
+
 	}
 
 	// Constructor from another poly
@@ -489,6 +515,11 @@ public:
 
 	}
 
+	// Substitute a variable for a polynomial TODO
+	Polynomial substitute(int ind, Polynomial<polyType> toReplace) {
+
+	}
+	
 	// Substitute a variable for a value
 	Polynomial substitute(int ind, polyType toReplace) {
 
@@ -563,6 +594,18 @@ public:
 
 	// Substitute several variables for several values
 	Polynomial substitute(std::vector<int> ind, std::vector<polyType> toReplace) {
+		if (ind.size() == 0) {
+			return *this;
+		}
+		Polynomial newPoly = substitute(ind[0], toReplace[0]);
+		for (int i=1; i<ind.size(); i++) {
+			newPoly = newPoly.substitute(ind[i], toReplace[i]);
+		}
+		return newPoly;
+	}
+
+	// Substitute several variables for several polynomials
+	Polynomial substitute(std::vector<int> ind, std::vector<Polynomial<polyType>> toReplace) {
 		if (ind.size() == 0) {
 			return *this;
 		}
@@ -2363,7 +2406,7 @@ public:
 	}
 
 	// Given the data from the previous run, guess the next best combo of monoms
-	std::vector<int> getBestPair(std::vector<std::string>& monoms, std::vector<Polynomial<polyType>>& monomsAsPolys, std::vector<std::vector<int>>& monomPairs, std::pair<polyType,std::vector<polyType>> prevRes, std::vector<int>& monomCounts, int matLevel) {
+	std::vector<int> getBestPair(std::vector<std::string>& monoms, std::vector<Polynomial<polyType>>& monomsAsPolys, std::vector<std::vector<int>>& monomPairs, std::pair<polyType,std::vector<polyType>> prevRes, int matLevel) {
 
 		// Get the list of linear monoms and their values
 		std::vector<polyType> linVals(maxVariables);
@@ -2391,9 +2434,9 @@ public:
 			if (i < prevRes.second.size()) {
 				monomResults[i] = std::abs(prevRes.second[i] - monomsAsPolys[i].evalFast(linVals));
 			} else {
-				monomResults[i] = 0; // TODO 2/0/1?
+				monomResults[i] = 0;
 			}
-			monomProbs[i] = 0.1+std::pow(monomResults[i],8);
+			monomProbs[i] = std::pow(1+monomResults[i],2); // TODO tweak
 			totalProb += monomProbs[i];
 			totalError += monomResults[i];
 		}
@@ -2479,7 +2522,6 @@ public:
 							} else {
 								secondLoc = monoms.size();
 								monoms.push_back(secondString);
-								monomCounts.push_back(1);
 								monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, secondString));
 								monomsAsPolys[monomsAsPolys.size()-1].prepareEvalMixed();
 							}
@@ -2564,7 +2606,6 @@ public:
 											auto loc = std::find(monoms.begin(), monoms.end(), monStrings[k]);
 											if (loc == monoms.end()) {
 												monoms.push_back(monStrings[k]);
-												monomCounts.push_back(1);
 												monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, monStrings[k]));
 												monomsAsPolys[monomsAsPolys.size()-1].prepareEvalMixed();
 												monLocs[k] = monoms.size()-1;
@@ -2612,7 +2653,6 @@ public:
 								auto loc = std::find(monoms.begin(), monoms.end(), monStrings[k]);
 								if (loc == monoms.end()) {
 									monoms.push_back(monStrings[k]);
-									monomCounts.push_back(1);
 									monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, monStrings[k]));
 									monomsAsPolys[monomsAsPolys.size()-1].prepareEvalMixed();
 									monLocs[k] = monoms.size()-1;
@@ -2651,7 +2691,7 @@ public:
 	}
 	
 	// Get a lower bound
-	polyType lowerBound(int knownIdeal=100000000, int maxIters=100000000, int matLevel=2, bool verbose=false, bool elimAtEnd=false, int matsPerIter=20) {
+	polyType lowerBound(int maxIters=100000000, int matLevel=2, bool verbose=false, bool elimAtEnd=false, int matsPerIter=20) {
 
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
@@ -2690,17 +2730,6 @@ public:
 		}
 		monoms.insert(monoms.begin(), "");
 		
-		// See how often each monomial appears in the cons DEBUG
-		std::vector<int> monomCounts(monoms.size(), 0);
-		for (int i=0; i<monoms.size(); i++) {
-			for (int j=0; j<conZero.size(); j++) {
-				if (conZero[j].coeffs.find(monoms[i]) != conZero[j].coeffs.end()) {
-					monomCounts[i]++;
-				}
-			}
-			//std::cout << monoms[i] << "   " << monomCounts[i] << std::endl;
-		}
-
 		// Also get the monomials as polynomials and prepare for fast eval
 		std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
 		for (int i=0; i<monoms.size(); i++) {
@@ -2748,7 +2777,7 @@ public:
 				for (int k=0; k<matsPerIter; k++) {
 
 					// Get the best guess
-					std::vector<int> monomPairToTry = getBestPair(monoms, monomsAsPolys, monomPairs, prevRes, monomCounts, matLevel);
+					std::vector<int> monomPairToTry = getBestPair(monoms, monomsAsPolys, monomPairs, prevRes, matLevel);
 
 					// Check for error or convergence
 					if (monomPairToTry[0] == -1) {
@@ -2796,14 +2825,9 @@ public:
 			}
 
 			// If we're stagnating, increase the level
-			if (numTheSame > 5 && matLevel < 3) {
+			if (numTheSame > 3 && matLevel < 3) {
 				matLevel++;
 				std::cout << "increasing matrix level" << std::endl;
-			}
-
-			// If we reach an optional limit
-			if (res.first >= knownIdeal) {
-				break;
 			}
 
 		}
@@ -2814,7 +2838,7 @@ public:
 				auto monomPairsCopy = monomPairs;
 				monomPairsCopy.erase(monomPairsCopy.begin()+k);
 				auto tempRes = solveLinearizedSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomPairsCopy);
-				std::vector<int> tempPair = getBestPair(monoms, monomsAsPolys, monomPairsCopy, tempRes, monomCounts, matLevel);
+				std::vector<int> tempPair = getBestPair(monoms, monomsAsPolys, monomPairsCopy, tempRes, matLevel);
 				std::cout << k << " / " << monomPairs.size() << " = " << tempRes.first << std::endl;
 				if (tempPair[0] == -2) {
 					monomPairs.erase(monomPairs.begin()+k);
@@ -2863,6 +2887,38 @@ public:
 		}
 
 		return bestVal.first;
+
+	}
+
+	// Convert from a real problem to a binary problem
+	void fromRealProblem(int numBits) {
+
+		int maxVariablesNew = maxVariables + maxVariables*numBits;
+
+		// Want to replace every x with x1+x2*0.5+x3*0.25-1
+		std::vector<int> indsToReplace(maxVariables);
+		std::vector<Polynomial<polyType>> polyToReplace(maxVariables);
+		for (int i=0; i<maxVariables; i++) {
+			indsToReplace[i] = i;
+			polyToReplace[i] = Polynomial<polyType>(maxVariablesNew, -1, {});
+			for (int j=0; j<numBits; j++) {
+				polyToReplace[i].addTerm(1.0/std::pow(2,j), {maxVariables+numBits*i+j});
+			}
+		}
+
+		// Perform the replacement TODO
+		Polynomial<polyType> objNew = obj.substitute(indsToReplace, polyToReplace);
+		std::vector<Polynomial<polyType>> conZeroNew(conZero.size());
+		for (int i=0; i<conZero.size(); i++) {
+			conZero[i] = conZero[i].substitute(indsToReplace, polyToReplace);
+		}
+		std::vector<Polynomial<polyType>> conPositiveNew(conPositive.size());
+		for (int i=0; i<conPositive.size(); i++) {
+			conPositive[i] = conPositive[i].substitute(indsToReplace, polyToReplace);
+		}
+
+		// Create the problem
+		*this = PolynomialBinaryProblem<polyType>(objNew, conZeroNew, conPositiveNew);
 
 	}
 

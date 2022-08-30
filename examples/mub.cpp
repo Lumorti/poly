@@ -6,7 +6,6 @@ int main(int argc, char ** argv) {
 	// Get the problem from the args
 	int d = 2;
 	int n = 2;
-	int level = 2;
 	if (argc > 1) {
 		d = std::stoi(argv[1]);
 	}
@@ -69,6 +68,12 @@ int main(int argc, char ** argv) {
 	for (int i=0; i<eqns.size(); i++) {
 		poly += eqns[i]*eqns[i];
 	}
+
+	// Turn into a binary optimisation problem TODO
+	PolynomialBinaryProblem<double> prob(poly, {}, {});
+	prob.fromRealProblem(4);
+	prob.lowerBound();
+	return 0;
 
 	// Find a root of this, the first value will go to zero but that's okay
 	// (could also use an auxiliary variable, but here not needed)

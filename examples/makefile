@@ -5,7 +5,7 @@ HDIR=${MSKHOME}/mosek/9.2/tools/platform/linux64x86/h
 LIBDIR=${MSKHOME}/mosek/9.2/tools/platform/linux64x86/bin
 LDLIBSMOSEK= -I$(HDIR) -L$(LIBDIR) -Wl,-rpath-link,$(LIBDIR) -Wl,-rpath=$(LIBDIR) -lmosek64 -lfusion64
 
-all: mub simple matrices sos
+all: mub simple matrices sos ising
 
 mub:
 	$(CXX) $(CXXFLAGS) -o mub mub.cpp $(LIBS) $(LDLIBSMOSEK)
@@ -18,4 +18,8 @@ matrices:
 
 sos:
 	$(CXX) $(CXXFLAGS) -o sos sos.cpp $(LIBS) $(LDLIBSMOSEK)
+
+ising:
+	$(CXX) $(CXXFLAGS) -o ising ising.cpp $(LIBS) $(LDLIBSMOSEK)
+
 
