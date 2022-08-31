@@ -214,6 +214,89 @@ public:
 
 	}
 
+	// Output in a form suitable for use elsewhere TODO
+	std::string commonForm() {
+
+		// For each term
+		std::string toReturn = "";
+		int numSoFar = 0;
+		for (auto const &pair: coeffs) {
+
+			// If it contains at least one variable
+			if (pair.first != "") {
+
+				// First the coeff
+				if (pair.second != 1 && std::abs(pair.second) > zeroTol) {
+					toReturn += std::to_string(pair.second);
+					toReturn += "*";
+				}
+
+				// Then the indices
+				for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
+					toReturn += "x[";
+					toReturn += pair.first.substr(i, digitsPerInd);
+					toReturn += "]";
+					if (i < pair.first.size()-1) {
+						toReturn += "*";
+					}
+				}
+
+			// For the constant, don't need any variables
+			} else {
+				toReturn += std::to_string(pair.second);
+			}
+
+			// Output an addition on everything but the last
+			numSoFar += 1;
+			if (numSoFar < coeffs.size()) {
+				toReturn += " + ";
+			}
+
+		}
+
+		return toReturn;
+
+	}
+	
+	// Output in a form suitable for use elsewhere TODO
+	std::string latexForm() {
+
+		// For each term
+		std::string toReturn = "";
+		int numSoFar = 0;
+		for (auto const &pair: coeffs) {
+
+			// If it contains at least one variable
+			if (pair.first != "") {
+
+				// First the coeff
+				if (pair.second != 1 && std::abs(pair.second) > zeroTol) {
+					toReturn += std::to_string(pair.second);
+				}
+
+				// Then the indices
+				for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
+					toReturn += "x_";
+					toReturn += pair.first.substr(i, digitsPerInd);
+				}
+
+			// For the constant, don't need any variables
+			} else {
+				toReturn += std::to_string(pair.second);
+			}
+
+			// Output an addition on everything but the last
+			numSoFar += 1;
+			if (numSoFar < coeffs.size()) {
+				toReturn += " + ";
+			}
+
+		}
+
+		return toReturn;
+
+	}
+
 	// Constructor from another poly
 	template <typename type2>
 	Polynomial(Polynomial<type2> other) {
@@ -515,8 +598,38 @@ public:
 
 	}
 
-	// Substitute a variable for a polynomial TODO
-	Polynomial substitute(int ind, Polynomial<polyType> toReplace) {
+	// Substitute a variable for a polynomial
+	Polynomial replaceWithPoly(int ind, Polynomial<polyType> toReplace) {
+
+		// Cache the ind to replace as a string
+		std::string indString = std::to_string(ind);
+		indString.insert(0, digitsPerInd-indString.size(), ' ');
+
+		// For each element in this polynomial
+		Polynomial newPoly(toReplace.maxVariables);
+		for (auto const &pair: coeffs) {
+
+			// Find any instance of this index
+			Polynomial toMultiply2(toReplace.maxVariables, 1, {});
+			std::string remainingIndex = "";
+			for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
+				if (pair.first.substr(i, digitsPerInd) == indString) {
+					toMultiply2 *= toReplace;
+				} else {
+					remainingIndex += pair.first.substr(i, digitsPerInd);
+				}
+			}
+
+			// Get this monomial as a seperate poly
+			Polynomial toMultiply1(toReplace.maxVariables);
+			toMultiply1.addTermString(pair.second, remainingIndex);
+
+			// Add to the main poly
+			newPoly += toMultiply1*toMultiply2;
+
+		}
+
+		return newPoly;
 
 	}
 	
@@ -605,15 +718,43 @@ public:
 	}
 
 	// Substitute several variables for several polynomials
-	Polynomial substitute(std::vector<int> ind, std::vector<Polynomial<polyType>> toReplace) {
-		if (ind.size() == 0) {
-			return *this;
+	Polynomial replaceWithPoly(std::vector<int> inds, std::vector<Polynomial<polyType>> toReplace) {
+
+		// Cache the inds to replace as a string
+		std::unordered_map<std::string,int> stringToLoc;
+		for (int i=0; i<inds.size(); i++) {
+			std::string indString = std::to_string(inds[i]);
+			indString.insert(0, digitsPerInd-indString.size(), ' ');
+			stringToLoc[indString] = i;
 		}
-		Polynomial newPoly = substitute(ind[0], toReplace[0]);
-		for (int i=1; i<ind.size(); i++) {
-			newPoly = newPoly.substitute(ind[i], toReplace[i]);
+
+		// For each element in this polynomial
+		Polynomial newPoly(toReplace[0].maxVariables);
+		for (auto const &pair: coeffs) {
+
+			// Find any instance of this index
+			Polynomial toMultiply2(toReplace[0].maxVariables, 1, {});
+			std::string remainingIndex = "";
+			for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
+				if (stringToLoc.find(pair.first.substr(i, digitsPerInd)) != stringToLoc.end()) {
+					toMultiply2 *= toReplace[stringToLoc[pair.first.substr(i, digitsPerInd)]];
+				} else {
+					remainingIndex += pair.first.substr(i, digitsPerInd);
+				}
+			}
+			
+			// Get whatever's left as a seperate poly
+			Polynomial toMultiply1(toReplace[0].maxVariables);
+			toMultiply1.addTermString(pair.second, remainingIndex);
+			toMultiply2 *= toMultiply1;
+
+			// Add to the main poly
+			newPoly += toMultiply2;
+
 		}
+
 		return newPoly;
+
 	}
 
 	// Substitute several variables for several values (with strings)
@@ -2061,7 +2202,9 @@ public:
 
 		// Output each constraint
 		int numSoFar = 0;
-		output << "Subject to: " << std::endl << std::endl;
+		if (other.conZero.size() + other.conPositive.size() > 0) {
+			output << "Subject to: " << std::endl << std::endl;
+		}
 		for (int i=0; i<other.conZero.size(); i++) {
 			output << other.conZero[i] << " = 0 ";
 			if (i < other.conZero.size()-1) {
@@ -2436,7 +2579,7 @@ public:
 			} else {
 				monomResults[i] = 0;
 			}
-			monomProbs[i] = std::pow(1+monomResults[i],2); // TODO tweak
+			monomProbs[i] = std::pow(1+monomResults[i],2); // DEBUG
 			totalProb += monomProbs[i];
 			totalError += monomResults[i];
 		}
@@ -2906,15 +3049,15 @@ public:
 			}
 		}
 
-		// Perform the replacement TODO
-		Polynomial<polyType> objNew = obj.substitute(indsToReplace, polyToReplace);
+		// Perform the replacement
+		Polynomial<polyType> objNew = obj.replaceWithPoly(indsToReplace, polyToReplace);
 		std::vector<Polynomial<polyType>> conZeroNew(conZero.size());
 		for (int i=0; i<conZero.size(); i++) {
-			conZero[i] = conZero[i].substitute(indsToReplace, polyToReplace);
+			conZero[i] = conZero[i].replaceWithPoly(indsToReplace, polyToReplace);
 		}
 		std::vector<Polynomial<polyType>> conPositiveNew(conPositive.size());
 		for (int i=0; i<conPositive.size(); i++) {
-			conPositive[i] = conPositive[i].substitute(indsToReplace, polyToReplace);
+			conPositive[i] = conPositive[i].replaceWithPoly(indsToReplace, polyToReplace);
 		}
 
 		// Create the problem

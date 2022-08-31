@@ -69,12 +69,6 @@ int main(int argc, char ** argv) {
 		poly += eqns[i]*eqns[i];
 	}
 
-	// Turn into a binary optimisation problem TODO
-	PolynomialBinaryProblem<double> prob(poly, {}, {});
-	prob.fromRealProblem(4);
-	prob.lowerBound();
-	return 0;
-
 	// Find a root of this, the first value will go to zero but that's okay
 	// (could also use an auxiliary variable, but here not needed)
 	std::cout << "Attempting to find a root..." << std::endl;

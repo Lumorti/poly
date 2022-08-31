@@ -1,5 +1,6 @@
 CXX=g++
 CXXFLAGS=-Wfatal-errors -O3
+DEBUGFLAGS=-Wall -g -pg -Wfatal-errors
 LIBS=-I/usr/include/eigen3 -fopenmp
 HDIR=${MSKHOME}/mosek/9.2/tools/platform/linux64x86/h
 LIBDIR=${MSKHOME}/mosek/9.2/tools/platform/linux64x86/bin
@@ -7,8 +8,14 @@ LDLIBSMOSEK= -I$(HDIR) -L$(LIBDIR) -Wl,-rpath-link,$(LIBDIR) -Wl,-rpath=$(LIBDIR
 
 all: mub simple matrices sos ising
 
+mubdebug:
+	$(CXX) $(DEBUGFLAGS) -o mub mub.cpp $(LIBS) $(LDLIBSMOSEK)
+
 mub:
 	$(CXX) $(CXXFLAGS) -o mub mub.cpp $(LIBS) $(LDLIBSMOSEK)
+
+testing:
+	$(CXX) $(CXXFLAGS) -o testing testing.cpp $(LIBS) $(LDLIBSMOSEK)
 
 simple:
 	$(CXX) $(CXXFLAGS) -o simple simple.cpp $(LIBS) $(LDLIBSMOSEK)
