@@ -214,8 +214,163 @@ public:
 
 	}
 
-	// Output in a form suitable for use elsewhere TODO
-	std::string commonForm() {
+	// Recursive function to remove a variable from a sorted monomial list
+	void removeVar(std::vector<std::string> monomsSorted, std::vector<polyType> valsSorted, std::vector<int> lexicalOrder, int& count, std::vector<std::pair<std::vector<std::string>,std::vector<polyType>>>& alreadyUsed) {
+
+		// See if this has been used before TODO never triggering
+		bool found = false;
+		for (int j=0; j<alreadyUsed.size(); j++) {
+			if (alreadyUsed[j].first == monomsSorted && alreadyUsed[j].second == valsSorted) {
+				found = true;
+				break;
+			}
+		}
+
+		// Stop if we've used this before DEBUG
+		if (found) {
+			//std::cout << "already used: " << monomsSorted << std::endl;
+			return;
+		}
+
+		// Cache the ind to replace as a string
+		std::string indString = std::to_string(lexicalOrder[0]);
+		indString.insert(0, digitsPerInd-indString.size(), ' ');
+		lexicalOrder.erase(lexicalOrder.begin());
+
+		// Split into a part with and without the variable
+		std::vector<std::string> monomsLeft;
+		std::vector<polyType> valsLeft;
+		std::vector<std::string> monomsRight;
+		std::vector<polyType> valsRight;
+		int splitInd = 0;
+		for (int j=0; j<monomsSorted.size(); j++) {
+
+			// Check if this monomial contains this variable
+			bool found = false;
+			std::string strippedMonom = "";
+			for (int k=0; k<monomsSorted[j].size(); k+=digitsPerInd) {
+				if (monomsSorted[j].substr(k, digitsPerInd) == indString) {
+					found = true;
+				} else {
+					strippedMonom += monomsSorted[j].substr(k, digitsPerInd);
+				}
+			}
+
+			// Stop when we find something without this variable
+			if (!found) {
+				splitInd = j;
+				break;
+			}
+
+			// Copy to the left
+			monomsLeft.push_back(strippedMonom);
+			valsLeft.push_back(valsSorted[j]);
+
+		}
+
+		// Copy anything left to the right
+		for (int j=splitInd; j<monomsSorted.size(); j++) {
+			monomsRight.push_back(monomsSorted[j]);
+			valsRight.push_back(valsSorted[j]);
+		}
+
+		// Record that we're calculating something DEBUG
+		alreadyUsed.push_back({monomsSorted, valsSorted});
+		count += 1;
+		//std::cout << "from: " << monomsSorted << " to \"" << indString << "\"*" << monomsLeft <<  " + " << monomsRight << std::endl; 
+
+		// Recurse each branch
+		if (monomsLeft.size() > 1) {
+			removeVar(monomsLeft, valsLeft, lexicalOrder, count, alreadyUsed);
+		}
+		if (monomsRight.size() > 1) {
+			removeVar(monomsRight, valsRight, lexicalOrder, count, alreadyUsed);
+		}
+
+	}
+
+	// Try to find the minimal Horner representation TODO
+	int minimalHorner() {
+
+		// Start with the x_0 < x_1 < x_2 ... lexical order
+		std::vector<int> lexicalOrder(maxVariables);
+		for (int i=0; i<lexicalOrder.size(); i++) {
+			lexicalOrder[i] = i;
+		}
+
+		// Keep trying all the permutations
+		int bestCount = 1000000;
+		std::vector<int> bestOrder(maxVariables);
+		do {
+
+			// Get as vectors rather than unordered map
+			std::vector<std::string> monomsSorted;
+			std::vector<polyType> valsSorted;
+			for (auto const &pair: coeffs) {
+				monomsSorted.push_back(pair.first);
+				valsSorted.push_back(pair.second);
+			}
+
+			// Sort the terms
+			std::vector<int> orderedIndices(monomsSorted.size(), 0);
+			for (int i=0; i<orderedIndices.size(); i++) {
+				orderedIndices[i] = i;
+			}
+			std::vector<int> varToLoc(maxVariables);
+			for (int i=0; i<maxVariables; i++) {
+				varToLoc[lexicalOrder[i]] = i;
+			}
+			std::sort(orderedIndices.begin(), orderedIndices.end(),
+				[&](const int& a, const int& b) {
+					double scoreA = 0;
+					for (int i=0; i<monomsSorted[a].size(); i+=digitsPerInd) {
+						scoreA += 1.0 / std::pow(2, varToLoc[std::stoi(monomsSorted[a].substr(i, digitsPerInd))]);
+					}
+					double scoreB = 0;
+					for (int i=0; i<monomsSorted[b].size(); i+=digitsPerInd) {
+						scoreB += 1.0 / std::pow(2, varToLoc[std::stoi(monomsSorted[b].substr(i, digitsPerInd))]);
+					}
+					//std::cout << monomsSorted[a] << " gives " << scoreA << std::endl;
+					//std::cout << monomsSorted[b] << " gives " << scoreB << std::endl;
+					return (scoreA > scoreB);
+
+				}
+			);
+
+			// Sort both lists
+			std::vector<std::string> monomsTemp = monomsSorted;
+			std::vector<polyType> valsTemp = valsSorted;
+			for (int i=0; i<orderedIndices.size(); i++) {
+				monomsSorted[i] = monomsTemp[orderedIndices[i]];
+				valsSorted[i] = valsTemp[orderedIndices[i]];
+			}
+
+			// DEBUG
+			//std::cout << lexicalOrder << " -> " << monomsSorted << std::endl;
+
+			// Recurse to split this into elementary operations
+			int count = 0;
+			std::vector<std::pair<std::vector<std::string>, std::vector<polyType>>> alreadyUsed;
+			removeVar(monomsSorted, valsSorted, lexicalOrder, count, alreadyUsed);
+
+			// Keep track of the best
+			if (count < bestCount) {
+				bestCount = count;
+				bestOrder = lexicalOrder;
+			}
+			std::cout << count << " " << bestCount << std::endl;
+
+		} while (std::next_permutation(lexicalOrder.begin(), lexicalOrder.end()));
+
+		// DEBUG
+		std::cout << bestOrder << std::endl;
+
+		return bestCount;
+
+	}
+
+	// Output in a form suitable for use elsewhere
+	std::string asMathematica() {
 
 		// For each term
 		std::string toReturn = "";
@@ -258,8 +413,8 @@ public:
 
 	}
 	
-	// Output in a form suitable for use elsewhere TODO
-	std::string latexForm() {
+	// Output in a form suitable for use elsewhere
+	std::string asLaTeX() {
 
 		// For each term
 		std::string toReturn = "";

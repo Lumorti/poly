@@ -35,6 +35,8 @@ bool f(std::vector<bool> x) {
 	}
 	return true;
 
+	// TODO addition or multiplication
+
 }
 
 // Standard cpp entry point 
@@ -49,10 +51,10 @@ int main(int argc, char ** argv) {
 		for (int j=0; j<numBits; j++) {
 			Polynomial<int> temp(numBits);
 			if (vec[j]) {
-				temp.addTerm(1, {j});
+				temp.addTerm(1, {numBits-j-1});
 			} else {
 				temp.addTerm(1, {});
-				temp.addTerm(-1, {j});
+				temp.addTerm(-1, {numBits-j-1});
 			}
 			term *= temp;
 		}
@@ -60,7 +62,7 @@ int main(int argc, char ** argv) {
 	}
 	g = g.prune();
 
-	std::cout << g.commonForm() << std::endl;
-
+	std::cout << g.asMathematica() << std::endl;
+	std::cout << g.minimalHorner() << std::endl;
 
 }
