@@ -28,7 +28,7 @@ bool f(std::vector<bool> x) {
 
 	// Primality testing O(numBits^6)
 	int asInt = boolToInt(x);
-	for (int i=2; i<asInt; i++) {
+	for (int i=2; i<std::ceil(std::sqrt(asInt)); i++) {
 		if (asInt % i == 0) {
 			return false;
 		}

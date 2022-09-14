@@ -20,7 +20,7 @@ int main(int argc, char ** argv) {
 	double rt2 = 1.0/std::sqrt(2.0);
 
 	// The list of equations to fill
-	PolynomialSystem<double> eqns;
+	std::vector<Polynomial<double>> eqns;
 
 	// Generate equations
 	std::cout << "Generating equations..." << std::endl;
@@ -54,8 +54,8 @@ int main(int argc, char ** argv) {
 	 				}
 
 					// Both the real and imaginary parts should be 0
-					eqns.addPolynomial(Polynomial<double>(eqn.real()));
-					eqns.addPolynomial(Polynomial<double>(eqn.imag()));
+					eqns.push_back(Polynomial<double>(eqn.real()));
+					eqns.push_back(Polynomial<double>(eqn.imag()));
 
 				}
 			}
@@ -68,6 +68,11 @@ int main(int argc, char ** argv) {
 	for (int i=0; i<eqns.size(); i++) {
 		poly += eqns[i]*eqns[i];
 	}
+
+	// Find a lower bound TODO
+	//PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, {});
+	//std::cout << prob.lowerBound(100000000, 2, false, false, 100) << std::endl;
+	//return 0;
 
 	// Find a root of this, the first value will go to zero but that's okay
 	// (could also use an auxiliary variable, but here not needed)
