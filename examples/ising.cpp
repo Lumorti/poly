@@ -22,7 +22,7 @@ int main(int argc, char ** argv) {
 	std::cout << std::endl;
 
 	// Try to find a lower bound for this valid
-	auto resLower = testProb.lowerBound(10000, 2, false, false, 50);
+	auto resLower = testProb.lowerBound(10000, 2, false, false, 100);
 	std::cout << std::endl;
 	std::cout << "from lower bounding:" << std::endl;
 	std::cout << resLower << std::endl;
