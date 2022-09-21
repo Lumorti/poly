@@ -2812,7 +2812,7 @@ public:
 
 	}
 
-	// Get a lower bound with the new method TODO
+	// Get a lower bound with the new method
 	polyType lowerBoundNew(int maxIters=1000000000, int matLevel=2, bool verbose=false, bool elimAtEnd=false, int matsPerIter=20) {
 
 		// Get the monomial list and sort it
@@ -2880,7 +2880,7 @@ public:
 			conPositiveLinear[i] = conPositive[i].changeVariables(mapping);
 		}
 
-		// Add a slack variable to positive cons TODO
+		// Add a slack variable to positive cons
 		for (int i=0; i<conPositiveLinear.size(); i++) {
 			Polynomial<polyType> newCon = conPositiveLinear[i];
 			newCon.addTerm(-1, {int(monoms.size())});
@@ -2889,9 +2889,13 @@ public:
 			monoms.push_back("s");
 		}
 
+		// Useful quantities
+		int n = monoms.size();
+		int m = conZeroLinear.size();
+
 		// Convert cons to a nicer form
-		Eigen::MatrixXd A = Eigen::MatrixXd::Zero(conZeroLinear.size(), monoms.size());
-		Eigen::VectorXd b = Eigen::VectorXd::Zero(conZeroLinear.size());
+		Eigen::MatrixXd A = Eigen::MatrixXd::Zero(m, n);
+		Eigen::VectorXd b = Eigen::VectorXd::Zero(m);
 		for (int i=0; i<conZeroLinear.size(); i++) {
 			for (auto const &pair: conZeroLinear[i].coeffs) {
 				if (pair.first != "") {
@@ -2904,7 +2908,7 @@ public:
 		b = 2*b - A*Eigen::VectorXd::Ones(monoms.size());
 
 		// Convert obj to a nicer form
-		Eigen::VectorXd c = Eigen::VectorXd::Zero(monoms.size());
+		Eigen::VectorXd c = Eigen::VectorXd::Zero(n);
 		double objCorrection = 0;
 		for (auto const &pair: objLinear.coeffs) {
 			if (pair.first != "") {
@@ -2913,94 +2917,104 @@ public:
 				objCorrection -= pair.second / 2.0;
 			}
 		}
-		objCorrection -= c.sum();
+		objCorrection -= 2.0*c.sum();
 
 		// now we should have:
 		// min c.x
 		// Ax = b
 		// x >= 0
 		std::cout << "c = {" << c.transpose() << "} + " << objCorrection << std::endl;
-		for (int i=0; i<conZeroLinear.size(); i++) {
+		for (int i=0; i<m; i++) {
 			std::cout << "lin con " << i << ": {" << A.row(i) << "} - " << b[i] << " = 0" << std::endl;
 		}
 
-		return 0;
-
 		// Initial guess
-		Eigen::VectorXd x = Eigen::VectorXd::Zero(monoms.size());
-		Eigen::VectorXd s = Eigen::VectorXd::Zero(monoms.size());
-		Eigen::VectorXd lambda = Eigen::VectorXd::Zero(conPositive.size());
+		Eigen::VectorXd x = Eigen::VectorXd::Random(n);
+		Eigen::VectorXd s = Eigen::VectorXd::Random(n);
+		Eigen::VectorXd lambda = Eigen::VectorXd::Random(m);
 
 		// TODO now this
 		// https://faculty.ksu.edu.sa/sites/default/files/Interior%20Point%20Methods%20and%20Linear%20Programming.pdf
 
 		// Keep iterating
 		double mu = 0.1;
+		double rho = 0.1;
+		std::cout << std::defaultfloat << std::setprecision(5);
+		std::cout << "iter |    primal   |    dual     |       alpha |    mu" << std::endl;
+		std::cout << "-----+-------------+-------------+-------------+-------------" << std::endl;
 		for (int i=0; i<maxIters; i++) {
 
-			// The Hessian of the objective
-			//Eigen::MatrixXd W = Eigen::MatrixXd::Zero(monoms.size(), monoms.size());
-			//for (int j=0; j<conPositive.size(); j++) {
-				//W -= mu * ((cs[j]*cs[j].transpose()) / std::pow(cs[j].dot(x), 2));
-			//}
-
-			// The Jacobian of the constraints
-			//Eigen::MatrixXd A = Eigen::MatrixXd::Zero(conPositive.size(), monoms.size());
-			//for (int j=0; j<conPositive.size(); j++) {
-				//A.row(j) = cs[j];
-			//}
-
-			// Matrix with constraints on diagonals
-			//Eigen::MatrixXd C = Eigen::MatrixXd::Zero(conPositive.size(), conPositive.size());
-			//for (int j=0; j<conPositive.size(); j++) {
-				//C(j,j) = cs[j].dot(x);
-			//}
-
-			// Vector of ones
-			//Eigen::VectorXd ones = Eigen::VectorXd::Ones(conPositive.size());
-
-			// Matrix with lambda on diagonals
-			//Eigen::MatrixXd Lambda = Eigen::MatrixXd::Identity(conPositive.size(), conPositive.size());
-			//for (int j=0; j<conPositive.size(); j++) {
-				//Lambda(j,j) = lambda[j];
-			//}
+			// Define some matrices
+			Eigen::VectorXd e = Eigen::VectorXd::Ones(n);
+			Eigen::MatrixXd X = Eigen::MatrixXd::Zero(n,n);
+			for (int j=0; j<n; j++) {
+				X(j,j) = x[j];
+			}
+			Eigen::MatrixXd S = Eigen::MatrixXd::Zero(n,n);
+			for (int j=0; j<n; j++) {
+				S(j,j) = s[j];
+			}
 			
-			// Get the matrix needed for the update TODO
-			//int matSize = monoms.size() + conPositive.size();
-			//Eigen::MatrixXd matToSolve = Eigen::MatrixXd::Zero(matSize, matSize);
-			//matToSolve.topLeftCorner(monoms.size(), monoms.size()) = W;
-			//matToSolve.topRightCorner(monoms.size(), conPositive.size()) = -A.transpose();
-			//matToSolve.bottomLeftCorner(conPositive.size(), monoms.size()) = Lambda*A;
-			//matToSolve.bottomRightCorner(conPositive.size(), conPositive.size()) = C;
+			// Get the matrix needed for the update 
+			Eigen::MatrixXd matToSolve = Eigen::MatrixXd::Zero(2*n+m, 2*n+m);
+			matToSolve.block(0, n, n, m) = A.transpose();
+			matToSolve.block(n, 0, m, n) = A;
+			matToSolve.block(n+m, 0, n, n) = S;
+			matToSolve.block(0, n+m, n, n) = Eigen::MatrixXd::Identity(n,n);
+			matToSolve.block(n+m, n+m, n, n) = X;
 
-			// Get the vector needed for the update TODO
-			//Eigen::VectorXd vecToSolve = Eigen::VectorXd::Zero(matSize);
-			//vecToSolve.head(monoms.size()) = A.transpose()*lambda - g;
-			//vecToSolve.tail(conPositive.size()) = mu*ones - C*lambda;
+			// Get the vector needed for the update 
+			Eigen::VectorXd vecToSolve = Eigen::VectorXd::Zero(2*n+m);
+			vecToSolve.segment(0, n) = -(A.transpose()*lambda + s - c);
+			vecToSolve.segment(n, m) = -(A*x - b);
+			vecToSolve.segment(n+m, n) = -(X*(S*e) - mu*e);
 
 			// Solve this linear system to get the update
-			//Eigen::VectorXd delta = matToSolve.colPivHouseholderQr().solve(vecToSolve);
+			Eigen::VectorXd delta = matToSolve.colPivHouseholderQr().solve(vecToSolve);
+
+			// Determine the best step-size TODO
+			double alpha = 1.0;
+			double bestAlpha = alpha;
+			double bestMin = 10000000;
+			for (int j=0; j<10; j++) {
+				Eigen::VectorXd xMod = x+alpha*delta.segment(0,n);
+				double B = c.dot(xMod);
+				for (int k=0; k<n; k++) {
+					if (xMod[k] < 1-5) {
+						B += mu*1000000000;
+					} else {
+						B += mu*std::log(xMod[k]);
+					}
+				}
+				std::cout << alpha << " " << B << " " << (A*xMod-b).norm() << std::endl;
+				if (B < bestMin && (A*xMod-b).norm() < 1e-5) {
+					bestAlpha = alpha;
+					bestMin = B;
+				}
+				alpha *= 0.9;
+			}
+			alpha = bestAlpha;
 
 			// Per-iter output
-			//std::cout << std::endl << "iteration " << i << std::endl;
-			//std::cout << matToSolve << std::endl;
-			//std::cout << std::endl;
-			//std::cout << vecToSolve.transpose() << std::endl;
-			//std::cout << std::endl;
-			//std::cout << "x = " << x.transpose() << std::endl;
-			//std::cout << "lambda = " << lambda.transpose() << std::endl;
-			//std::cout << "g.x = " << x.dot(g) << std::endl;
-			//std::cout << "delta = " << delta.transpose() << std::endl;
-			//for (int j=0; j<conPositive.size(); j++) {
-				//std::cout << "con " << j << " = " << cs[j].dot(x) << std::endl;
-			//}
-			//std::cout << lambda << std::endl;
+			double primal = x.dot(c);
+			double dual = lambda.dot(b);
+			std::cout << std::setw(4) << i << " | ";
+			std::cout << std::setw(11) << primal << " | ";
+			std::cout << std::setw(11) << dual << " | ";
+			std::cout << std::setw(11) << alpha << " | ";
+			std::cout << std::setw(11) << mu;
+			std::cout << std::endl;
 
 			// Apply the update
-			//double alpha = 0.1;
-			//x += alpha*delta.head(monoms.size());
-			//lambda += alpha*delta.tail(conPositive.size());
-			//x[0] = 1.0;
+			x += alpha*delta.segment(0, n);
+			lambda += alpha*delta.segment(n, m);
+			s += alpha*delta.segment(n+m, n);
+			mu = rho*mu;
+
+			// Stop if the primal and dual match
+			if (std::abs(x.dot(c) - lambda.dot(b)) < 1e-5) {
+				break;
+			}
 
 			// See which new constraint is most violated TODO
 

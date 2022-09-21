@@ -26,6 +26,6 @@ int main(int argc, char ** argv) {
 
 	// Create the problem
 	PolynomialBinaryProblem<double> prob(obj, {}, cons);
-	prob.lowerBoundNew(5);
+	prob.lowerBoundNew(100);
 
 }
