@@ -2880,6 +2880,17 @@ public:
 			conPositiveLinear[i] = conPositive[i].changeVariables(mapping);
 		}
 
+		// At this point we have a linear system
+		// -1 < x < 1
+
+		// All vars should be at most one
+		for (int i=0; i<monoms.size(); i++) {
+			Polynomial<polyType> newCon(objLinear.maxVariables);
+			newCon.addTerm(-1, {i});
+			newCon.addTerm(1, {});
+			conPositiveLinear.push_back(newCon);
+		}
+
 		// Add a slack variable to positive cons
 		for (int i=0; i<conPositiveLinear.size(); i++) {
 			Polynomial<polyType> newCon = conPositiveLinear[i];
@@ -2893,7 +2904,7 @@ public:
 		int n = monoms.size();
 		int m = conZeroLinear.size();
 
-		// Convert cons to a nicer form
+		// Convert cons to a nicer form (Ax = b, -1 <= x <= 1)
 		Eigen::MatrixXd A = Eigen::MatrixXd::Zero(m, n);
 		Eigen::VectorXd b = Eigen::VectorXd::Zero(m);
 		for (int i=0; i<conZeroLinear.size(); i++) {
@@ -2905,39 +2916,53 @@ public:
 				}
 			}
 		}
-		b = 2*b - A*Eigen::VectorXd::Ones(monoms.size());
 
-		// Convert obj to a nicer form
+		// Convert obj to a nicer form (c.x+d, -1 <= x <= 1)
 		Eigen::VectorXd c = Eigen::VectorXd::Zero(n);
-		double objCorrection = 0;
+		double d = 0;
 		for (auto const &pair: objLinear.coeffs) {
 			if (pair.first != "") {
-				c[std::stoi(pair.first)] = pair.second / 2.0;
+				c[std::stoi(pair.first)] = pair.second;
 			} else {
-				objCorrection -= pair.second / 2.0;
+				d -= pair.second;
 			}
 		}
-		objCorrection -= 2.0*c.sum();
+
+		std::cout << "c = {" << c.transpose() << "} + " << d << std::endl;
+		for (int i=0; i<m; i++) {
+			std::cout << "before con " << i << ": {" << A.row(i) << "} - " << b[i] << " = 0" << std::endl;
+		}
+
+		// Adjust from -1 <= x <= 1
+		//          to  0 <= x <= 1
+		b = 0.5*(b + A*Eigen::VectorXd::Ones(n));
+		d = d - c.dot(Eigen::VectorXd::Ones(n));
+		c = 2.0*c;
 
 		// now we should have:
 		// min c.x
 		// Ax = b
 		// x >= 0
-		std::cout << "c = {" << c.transpose() << "} + " << objCorrection << std::endl;
+		std::cout << "c = {" << c.transpose() << "} + " << d << std::endl;
 		for (int i=0; i<m; i++) {
 			std::cout << "lin con " << i << ": {" << A.row(i) << "} - " << b[i] << " = 0" << std::endl;
 		}
 
 		// Initial guess
-		Eigen::VectorXd x = Eigen::VectorXd::Random(n);
-		Eigen::VectorXd s = Eigen::VectorXd::Random(n);
-		Eigen::VectorXd lambda = Eigen::VectorXd::Random(m);
+		//Eigen::VectorXd x = (Eigen::VectorXd::Random(n)+Eigen::VectorXd::Ones(n))/2.0;
+		//Eigen::VectorXd s = (Eigen::VectorXd::Random(n)+Eigen::VectorXd::Ones(n))/2.0;
+		//Eigen::VectorXd lambda = (Eigen::VectorXd::Random(m)+Eigen::VectorXd::Ones(m))/2.0;
+		//Eigen::VectorXd x = Eigen::VectorXd::Zero(n);
+		Eigen::VectorXd s = Eigen::VectorXd::Zero(n);
+		//Eigen::VectorXd lambda = Eigen::VectorXd::Zero(m);
+		Eigen::VectorXd x = A.colPivHouseholderQr().solve(b);
+		Eigen::VectorXd lambda = A.transpose().colPivHouseholderQr().solve(c);
 
 		// TODO now this
 		// https://faculty.ksu.edu.sa/sites/default/files/Interior%20Point%20Methods%20and%20Linear%20Programming.pdf
 
 		// Keep iterating
-		double mu = 0.1;
+		double mu = 1.0;
 		double rho = 0.1;
 		std::cout << std::defaultfloat << std::setprecision(5);
 		std::cout << "iter |    primal   |    dual     |       alpha |    mu" << std::endl;
@@ -2974,30 +2999,29 @@ public:
 
 			// Determine the best step-size TODO
 			double alpha = 1.0;
-			double bestAlpha = alpha;
-			double bestMin = 10000000;
-			for (int j=0; j<10; j++) {
+			double bestAlpha = 0;
+			double bestMin = 100000;
+			for (int j=0; j<90; j++) {
 				Eigen::VectorXd xMod = x+alpha*delta.segment(0,n);
 				double B = c.dot(xMod);
 				for (int k=0; k<n; k++) {
-					if (xMod[k] < 1-5) {
-						B += mu*1000000000;
+					if (xMod[k] < 0) {
+						B += 1000000000;
 					} else {
 						B += mu*std::log(xMod[k]);
 					}
 				}
-				std::cout << alpha << " " << B << " " << (A*xMod-b).norm() << std::endl;
-				if (B < bestMin && (A*xMod-b).norm() < 1e-5) {
+				if (B < bestMin && (A*xMod-b).norm() < 1e-1) {
 					bestAlpha = alpha;
 					bestMin = B;
 				}
-				alpha *= 0.9;
+				alpha -= 0.01;
 			}
 			alpha = bestAlpha;
 
 			// Per-iter output
-			double primal = x.dot(c);
-			double dual = lambda.dot(b);
+			double primal = x.dot(c) + d;
+			double dual = lambda.dot(b) + d;
 			std::cout << std::setw(4) << i << " | ";
 			std::cout << std::setw(11) << primal << " | ";
 			std::cout << std::setw(11) << dual << " | ";
@@ -3009,10 +3033,12 @@ public:
 			x += alpha*delta.segment(0, n);
 			lambda += alpha*delta.segment(n, m);
 			s += alpha*delta.segment(n+m, n);
+
+			// Update the barrier parameter
 			mu = rho*mu;
 
 			// Stop if the primal and dual match
-			if (std::abs(x.dot(c) - lambda.dot(b)) < 1e-5) {
+			if (i >= 2 && std::abs(primal-dual) < 1e-4) {
 				break;
 			}
 
@@ -3021,6 +3047,8 @@ public:
 			// Add this constraint TODO
 
 		}
+		std::cout << "-----+-------------+-------------+-------------+-------------" << std::endl;
+		std::cout << "x = " << x.transpose() << std::endl;
 
 		return 0;
 
