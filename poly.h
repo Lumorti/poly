@@ -2867,6 +2867,7 @@ public:
 			std::string newInd = std::to_string(i);
 			newInd.insert(0, digitsPerIndAfterLinear-newInd.size(), ' ');
 			mapping[monoms[i]] = newInd;
+			//std::cout << monoms[i] << " -> " << newInd << std::endl; // DEBUG
 		}
 
 		// Linearize the problem
@@ -2879,9 +2880,6 @@ public:
 		for (int i=0; i<conPositive.size(); i++) {
 			conPositiveLinear[i] = conPositive[i].changeVariables(mapping);
 		}
-
-		// At this point we have a linear system
-		// -1 < x < 1
 
 		// All vars should be at most one
 		for (int i=0; i<monoms.size(); i++) {
@@ -2912,7 +2910,7 @@ public:
 				if (pair.first != "") {
 					A(i,std::stoi(pair.first)) = pair.second;
 				} else {
-					b(i) = pair.second;
+					b(i) = -pair.second;
 				}
 			}
 		}
@@ -2928,9 +2926,13 @@ public:
 			}
 		}
 
+		// here we should have:
+		// min c.x + d
+		// Ax = b
+		// -1 <= x <= 1
 		std::cout << "c = {" << c.transpose() << "} + " << d << std::endl;
 		for (int i=0; i<m; i++) {
-			std::cout << "before con " << i << ": {" << A.row(i) << "} - " << b[i] << " = 0" << std::endl;
+			std::cout << "before con " << i << ": {" << A.row(i) << "} = " << b[i] << std::endl;
 		}
 
 		// Adjust from -1 <= x <= 1
@@ -2939,24 +2941,28 @@ public:
 		d = d - c.dot(Eigen::VectorXd::Ones(n));
 		c = 2.0*c;
 
-		// now we should have:
-		// min c.x
+		// here we should have:
+		// min c.x + d
 		// Ax = b
-		// x >= 0
+		// 0 <= x <= 1
 		std::cout << std::endl;
 		std::cout << "c = {" << c.transpose() << "} + " << d << std::endl;
 		for (int i=0; i<m; i++) {
-			std::cout << "lin con " << i << ": {" << A.row(i) << "} - " << b[i] << " = 0" << std::endl;
+			std::cout << "lin con " << i << ": {" << A.row(i) << "} = " << b[i] << std::endl;
 		}
 
 		// Initial guess
 		//Eigen::VectorXd x = (Eigen::VectorXd::Random(n)+Eigen::VectorXd::Ones(n))/2.0;
 		//Eigen::VectorXd s = (Eigen::VectorXd::Random(n)+Eigen::VectorXd::Ones(n))/2.0;
 		//Eigen::VectorXd lambda = (Eigen::VectorXd::Random(m)+Eigen::VectorXd::Ones(m))/2.0;
+		Eigen::VectorXd x = Eigen::VectorXd::Ones(n) / 2.0;
+		Eigen::VectorXd s = Eigen::VectorXd::Ones(n) / 2.0;
+		Eigen::VectorXd lambda = Eigen::VectorXd::Ones(m) / 2.0;
 		//Eigen::VectorXd x = Eigen::VectorXd::Zero(n);
-		Eigen::VectorXd s = Eigen::VectorXd::Zero(n);
-		Eigen::VectorXd lambda = Eigen::VectorXd::Zero(m);
-		Eigen::VectorXd x = A.colPivHouseholderQr().solve(b);
+		//Eigen::VectorXd s = Eigen::VectorXd::Zero(n);
+		//Eigen::VectorXd lambda = Eigen::VectorXd::Zero(m);
+		//Eigen::VectorXd x = A.colPivHouseholderQr().solve(b);
+		//Eigen::VectorXd s = Eigen::VectorXd::Zero(n);
 		//Eigen::VectorXd lambda = A.transpose().colPivHouseholderQr().solve(c);
 
 		std::cout << std::endl;
@@ -2969,12 +2975,13 @@ public:
 		// https://faculty.ksu.edu.sa/sites/default/files/Interior%20Point%20Methods%20and%20Linear%20Programming.pdf
 
 		// Keep iterating
-		double mu = 100.0;
-		double rho = 0.8;
+		double mu = 1.0;
+		double rho = 0.1;
+		bool stepTaken = false;
 		std::cout << std::defaultfloat << std::setprecision(5);
-		std::cout << "-------------------------------------------------------------" << std::endl;
-		std::cout << "iter |    primal   |    dual     |       alpha |    mu" << std::endl;
-		std::cout << "-----+-------------+-------------+-------------+-------------" << std::endl;
+		std::cout << "----------------------------------------------------------------" << std::endl;
+		std::cout << "| iter |    primal   |    dual     |    alpha    |      mu     |    bonus" << std::endl;
+		std::cout << "----------------------------------------------------------------" << std::endl;
 		for (int i=0; i<maxIters; i++) {
 
 			// Define some matrices
@@ -3005,61 +3012,71 @@ public:
 			// Solve this linear system to get the update
 			Eigen::VectorXd delta = matToSolve.colPivHouseholderQr().solve(vecToSolve);
 
-			std::cout << x.segment(0,n).transpose() << std::endl;
-			std::cout << delta.segment(0,n).transpose() << std::endl;
+			//std::cout << x.segment(0,n).transpose() << std::endl;
+			//std::cout << delta.segment(0,n).transpose() << std::endl;
 
 			// Determine the best step-size TODO
 			double alpha = 1.0;
-			double bestAlpha = 0;
-			double bestMin = 1000;
-			for (int j=0; j<1000; j++) {
-				Eigen::VectorXd xMod = x+alpha*delta.segment(0,n);
-				double B = c.dot(xMod);
-				if (j == 1) {
-					std::cout << "c.xMod = " << B << std::endl;
-					std::cout << "xMod = " << xMod.transpose() << std::endl;
-				}
+			bool nonZeroAlpha = false;
+			for (int j=0; j<100; j++) {
+				Eigen::VectorXd xMod = x + alpha*delta.segment(0,n);
+				Eigen::VectorXd lambdaMod = lambda + alpha*delta.segment(n, m);
+				Eigen::VectorXd sMod = s + alpha*delta.segment(n+m,n);
+				bool allPositive = true;
 				for (int k=0; k<n; k++) {
-					if (xMod[k] < 0) {
-						B = bestMin*10;
-					} else if (xMod[k] > 1e-8) {
-						B += mu*std::log(xMod[k]);
+					if (xMod[k] < 0 || sMod[k] < 0) {
+						allPositive = false;
+						break;
 					}
 				}
-				if (j == 1) {
-					std::cout << "B = " << B << std::endl;
-					std::cout << "A*xMod-b = " << (A*xMod-b).norm() << std::endl;
+				//std::cout << alpha << " " << allPositive << " " << (A*xMod-b).norm() << " " << (A.transpose()*lambdaMod + sMod - c).norm() << std::endl;
+				//if (allPositive && (A*xMod-b).norm() < 1e-5 && (A.transpose()*lambdaMod + sMod - c).norm() < 1e-5) {
+				//if (allPositive && (A*xMod-b).norm() < 1e-5) {
+				if (allPositive) {
+					nonZeroAlpha = true;
+					break;
 				}
-				if (B < bestMin && (A*xMod-b).norm() < 1e-3) {
-					bestAlpha = alpha;
-					bestMin = B;
-				}
-				alpha *= 0.95;
+				alpha *= 0.9;
 			}
-			alpha = bestAlpha;
 
 			// Per-iter output
 			double primal = x.dot(c) + d;
 			double dual = lambda.dot(b) + d;
-			std::cout << std::setw(4) << i << " | ";
-			std::cout << std::setw(11) << primal << " | ";
-			std::cout << std::setw(11) << dual << " | ";
-			std::cout << std::setw(11) << alpha << " | ";
-			std::cout << std::setw(11) << mu;
+			std::cout << "|";
+			std::cout << std::setw(5) << i << " | ";
+			if (stepTaken) {
+				std::cout << std::setw(11) << primal << " | ";
+				std::cout << std::setw(11) << dual << " | ";
+			} else {
+				std::cout << std::setw(11) << "-" << " | ";
+				std::cout << std::setw(11) << "-" << " | ";
+			}
+			if (nonZeroAlpha) {
+				std::cout << std::setw(11) << alpha << " | ";
+			} else {
+				std::cout << std::setw(11) << "-" << " | ";
+			}
+			std::cout << std::setw(11) << mu << " | ";
+			std::cout << std::setw(11) << vecToSolve.segment(n+m, n).norm();
 			std::cout << std::endl;
 
-			if (alpha < 1e-5) {
-				std::cout << "WARNING - stopped early, zero step size" << std::endl;
-				break;
+			// If we couldn't find a good step-size, try a higher mu
+			if (!nonZeroAlpha) {
+				mu /= rho;
+				continue;
 			}
 
 			// Apply the update
 			x += alpha*delta.segment(0, n);
 			lambda += alpha*delta.segment(n, m);
 			s += alpha*delta.segment(n+m, n);
+			stepTaken = true;
 
-			// Update the barrier parameter
-			mu *= rho;
+			// Update the barrier parameter if we've done all we can
+			// TODO needed?
+			if (vecToSolve.segment(n+m, n).norm() < 1000) {
+				mu *= rho;
+			}
 
 			// Stop if the primal and dual match
 			if (i >= 2 && std::abs(primal-dual) < 1e-4) {
@@ -3071,7 +3088,7 @@ public:
 			// Add this constraint TODO
 
 		}
-		std::cout << "-----+-------------+-------------+-------------+-------------" << std::endl;
+		std::cout << "----------------------------------------------------------------" << std::endl;
 		std::cout << "x = " << x.transpose() << std::endl;
 
 		return 0;

@@ -3,24 +3,29 @@
 // Standard cpp entry point 
 int main(int argc, char ** argv) {
 
-	// min x_1 + 2x_2 - 3x_3
-	// s.t. -1 <= x_i <= 1
-	// min = -6 at -1,-1,1
-	Polynomial<double> obj(3);
-	obj.addTerm(1, {0});
-	obj.addTerm(2, {1});
-	obj.addTerm(-3, {2});
+	// Generate a random objective
+	int n = 100;
+	std::srand(time(0));
+	Polynomial<double> obj(n);
+	for (int i=0; i<n; i++) {
+		double r = 10.0*(float(rand()) / RAND_MAX) - 5.0;
+		obj.addTerm(r, {i});
+	}
 
-	std::vector<Polynomial<double>> cons;
-	//{
-		//Polynomial<double> con;
-		//con.addTerm(1, {});
-		//con.addTerm(-1, {0});
-		//cons.push_back(con);
-	//}
+	// Constraints
+	std::vector<Polynomial<double>> consPositive;
+	std::vector<Polynomial<double>> consZero;
+	{
+		Polynomial<double> newCon(n);
+		newCon.addTerm(-0.5, {});
+		newCon.addTerm(1, {0});
+		newCon.addTerm(1, {1});
+		newCon.addTerm(1, {2});
+		consZero.push_back(newCon);
+	}
 
 	// Create the problem
-	PolynomialBinaryProblem<double> prob(obj, {}, cons);
-	prob.lowerBoundNew(20);
+	PolynomialBinaryProblem<double> prob(obj, consZero, consPositive);
+	prob.lowerBoundNew(30);
 
 }
