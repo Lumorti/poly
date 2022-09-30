@@ -15,6 +15,7 @@
 // Use Eigen for matrix/vector ops
 #include <Eigen/Dense>
 #include <Eigen/IterativeLinearSolvers>
+#include <Eigen/Sparse>
 
 // OpenMP for parallelisation
 #include <omp.h>
@@ -2823,7 +2824,7 @@ public:
 		std::vector<std::vector<int>> monomPairs;
 
 		// Random seed
-		std::srand(time(0));
+		//std::srand(time(0));
 
 		// Single-order monomials should always appear
 		for (int i=0; i<maxVariables; i++) {
@@ -2881,7 +2882,7 @@ public:
 			conPositiveLinear[i] = conPositive[i].changeVariables(mapping);
 		}
 
-		// All vars should be at most one
+		// All vars should be at most one TODO remove
 		for (int i=0; i<monoms.size(); i++) {
 			Polynomial<polyType> newCon(objLinear.maxVariables);
 			newCon.addTerm(-1, {i});
@@ -2903,17 +2904,21 @@ public:
 		int m = conZeroLinear.size();
 
 		// Convert cons to a nicer form (Ax = b, -1 <= x <= 1)
-		Eigen::MatrixXd A = Eigen::MatrixXd::Zero(m, n);
+		Eigen::SparseMatrix<double> A(m, n);
+		std::vector<Eigen::Triplet<double>> tripletsA;
+		//Eigen::MatrixXd A = Eigen::MatrixXd::Zero(m, n);
 		Eigen::VectorXd b = Eigen::VectorXd::Zero(m);
 		for (int i=0; i<conZeroLinear.size(); i++) {
 			for (auto const &pair: conZeroLinear[i].coeffs) {
 				if (pair.first != "") {
-					A(i,std::stoi(pair.first)) = pair.second;
+					//A(i,std::stoi(pair.first)) = pair.second;
+					tripletsA.push_back(Eigen::Triplet<double>(i, std::stoi(pair.first), pair.second));
 				} else {
 					b(i) = -pair.second;
 				}
 			}
 		}
+		A.setFromTriplets(tripletsA.begin(), tripletsA.end());
 
 		// Convert obj to a nicer form (c.x+d, -1 <= x <= 1)
 		Eigen::VectorXd c = Eigen::VectorXd::Zero(n);
@@ -2926,57 +2931,70 @@ public:
 			}
 		}
 
+		// DEBUG
 		// here we should have:
 		// min c.x + d
 		// Ax = b
 		// -1 <= x <= 1
-		std::cout << "c = {" << c.transpose() << "} + " << d << std::endl;
-		for (int i=0; i<m; i++) {
-			std::cout << "before con " << i << ": {" << A.row(i) << "} = " << b[i] << std::endl;
-		}
+		//std::cout << "c = {" << c.transpose() << "} + " << d << std::endl;
+		//for (int i=0; i<m; i++) {
+			//std::cout << "before con " << i << ": {" << A.row(i) << "} = " << b[i] << std::endl;
+		//}
+
+		// Define some matrices
+		Eigen::VectorXd e = Eigen::VectorXd::Ones(n);
 
 		// Adjust from -1 <= x <= 1
 		//          to  0 <= x <= 1
-		b = 0.5*(b + A*Eigen::VectorXd::Ones(n));
-		d = d - c.dot(Eigen::VectorXd::Ones(n));
+		b = 0.5*(b + A*e);
+		d = d - c.dot(e);
 		c = 2.0*c;
 
+		// DEBUG
 		// here we should have:
 		// min c.x + d
 		// Ax = b
 		// 0 <= x <= 1
-		std::cout << std::endl;
-		std::cout << "c = {" << c.transpose() << "} + " << d << std::endl;
-		for (int i=0; i<m; i++) {
-			std::cout << "lin con " << i << ": {" << A.row(i) << "} = " << b[i] << std::endl;
-		}
+		//std::cout << std::endl;
+		//std::cout << "c = {" << c.transpose() << "} + " << d << std::endl;
+		//for (int i=0; i<m; i++) {
+			//std::cout << "lin con " << i << ": {" << A.row(i) << "} = " << b[i] << std::endl;
+		//}
 
 		// Initial guess
 		//Eigen::VectorXd x = (Eigen::VectorXd::Random(n)+Eigen::VectorXd::Ones(n))/2.0;
 		//Eigen::VectorXd s = (Eigen::VectorXd::Random(n)+Eigen::VectorXd::Ones(n))/2.0;
 		//Eigen::VectorXd lambda = (Eigen::VectorXd::Random(m)+Eigen::VectorXd::Ones(m))/2.0;
-		Eigen::VectorXd x = Eigen::VectorXd::Ones(n) / 2.0;
-		Eigen::VectorXd s = Eigen::VectorXd::Ones(n) / 2.0;
-		Eigen::VectorXd lambda = Eigen::VectorXd::Ones(m) / 2.0;
+		//Eigen::VectorXd x = e;
+		//Eigen::VectorXd s = e;
+		Eigen::VectorXd x = e / 2.0;
+		Eigen::VectorXd s = e / 2.0;
 		//Eigen::VectorXd x = Eigen::VectorXd::Zero(n);
 		//Eigen::VectorXd s = Eigen::VectorXd::Zero(n);
-		//Eigen::VectorXd lambda = Eigen::VectorXd::Zero(m);
+		Eigen::VectorXd lambda = Eigen::VectorXd::Zero(m);
 		//Eigen::VectorXd x = A.colPivHouseholderQr().solve(b);
 		//Eigen::VectorXd s = Eigen::VectorXd::Zero(n);
 		//Eigen::VectorXd lambda = A.transpose().colPivHouseholderQr().solve(c);
 
-		std::cout << std::endl;
-		std::cout << "initial x = " << x.transpose() << std::endl;
-		std::cout << "initial s = " << s.transpose() << std::endl;
-		std::cout << "initial lambda = " << lambda.transpose() << std::endl;
-		std::cout << std::endl;
+		//Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> sol;
+		//sol.compute(A);
+		//Eigen::VectorXd x = sol.solve(b);
+
+		// DEBUG
+		//std::cout << std::endl;
+		//std::cout << "initial x = " << x.transpose() << std::endl;
+		//std::cout << "initial s = " << s.transpose() << std::endl;
+		//std::cout << "initial lambda = " << lambda.transpose() << std::endl;
+		//std::cout << std::endl;
 
 		// TODO now this
-		// https://faculty.ksu.edu.sa/sites/default/files/Interior%20Point%20Methods%20and%20Linear%20Programming.pdf
+		// https://faculty.ksu.edu.sa/sites/default/files/
+		// Interior%20Point%20Methods%20and%20Linear%20Programming.pdf
 
 		// Keep iterating
-		double mu = 1.0;
+		double mu = 100.0;
 		double rho = 0.1;
+		double primal = 0;
 		bool stepTaken = false;
 		std::cout << std::defaultfloat << std::setprecision(5);
 		std::cout << "----------------------------------------------------------------" << std::endl;
@@ -2984,63 +3002,87 @@ public:
 		std::cout << "----------------------------------------------------------------" << std::endl;
 		for (int i=0; i<maxIters; i++) {
 
-			// Define some matrices
-			Eigen::VectorXd e = Eigen::VectorXd::Ones(n);
-			Eigen::MatrixXd X = Eigen::MatrixXd::Zero(n,n);
-			for (int j=0; j<n; j++) {
-				X(j,j) = x[j];
+			// Get the matrix needed for the update TODO pre-solve
+			Eigen::SparseMatrix<double> matToSolve(n+m+n, n+m+n);
+			std::vector<Eigen::Triplet<double>> tripletsMat;
+			for (int j=0; j<tripletsA.size(); j++) {
+				tripletsMat.push_back(Eigen::Triplet<double>(tripletsA[j].col(), n+tripletsA[j].row(), tripletsA[j].value()));
+				tripletsMat.push_back(Eigen::Triplet<double>(n+tripletsA[j].row(), tripletsA[j].col(), tripletsA[j].value()));
 			}
-			Eigen::MatrixXd S = Eigen::MatrixXd::Zero(n,n);
 			for (int j=0; j<n; j++) {
-				S(j,j) = s[j];
+				tripletsMat.push_back(Eigen::Triplet<double>(j, n+m+j, 1));
+				tripletsMat.push_back(Eigen::Triplet<double>(n+m+j, j, s[j]));
+				tripletsMat.push_back(Eigen::Triplet<double>(n+m+j, n+m+j, x[j]));
 			}
-			
-			// Get the matrix needed for the update 
-			Eigen::MatrixXd matToSolve = Eigen::MatrixXd::Zero(2*n+m, 2*n+m);
-			matToSolve.block(0, n, n, m) = A.transpose();
-			matToSolve.block(n, 0, m, n) = A;
-			matToSolve.block(n+m, 0, n, n) = S;
-			matToSolve.block(0, n+m, n, n) = Eigen::MatrixXd::Identity(n,n);
-			matToSolve.block(n+m, n+m, n, n) = X;
+			matToSolve.setFromTriplets(tripletsMat.begin(), tripletsMat.end());
 
 			// Get the vector needed for the update 
-			Eigen::VectorXd vecToSolve = Eigen::VectorXd::Zero(2*n+m);
+			Eigen::VectorXd vecToSolve = Eigen::VectorXd::Zero(n+m+n);
 			vecToSolve.segment(0, n) = -(A.transpose()*lambda + s - c);
 			vecToSolve.segment(n, m) = -(A*x - b);
-			vecToSolve.segment(n+m, n) = -(X*(S*e) - mu*e);
+			for (int j=0; j<n; j++) {
+				vecToSolve[n+m+j] = -(x[j]*s[j] - mu);
+			}
 
 			// Solve this linear system to get the update
-			Eigen::VectorXd delta = matToSolve.colPivHouseholderQr().solve(vecToSolve);
+			Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> solver;
+			solver.compute(matToSolve);
+			Eigen::VectorXd delta = solver.solve(vecToSolve);
 
-			//std::cout << x.segment(0,n).transpose() << std::endl;
-			//std::cout << delta.segment(0,n).transpose() << std::endl;
+			// DEBUG
+			//std::cout << std::endl;
+			//std::cout << Eigen::MatrixXd(matToSolve) << std::endl;
+			//std::cout << std::endl;
+			//std::cout << vecToSolve.transpose() << std::endl;
+			//std::cout << std::endl;
+			//std::cout << "x = " << x.transpose() << std::endl;
+			//std::cout << "s = " << s.transpose() << std::endl;
+			//std::cout << "delta = " << delta.transpose() << std::endl;
+			//std::cout << std::endl;
 
 			// Determine the best step-size TODO
-			double alpha = 1.0;
+			double alphaX = 1.0;
 			bool nonZeroAlpha = false;
-			for (int j=0; j<100; j++) {
-				Eigen::VectorXd xMod = x + alpha*delta.segment(0,n);
-				Eigen::VectorXd lambdaMod = lambda + alpha*delta.segment(n, m);
-				Eigen::VectorXd sMod = s + alpha*delta.segment(n+m,n);
+			for (int j=0; j<1000; j++) {
+				Eigen::VectorXd xMod = x + alphaX*delta.segment(0,n);
+				//Eigen::VectorXd sMod = s + alphaS*delta.segment(n+m,n);
 				bool allPositive = true;
 				for (int k=0; k<n; k++) {
-					if (xMod[k] < 0 || sMod[k] < 0) {
+					//if (xMod[k] < 0 || sMod[k] < 0) {
+					//if (xMod[k] < 0 || sMod[k] < 0 || xMod[k] > 1) {
+					if (xMod[k] < 0) {
 						allPositive = false;
 						break;
 					}
 				}
-				//std::cout << alpha << " " << allPositive << " " << (A*xMod-b).norm() << " " << (A.transpose()*lambdaMod + sMod - c).norm() << std::endl;
-				//if (allPositive && (A*xMod-b).norm() < 1e-5 && (A.transpose()*lambdaMod + sMod - c).norm() < 1e-5) {
-				//if (allPositive && (A*xMod-b).norm() < 1e-5) {
 				if (allPositive) {
+				//if (allPositive && (A*x-b).norm() < 1e-5) {
+				//if ((A*x-b).norm() < 1e-5) {
 					nonZeroAlpha = true;
 					break;
 				}
-				alpha *= 0.9;
+				alphaX *= 0.95;
+			}
+
+			double alphaS = 1.0;
+			for (int j=0; j<1000; j++) {
+				Eigen::VectorXd sMod = s + alphaS*delta.segment(n+m,n);
+				bool allPositive = true;
+				for (int k=0; k<n; k++) {
+					if (sMod[k] < 0) {
+						allPositive = false;
+						break;
+					}
+				}
+				if (allPositive) {
+				//if (allPositive && (A.transpose()*lambda-c+sMod).norm() < 1e-5) {
+					break;
+				}
+				alphaS *= 0.95;
 			}
 
 			// Per-iter output
-			double primal = x.dot(c) + d;
+			primal = x.dot(c) + d;
 			double dual = lambda.dot(b) + d;
 			std::cout << "|";
 			std::cout << std::setw(5) << i << " | ";
@@ -3052,12 +3094,12 @@ public:
 				std::cout << std::setw(11) << "-" << " | ";
 			}
 			if (nonZeroAlpha) {
-				std::cout << std::setw(11) << alpha << " | ";
+				std::cout << std::setw(11) << alphaX << " | ";
 			} else {
 				std::cout << std::setw(11) << "-" << " | ";
 			}
 			std::cout << std::setw(11) << mu << " | ";
-			std::cout << std::setw(11) << vecToSolve.segment(n+m, n).norm();
+			std::cout << std::setw(11) << vecToSolve.norm();
 			std::cout << std::endl;
 
 			// If we couldn't find a good step-size, try a higher mu
@@ -3067,19 +3109,19 @@ public:
 			}
 
 			// Apply the update
-			x += alpha*delta.segment(0, n);
-			lambda += alpha*delta.segment(n, m);
-			s += alpha*delta.segment(n+m, n);
+			x += alphaX*delta.segment(0, n);
+			lambda += alphaX*delta.segment(n, m);
+			s += alphaS*delta.segment(n+m, n);
 			stepTaken = true;
 
 			// Update the barrier parameter if we've done all we can
 			// TODO needed?
-			if (vecToSolve.segment(n+m, n).norm() < 1000) {
+			if (vecToSolve.segment(n+m, n).norm() < 100000) {
 				mu *= rho;
 			}
 
 			// Stop if the primal and dual match
-			if (i >= 2 && std::abs(primal-dual) < 1e-4) {
+			if (i >= 2 && std::abs(primal-dual) < 1e-4 && vecToSolve.norm() < 1e-5) {
 				break;
 			}
 
@@ -3089,9 +3131,8 @@ public:
 
 		}
 		std::cout << "----------------------------------------------------------------" << std::endl;
-		std::cout << "x = " << x.transpose() << std::endl;
 
-		return 0;
+		return primal;
 
 	}
 
