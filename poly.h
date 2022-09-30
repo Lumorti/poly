@@ -2823,9 +2823,6 @@ public:
 		// List of semdefinite matrices
 		std::vector<std::vector<int>> monomPairs;
 
-		// Random seed
-		//std::srand(time(0));
-
 		// Single-order monomials should always appear
 		for (int i=0; i<maxVariables; i++) {
 			std::string newMonom = std::to_string(i);
@@ -2846,12 +2843,11 @@ public:
 			//monoms.push_back(bigBoi);
 		//}
 
-		// First monom should always be 1
+		// We don't need a monom for 1
 		auto loc = std::find(monoms.begin(), monoms.end(), "");
 		if (loc != monoms.end()) {
 			monoms.erase(loc);
 		}
-		//monoms.insert(monoms.begin(), "");
 		
 		// Also get the monomials as polynomials and prepare for fast eval
 		std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
@@ -2871,6 +2867,11 @@ public:
 			//std::cout << monoms[i] << " -> " << newInd << std::endl; // DEBUG
 		}
 
+		// Increase the number of vars in advance
+		for (int i=0; i<(monoms.size()+conPositive.size())*10; i++) {
+			mapping[std::to_string(monoms.size()+i)+" "] = monoms.size()+i;
+		}
+
 		// Linearize the problem
 		Polynomial<polyType> objLinear = obj.changeVariables(mapping);
 		std::vector<Polynomial<polyType>> conZeroLinear(conZero.size());
@@ -2881,6 +2882,8 @@ public:
 		for (int i=0; i<conPositive.size(); i++) {
 			conPositiveLinear[i] = conPositive[i].changeVariables(mapping);
 		}
+
+		//std::cout << objLinear.maxVariables << std::endl;
 
 		// All vars should be at most one TODO remove
 		for (int i=0; i<monoms.size(); i++) {
@@ -2906,7 +2909,6 @@ public:
 		// Convert cons to a nicer form (Ax = b, -1 <= x <= 1)
 		Eigen::SparseMatrix<double> A(m, n);
 		std::vector<Eigen::Triplet<double>> tripletsA;
-		//Eigen::MatrixXd A = Eigen::MatrixXd::Zero(m, n);
 		Eigen::VectorXd b = Eigen::VectorXd::Zero(m);
 		for (int i=0; i<conZeroLinear.size(); i++) {
 			for (auto const &pair: conZeroLinear[i].coeffs) {
@@ -2932,10 +2934,6 @@ public:
 		}
 
 		// DEBUG
-		// here we should have:
-		// min c.x + d
-		// Ax = b
-		// -1 <= x <= 1
 		//std::cout << "c = {" << c.transpose() << "} + " << d << std::endl;
 		//for (int i=0; i<m; i++) {
 			//std::cout << "before con " << i << ": {" << A.row(i) << "} = " << b[i] << std::endl;
@@ -2951,10 +2949,6 @@ public:
 		c = 2.0*c;
 
 		// DEBUG
-		// here we should have:
-		// min c.x + d
-		// Ax = b
-		// 0 <= x <= 1
 		//std::cout << std::endl;
 		//std::cout << "c = {" << c.transpose() << "} + " << d << std::endl;
 		//for (int i=0; i<m; i++) {
@@ -2962,37 +2956,19 @@ public:
 		//}
 
 		// Initial guess
-		//Eigen::VectorXd x = (Eigen::VectorXd::Random(n)+Eigen::VectorXd::Ones(n))/2.0;
-		//Eigen::VectorXd s = (Eigen::VectorXd::Random(n)+Eigen::VectorXd::Ones(n))/2.0;
-		//Eigen::VectorXd lambda = (Eigen::VectorXd::Random(m)+Eigen::VectorXd::Ones(m))/2.0;
-		//Eigen::VectorXd x = e;
-		//Eigen::VectorXd s = e;
 		Eigen::VectorXd x = e / 2.0;
 		Eigen::VectorXd s = e / 2.0;
-		//Eigen::VectorXd x = Eigen::VectorXd::Zero(n);
-		//Eigen::VectorXd s = Eigen::VectorXd::Zero(n);
 		Eigen::VectorXd lambda = Eigen::VectorXd::Zero(m);
-		//Eigen::VectorXd x = A.colPivHouseholderQr().solve(b);
-		//Eigen::VectorXd s = Eigen::VectorXd::Zero(n);
-		//Eigen::VectorXd lambda = A.transpose().colPivHouseholderQr().solve(c);
-
 		//Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> sol;
 		//sol.compute(A);
 		//Eigen::VectorXd x = sol.solve(b);
-
-		// DEBUG
-		//std::cout << std::endl;
-		//std::cout << "initial x = " << x.transpose() << std::endl;
-		//std::cout << "initial s = " << s.transpose() << std::endl;
-		//std::cout << "initial lambda = " << lambda.transpose() << std::endl;
-		//std::cout << std::endl;
 
 		// TODO now this
 		// https://faculty.ksu.edu.sa/sites/default/files/
 		// Interior%20Point%20Methods%20and%20Linear%20Programming.pdf
 
 		// Keep iterating
-		double mu = 100.0;
+		double mu = 1.0;
 		double rho = 0.1;
 		double primal = 0;
 		bool stepTaken = false;
@@ -3002,7 +2978,7 @@ public:
 		std::cout << "----------------------------------------------------------------" << std::endl;
 		for (int i=0; i<maxIters; i++) {
 
-			// Get the matrix needed for the update TODO pre-solve
+			// Get the matrix needed for the update
 			Eigen::SparseMatrix<double> matToSolve(n+m+n, n+m+n);
 			std::vector<Eigen::Triplet<double>> tripletsMat;
 			for (int j=0; j<tripletsA.size(); j++) {
@@ -3025,9 +3001,17 @@ public:
 			}
 
 			// Solve this linear system to get the update
-			Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> solver;
-			solver.compute(matToSolve);
-			Eigen::VectorXd delta = solver.solve(vecToSolve);
+			Eigen::VectorXd delta = Eigen::VectorXd::Zero(n+m+n);
+			Eigen::SparseLU<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
+			solver.analyzePattern(matToSolve);
+			solver.factorize(matToSolve);
+			if (solver.info() == Eigen::Success) {
+				delta = solver.solve(vecToSolve);
+			} else {
+				Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> solver;
+				solver.compute(matToSolve);
+				delta = solver.solve(vecToSolve);
+			}
 
 			// DEBUG
 			//std::cout << std::endl;
@@ -3040,31 +3024,28 @@ public:
 			//std::cout << "delta = " << delta.transpose() << std::endl;
 			//std::cout << std::endl;
 
-			// Determine the best step-size TODO
+			// Determine the best step-size for x
 			double alphaX = 1.0;
-			bool nonZeroAlpha = false;
+			bool nonZeroAlphaX = false;
 			for (int j=0; j<1000; j++) {
 				Eigen::VectorXd xMod = x + alphaX*delta.segment(0,n);
-				//Eigen::VectorXd sMod = s + alphaS*delta.segment(n+m,n);
 				bool allPositive = true;
 				for (int k=0; k<n; k++) {
-					//if (xMod[k] < 0 || sMod[k] < 0) {
-					//if (xMod[k] < 0 || sMod[k] < 0 || xMod[k] > 1) {
 					if (xMod[k] < 0) {
 						allPositive = false;
 						break;
 					}
 				}
 				if (allPositive) {
-				//if (allPositive && (A*x-b).norm() < 1e-5) {
-				//if ((A*x-b).norm() < 1e-5) {
-					nonZeroAlpha = true;
+					nonZeroAlphaX = true;
 					break;
 				}
 				alphaX *= 0.95;
 			}
 
+			// Determine the best step-size for s
 			double alphaS = 1.0;
+			bool nonZeroAlphaS = false;
 			for (int j=0; j<1000; j++) {
 				Eigen::VectorXd sMod = s + alphaS*delta.segment(n+m,n);
 				bool allPositive = true;
@@ -3075,7 +3056,7 @@ public:
 					}
 				}
 				if (allPositive) {
-				//if (allPositive && (A.transpose()*lambda-c+sMod).norm() < 1e-5) {
+					nonZeroAlphaS = true;
 					break;
 				}
 				alphaS *= 0.95;
@@ -3093,29 +3074,28 @@ public:
 				std::cout << std::setw(11) << "-" << " | ";
 				std::cout << std::setw(11) << "-" << " | ";
 			}
-			if (nonZeroAlpha) {
+			if (nonZeroAlphaX) {
 				std::cout << std::setw(11) << alphaX << " | ";
 			} else {
 				std::cout << std::setw(11) << "-" << " | ";
 			}
 			std::cout << std::setw(11) << mu << " | ";
-			std::cout << std::setw(11) << vecToSolve.norm();
+			std::cout << std::setw(11) << alphaS;
 			std::cout << std::endl;
 
 			// If we couldn't find a good step-size, try a higher mu
-			if (!nonZeroAlpha) {
+			if (!nonZeroAlphaX || !nonZeroAlphaS) {
 				mu /= rho;
 				continue;
 			}
 
 			// Apply the update
 			x += alphaX*delta.segment(0, n);
-			lambda += alphaX*delta.segment(n, m);
+			lambda += alphaS*delta.segment(n, m);
 			s += alphaS*delta.segment(n+m, n);
 			stepTaken = true;
 
 			// Update the barrier parameter if we've done all we can
-			// TODO needed?
 			if (vecToSolve.segment(n+m, n).norm() < 100000) {
 				mu *= rho;
 			}
@@ -3126,6 +3106,8 @@ public:
 			}
 
 			// See which new constraint is most violated TODO
+			std::cout << x.transpose() << std::endl;
+			std::cout << monoms << std::endl;
 
 			// Add this constraint TODO
 
