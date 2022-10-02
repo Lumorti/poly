@@ -2885,7 +2885,7 @@ public:
 
 		//std::cout << objLinear.maxVariables << std::endl;
 
-		// All vars should be at most one TODO remove
+		// All vars should be at most one 
 		for (int i=0; i<monoms.size(); i++) {
 			Polynomial<polyType> newCon(objLinear.maxVariables);
 			newCon.addTerm(-1, {i});
@@ -2963,7 +2963,7 @@ public:
 		//sol.compute(A);
 		//Eigen::VectorXd x = sol.solve(b);
 
-		// TODO now this
+		// TODO using this
 		// https://faculty.ksu.edu.sa/sites/default/files/
 		// Interior%20Point%20Methods%20and%20Linear%20Programming.pdf
 
@@ -3105,9 +3105,10 @@ public:
 				break;
 			}
 
-			// See which new constraint is most violated TODO
-			std::cout << x.transpose() << std::endl;
-			std::cout << monoms << std::endl;
+			// Determine which variable most needs new constraints TODO
+			std::cout << "deltax = " << delta.segment(0, n).transpose() << std::endl;
+			std::cout << "x = " << x.transpose() << std::endl;
+			std::cout << "monoms = " << monoms << std::endl;
 
 			// Add this constraint TODO
 
