@@ -2900,6 +2900,7 @@ public:
 			newCon.addTerm(-1, {});
 			conZeroLinear.push_back(newCon);
 			monoms.push_back("s");
+			monomsAsPolys.push_back(Polynomial<polyType>(objLinear.maxVariables));
 		}
 
 		// Useful quantities
@@ -2963,7 +2964,7 @@ public:
 		//sol.compute(A);
 		//Eigen::VectorXd x = sol.solve(b);
 
-		// TODO using this
+		// Using this:
 		// https://faculty.ksu.edu.sa/sites/default/files/
 		// Interior%20Point%20Methods%20and%20Linear%20Programming.pdf
 
@@ -3105,11 +3106,44 @@ public:
 				break;
 			}
 
+			// Get the list of rounded values
+			std::vector<polyType> principleValues(obj.maxVariables);
+			int numDone = 0;
+			for (int i=0; i<monoms.size(); i++) {
+				if (monoms[i].size() == digitsPerInd && monoms[i] != "s") {
+					if (x[i] >= 0) {
+						linVals[std::stoi(monoms[i])] = 1;
+					} else {
+						linVals[std::stoi(monoms[i])] = -1;
+					}
+					numDone++;
+					if (numDone > maxVariables) {
+						break;
+					}
+				}
+			}
+
+			// Get the probabilities based on the error for each monomial
+			std::vector<polyType> monomResults(monoms.size());
+			std::vector<double> monomProbs(monoms.size(), 0);
+			double totalProb = 0;
+			double totalError = 0;
+			for (int i=0; i<monoms.size(); i++) {
+				if (monoms[i] != "s" && i < x.size()) {
+					monomResults[i] = std::abs(x[i] - monomsAsPolys[i].evalFast(principleValues));
+				}
+				monomProbs[i] = std::pow(1 + monomResults[i], 2); // DEBUG
+				totalProb += monomProbs[i];
+				totalError += monomResults[i];
+			}
+
 			// Determine which variable most needs new constraints TODO
 			std::cout << "deltax = " << delta.segment(0, n).transpose() << std::endl;
 			std::cout << "x = " << x.transpose() << std::endl;
 			std::cout << "monoms = " << monoms << std::endl;
-
+			std::cout << "monoms = " << monomResults << std::endl;
+			std::cout << "monoms = " << monomProbs << std::endl;
+			
 			// Add this constraint TODO
 
 		}
