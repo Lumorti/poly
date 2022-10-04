@@ -3112,9 +3112,9 @@ public:
 			for (int i=0; i<monoms.size(); i++) {
 				if (monoms[i].size() == digitsPerInd && monoms[i] != "s") {
 					if (x[i] >= 0) {
-						linVals[std::stoi(monoms[i])] = 1;
+						principleValues[std::stoi(monoms[i])] = 1;
 					} else {
-						linVals[std::stoi(monoms[i])] = -1;
+						principleValues[std::stoi(monoms[i])] = -1;
 					}
 					numDone++;
 					if (numDone > maxVariables) {
@@ -3124,28 +3124,48 @@ public:
 			}
 
 			// Get the probabilities based on the error for each monomial
-			std::vector<polyType> monomResults(monoms.size());
+			std::vector<polyType> monomErrors(monoms.size(), 0);
 			std::vector<double> monomProbs(monoms.size(), 0);
 			double totalProb = 0;
 			double totalError = 0;
 			for (int i=0; i<monoms.size(); i++) {
 				if (monoms[i] != "s" && i < x.size()) {
-					monomResults[i] = std::abs(x[i] - monomsAsPolys[i].evalFast(principleValues));
+					monomErrors[i] = std::abs(x[i] - monomsAsPolys[i].evalFast(principleValues));
+					monomProbs[i] = std::pow(monomErrors[i], 2) + std::pow(delta[i], 2); // DEBUG
+					totalProb += monomProbs[i];
+					totalError += monomErrors[i];
 				}
-				monomProbs[i] = std::pow(1 + monomResults[i], 2); // DEBUG
-				totalProb += monomProbs[i];
-				totalError += monomResults[i];
 			}
 
-			// Determine which variable most needs new constraints TODO
-			std::cout << "deltax = " << delta.segment(0, n).transpose() << std::endl;
-			std::cout << "x = " << x.transpose() << std::endl;
-			std::cout << "monoms = " << monoms << std::endl;
-			std::cout << "monoms = " << monomResults << std::endl;
-			std::cout << "monoms = " << monomProbs << std::endl;
-			
+			// Readjust the probability distribution
+			for (int i=0; i<monoms.size(); i++) {
+				monomProbs[i] = monomProbs[i] / totalProb;
+			}
+
+			// Pick a variable according to this
+			double probToReach = (double(rand())/(RAND_MAX));
+			int monomInd = -1;
+			double probSoFar = 0;
+			for (int k=0; k<monoms.size(); k++) {
+				probSoFar += monomProbs[k];
+				if (probSoFar > probToReach) {
+					monomInd = k;
+					break;
+				}
+			}
+
+			// Find a new constraint using as many vars as possible TODO
+
 			// Add this constraint TODO
 
+			std::cout << "x = " << x.transpose() << std::endl;
+			std::cout << "monoms = " << monoms << std::endl;
+			std::cout << "delta = " << delta.segment(0, n).transpose() << std::endl;
+			std::cout << "error = " << monomErrors << std::endl;
+			std::cout << "probs = " << monomProbs << std::endl;
+			std::cout << "chose = " << monoms[monomInd] << std::endl;
+			std::cout << std::endl;
+			
 		}
 		std::cout << "----------------------------------------------------------------" << std::endl;
 
