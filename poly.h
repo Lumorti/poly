@@ -3154,9 +3154,15 @@ public:
 				}
 			}
 
-			// Find a new constraint using as many vars as possible TODO
+			// Find potential new constraints TODO
+			std::vector<std::vector<double>> newConsA;
+			std::vector<double> newConsb;
+			for (int k=0; k<monoms.size(); k++) {
+			}
 
-			// Add this constraint TODO
+			// Test each of these TODO
+
+			// Add the most constrictive constraint TODO
 
 			std::cout << "x = " << x.transpose() << std::endl;
 			std::cout << "monoms = " << monoms << std::endl;

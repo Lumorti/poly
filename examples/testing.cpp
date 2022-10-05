@@ -35,6 +35,6 @@ int main(int argc, char ** argv) {
 	PolynomialBinaryProblem<double> prob(obj, consZero, consPositive);
 	auto sol = prob.bruteForce();
 	std::cout << "brute force = " << sol.first << " " << sol.second << std::endl;
-	prob.lowerBoundNew(1000);
+	prob.lowerBoundNew(3);
 
 }
