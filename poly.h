@@ -2813,6 +2813,46 @@ public:
 
 	}
 
+	// Get a constraint from a monom list and a list of monom polys
+	void addCons(std::vector<std::tuple<std::vector<int>, std::vector<double>, std::vector<std::string>>>& newCons, std::vector<std::string> monoms, std::vector<Polynomial<polyType>> asPolys) {
+
+		// Find these polynomials
+		std::vector<std::string> newMonoms;
+		std::vector<int> monomInds(asPolys.size(), -1000000);
+		for (int i=0; i<asPolys.size(); i++) {
+			std::string mon = asPolys[i].getMonomials()[0];
+			auto loc = std::find(monoms.begin(), monoms.end(), mon);
+			if (loc != monoms.end()) {
+				monomInds[i] = loc - monoms.begin();
+			} else {
+				newMonoms.push_back(mon);
+				monomInds[i] = -newMonoms.size();
+			}
+		}
+
+		// Calculate the level
+		int L = std::log2(asPolys.size()+1);
+
+		std::cout << asPolys << std::endl;
+		std::cout << monomInds << std::endl;
+		std::cout << newMonoms << std::endl;
+		std::cout << L << std::endl;
+
+		// Add each con TODO
+		for (int i=0; i<asPolys.size()+1; i++) {
+
+			std::vector<int> newInds;
+			std::vector<double> newVals;
+
+			std::cout << newInds << std::endl;
+			std::cout << newVals << std::endl;
+
+		}
+
+		std::cout << std::endl;
+
+	}
+
 	// Get a lower bound with the new method
 	polyType lowerBoundNew(int maxIters=1000000000, int matLevel=2, bool verbose=false, bool elimAtEnd=false, int matsPerIter=20) {
 
@@ -3154,13 +3194,29 @@ public:
 				}
 			}
 
-			// Find potential new constraints TODO
-			std::vector<std::vector<double>> newConsA;
-			std::vector<double> newConsb;
+			// Find potential new constraints
+			std::vector<std::tuple<std::vector<int>, std::vector<double>, std::vector<std::string>>> newCons;
 			for (int k=0; k<monoms.size(); k++) {
+				if (monoms[k] != "s" && monoms[k] != monoms[monomInd]) {
+				
+					// Consider this dividing the main
+					auto div = monomsAsPolys[monomInd] / monomsAsPolys[k];
+					if (!div.isNaN) {
+						addCons(newCons, monoms, {monomsAsPolys[monomInd], monomsAsPolys[k], div});
+					}
+
+					// Consider this multiplying the main
+					auto mul = monomsAsPolys[monomInd] * monomsAsPolys[k];
+					addCons(newCons, monoms, {mul, monomsAsPolys[monomInd], monomsAsPolys[k]});
+
+				}
 			}
 
+			// Maybe consider combining L2 -> L3 etc. TODO
+
 			// Test each of these TODO
+			for (int k=0; k<newCons.size(); k++) {
+			}
 
 			// Add the most constrictive constraint TODO
 
