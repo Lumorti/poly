@@ -707,25 +707,6 @@ public:
 		return maxDegree;
 	}
 
-	// Return the max power of any variable in any monomial
-	int getDegreePerVariable() const {
-		int maxDegree = 0;
-		for (auto const &pair: coeffs) {
-			int currentDegree = 0;
-			std::string currentVar = "";
-			for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
-				if (pair.first.substr(i, digitsPerInd) == currentVar) {
-					currentDegree += 1;
-				} else {
-					currentDegree = 1;
-					currentVar = pair.first.substr(i, digitsPerInd);
-				}
-				maxDegree = std::max(maxDegree, currentDegree);
-			}
-		}
-		return maxDegree;
-	}
-
 	// Check if the polynomial can be represented as a sum-of-squares
 	bool isSOS() {
 
@@ -2835,30 +2816,25 @@ public:
 	// Get a constraint from a monom list and a list of monom polys
 	void addCons(std::vector<std::tuple<std::vector<int>, std::vector<double>, std::vector<std::string>>>& newCons, std::vector<std::string> monoms, std::vector<Polynomial<polyType>> asPolys) {
 
+		// Find these polynomials
+		std::vector<std::string> newMonoms;
+		std::vector<int> monomInds(asPolys.size(), -1000000);
+		for (int i=0; i<asPolys.size(); i++) {
+			std::string mon = asPolys[i].getMonomials()[0];
+			auto loc = std::find(monoms.begin(), monoms.end(), mon);
+			if (loc != monoms.end()) {
+				monomInds[i] = loc - monoms.begin();
+			} else {
+				newMonoms.push_back(mon);
+				monomInds[i] = -(newMonoms.size()+1);
+			}
+		}
+
 		// Calculate the level
-		int L = asPolys.size()-1;
+		int L = std::log2(asPolys.size()+1);
 
 		// For now we do everything specific to levels
 		if (L == 2) {
-
-			// Find these polynomials
-			std::vector<std::string> newMonoms;
-			std::vector<int> monomInds(asPolys.size(), -1000000);
-			for (int i=0; i<asPolys.size(); i++) {
-				std::string mon = asPolys[i].getMonomials()[0];
-				auto loc = std::find(monoms.begin(), monoms.end(), mon);
-				if (loc != monoms.end()) {
-					monomInds[i] = loc - monoms.begin();
-				} else {
-					auto locNew = std::find(newMonoms.begin(), newMonoms.end(), mon);
-					if (locNew != newMonoms.end()) {
-						monomInds[i] = -2 -(locNew - newMonoms.begin());
-					} else {
-						newMonoms.push_back(mon);
-						monomInds[i] = -(newMonoms.size()+1);
-					}
-				}
-			}
 
 			// In this case the -1 index means the constant 1
 			std::vector<int> newInds;
@@ -2871,7 +2847,7 @@ public:
 			for (int i=0; i<2; i++) {
 				for (int j=0; j<2; j++) {
 
-				    // con(xy,y,x) = 2x(-1)^i + 2y(-1)^j + 2xy(-1)^(i+j) + (1-sumofcoeffs)
+				    // con(xy,y,x) = 2x(-1)^i + 2y(-1)^j + 2xy(-1)(i+j) + (1-sumofcoeffs)
 					std::vector<double> newVals;
 					newVals.push_back(1-std::pow(-1, i)-std::pow(-1, j)-std::pow(-1, i+j));
 					newVals.push_back(2*std::pow(-1, i));
@@ -2879,65 +2855,6 @@ public:
 					newVals.push_back(2*std::pow(-1, i+j));
 					newCons.push_back(std::make_tuple(newInds, newVals, newMonoms));
 
-				}
-			}
-
-		// For level 3 TODO
-		} else if (L == 3) {
-
-			// Multiply to get the mixed
-			asPolys.push_back(asPolys[1]*asPolys[2]);
-			asPolys.push_back(asPolys[1]*asPolys[3]);
-			asPolys.push_back(asPolys[2]*asPolys[3]);
-
-			// Find these polynomials
-			std::vector<std::string> newMonoms;
-			std::vector<int> monomInds(asPolys.size(), -1000000);
-			for (int i=0; i<asPolys.size(); i++) {
-				std::string mon = asPolys[i].getMonomials()[0];
-				auto loc = std::find(monoms.begin(), monoms.end(), mon);
-				if (loc != monoms.end()) {
-					monomInds[i] = loc - monoms.begin();
-				} else {
-					auto locNew = std::find(newMonoms.begin(), newMonoms.end(), mon);
-					if (locNew != newMonoms.end()) {
-						monomInds[i] = -2 -(locNew - newMonoms.begin());
-					} else {
-						newMonoms.push_back(mon);
-						monomInds[i] = -(newMonoms.size()+1);
-					}
-				}
-			}
-
-			// In this case the -1 index means the constant 1
-			std::vector<int> newInds;
-			newInds.push_back(-1);
-			newInds.push_back(monomInds[1]);
-			newInds.push_back(monomInds[2]);
-			newInds.push_back(monomInds[3]);
-			newInds.push_back(monomInds[4]);
-			newInds.push_back(monomInds[5]);
-			newInds.push_back(monomInds[6]);
-			newInds.push_back(monomInds[0]);
-
-			// Add each con
-			for (int i=0; i<2; i++) {
-				for (int j=0; j<2; j++) {
-					for (int k=0; k<2; k++) {
-
-						// 2x(-1)^i + ... + 2xy(-1)^(i+j) ... + 2xyz(-1)^(i+j+k) + (1-sumofcoeffs)
-						std::vector<double> newVals;
-						newVals.push_back(1-std::pow(-1, i)-std::pow(-1, j)-std::pow(-1, k)-std::pow(-1, i+j)-std::pow(-1, i+k)-std::pow(-1, j+k)-std::pow(-1, i+j+k));
-						newVals.push_back(2*std::pow(-1, i));
-						newVals.push_back(2*std::pow(-1, j));
-						newVals.push_back(2*std::pow(-1, k));
-						newVals.push_back(2*std::pow(-1, i+j));
-						newVals.push_back(2*std::pow(-1, i+k));
-						newVals.push_back(2*std::pow(-1, j+k));
-						newVals.push_back(2*std::pow(-1, i+j+k));
-						newCons.push_back(std::make_tuple(newInds, newVals, newMonoms));
-
-					}
 				}
 			}
 
@@ -3219,6 +3136,11 @@ public:
 				mu *= rho;
 			}
 
+			// Stop if the primal and dual match
+			if (i >= 2 && std::abs(primal-dual) < 1e-4 && vecToSolve.norm() < 1e-5) {
+				break;
+			}
+
 			// Get the list of rounded values
 			std::vector<polyType> principleValues(obj.maxVariables);
 			int numDone = 0;
@@ -3255,11 +3177,6 @@ public:
 				monomProbs[i] = monomProbs[i] / totalProb;
 			}
 
-			// Stop if the primal and dual match
-			if (i >= 2 && std::abs(primal-dual) < 1e-4 && vecToSolve.norm() < 1e-5) {
-				break;
-			}
-
 			// Pick a variable according to this
 			double probToReach = (double(rand())/(RAND_MAX));
 			int monomInd = -1;
@@ -3271,54 +3188,27 @@ public:
 					break;
 				}
 			}
+			monomInd = 0;
 
-			// L2 constraints
+			// Find potential new constraints
 			std::vector<std::tuple<std::vector<int>, std::vector<double>, std::vector<std::string>>> newCons;
 			for (int k=0; k<monoms.size(); k++) {
 				if (monoms[k] != "s" && monoms[k] != monoms[monomInd]) {
 				
-					// Division
+					// Consider this dividing the main
 					auto div = monomsAsPolys[monomInd] / monomsAsPolys[k];
 					if (!div.isNaN) {
-						//addCons(newCons, monoms, {monomsAsPolys[monomInd], monomsAsPolys[k], div});
-
-						// L3 constraints TODO
-						for (int l=0; l<monoms.size(); l++) {
-							if (l != k && monoms[l] != "s" && l != monomInd) {
-
-								// Multiplication
-								auto newBig = monomsAsPolys[monomInd] * monomsAsPolys[l];
-								if (newBig.getDegreePerVariable() == 1) {
-									addCons(newCons, monoms, {newBig, monomsAsPolys[k], div, monomsAsPolys[l]});
-								}
-
-							}
-						}
-
+						addCons(newCons, monoms, {monomsAsPolys[monomInd], monomsAsPolys[k], div});
 					}
 
-					// Multiplication
+					// Consider this multiplying the main
 					auto mul = monomsAsPolys[monomInd] * monomsAsPolys[k];
-					if (mul.getDegreePerVariable() == 1) {
-						//addCons(newCons, monoms, {mul, monomsAsPolys[monomInd], monomsAsPolys[k]});
-
-						// L3 constraints TODO
-						for (int l=0; l<monoms.size(); l++) {
-							if (l != k && monoms[l] != "s" && l != monomInd) {
-
-								// Multiplication
-								auto newBig = mul * monomsAsPolys[l];
-								if (newBig.getDegreePerVariable() == 1) {
-									addCons(newCons, monoms, {newBig, mul, monomsAsPolys[k], monomsAsPolys[l]});
-								}
-
-							}
-						}
-
-					}
+					addCons(newCons, monoms, {mul, monomsAsPolys[monomInd], monomsAsPolys[k]});
 
 				}
 			}
+
+			// Maybe consider combining L2 -> L3 etc. TODO
 
 			// Test each of these
 			double worstViol = 100000000;
@@ -3337,7 +3227,7 @@ public:
 					} else if (conInds[m] == -1) {
 						viol += conVals[m];
 					} else {
-						viol += 2;
+						viol += 0;
 					}
 				}
 
@@ -3348,31 +3238,21 @@ public:
 				}
 
 				// DEBUG
-				//std::cout << viol << std::endl;
-				//std::cout << conInds << std::endl;
-				//std::cout << conVals << std::endl;
-				//std::cout << std::get<2>(newCons[k]) << std::endl;
-				//std::cout << std::endl;
+				std::cout << viol << std::endl;
+				std::cout << conInds << std::endl;
+				std::cout << conVals << std::endl;
+				std::cout << std::get<2>(newCons[k]) << std::endl;
+				std::cout << std::endl;
 
 			}
-
-			// DEBUG
-			std::cout << "Ax-b = " << (A*x-b).transpose() << std::endl;
-			std::cout << "x = " << x.transpose() << std::endl;
-			std::cout << "monoms = " << monoms << std::endl;
-			std::cout << "delta = " << delta.segment(0, n).transpose() << std::endl;
-			std::cout << "error = " << monomErrors << std::endl;
-			std::cout << "probs = " << monomProbs << std::endl;
-			std::cout << "chose = " << monoms[monomInd] << std::endl;
-			std::cout << std::endl;
 
 			if (worstViol > 0) {
 				std::cout << "no new constraints" << std::endl;
-				continue;
+				break;
 			}
 
 			// TODO
-			if (i < 10000) {
+			if (i < 4) {
 
 				// Get the most constrictive constraint
 				std::vector<int> finalConInds = std::get<0>(newCons[worstInd]);
@@ -3380,7 +3260,6 @@ public:
 				std::vector<std::string> finalConMonoms = std::get<2>(newCons[worstInd]);
 
 				// DEBUG
-				std::cout << "worst con = " << std::endl;
 				std::cout << worstViol << std::endl;
 				std::cout << finalConInds << std::endl;
 				std::cout << finalConVals << std::endl;
@@ -3418,6 +3297,8 @@ public:
 				lambda.tail(m-oldm) = Eigen::VectorXd::Zero(m-oldm);
 				c.tail(n-oldn) = Eigen::VectorXd::Zero(n-oldn);
 
+				std::cout << "here" << std::endl;
+
 				// Add the relevant values TODO
 				for (int k=0; k<finalConInds.size(); k++) {
 					if (finalConInds[k] >= 0) {
@@ -3425,14 +3306,26 @@ public:
 					} else if (finalConInds[k] == -1) {
 						b[m-1] = -finalConVals[k];
 					} else {
-						tripletsA.push_back(Eigen::Triplet<double>(m-1, n+finalConInds[k], finalConVals[k]));
+						tripletsA.push_back(Eigen::Triplet<double>(m-1, n+finalConVals[k], finalConVals[k]));
 					}
 				}
 				tripletsA.push_back(Eigen::Triplet<double>(m-1, n-1, -1));
 				A.setFromTriplets(tripletsA.begin(), tripletsA.end());
 
+				std::cout << Eigen::MatrixXd(A) << std::endl;
+				std::cout << b.transpose() << std::endl;
+
 			}
 
+			std::cout << "Ax-b = " << (A*x-b).transpose() << std::endl;
+			std::cout << "x = " << x.transpose() << std::endl;
+			std::cout << "monoms = " << monoms << std::endl;
+			std::cout << "delta = " << delta.segment(0, n).transpose() << std::endl;
+			std::cout << "error = " << monomErrors << std::endl;
+			std::cout << "probs = " << monomProbs << std::endl;
+			std::cout << "chose = " << monoms[monomInd] << std::endl;
+			std::cout << std::endl;
+			
 		}
 		std::cout << "----------------------------------------------------------------" << std::endl;
 

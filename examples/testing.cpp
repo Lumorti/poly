@@ -13,11 +13,22 @@ int main(int argc, char ** argv) {
 	//}
 
 	// Ising model system
-	int n = 3;
+	int n = 5;
 	Polynomial<double> obj(n);
 	obj.addTerm(1, {0,1});
+	obj.addTerm(1, {0,2});
+	obj.addTerm(1, {0,3});
+	obj.addTerm(1, {0,4});
 	obj.addTerm(1, {1,2});
-	obj.addTerm(1, {2,0});
+	obj.addTerm(1, {1,3});
+	obj.addTerm(1, {1,4});
+	obj.addTerm(1, {1,5});
+	obj.addTerm(1, {2,3});
+	obj.addTerm(1, {2,4});
+	obj.addTerm(1, {2,5});
+	obj.addTerm(1, {3,4});
+	obj.addTerm(1, {3,5});
+	obj.addTerm(1, {4,5});
 
 	// Constraints
 	std::vector<Polynomial<double>> consPositive;
@@ -35,6 +46,6 @@ int main(int argc, char ** argv) {
 	PolynomialBinaryProblem<double> prob(obj, consZero, consPositive);
 	auto sol = prob.bruteForce();
 	std::cout << "brute force = " << sol.first << " " << sol.second << std::endl;
-	prob.lowerBoundNew(1);
+	prob.lowerBoundNew(100);
 
 }
