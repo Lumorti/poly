@@ -3,32 +3,26 @@
 // Standard cpp entry point 
 int main(int argc, char ** argv) {
 
-	// Generate a random objective
-	//int n = 3;
+	// Generate a random Ising
+	int n = 5;
 	//std::srand(time(0));
-	//Polynomial<double> obj(n);
-	//for (int i=0; i<n; i++) {
-		//double r = 10.0*(float(rand()) / RAND_MAX) - 5.0;
-		//obj.addTerm(r, {i});
-	//}
+	std::srand(7);
+	Polynomial<double> obj(n);
+	for (int i=0; i<n; i++) {
+		for (int j=i+1; j<n; j++) {
+			double r = 2.0*(float(rand()) / RAND_MAX) - 1.0;
+			obj.addTerm(r, {i,j});
+		}
+	}
+	std::cout << "obj = " << obj << std::endl;
 
 	// Ising model system
-	int n = 5;
-	Polynomial<double> obj(n);
-	obj.addTerm(1, {0,1});
-	obj.addTerm(1, {0,2});
-	obj.addTerm(1, {0,3});
-	obj.addTerm(1, {0,4});
-	obj.addTerm(1, {1,2});
-	obj.addTerm(1, {1,3});
-	obj.addTerm(1, {1,4});
-	obj.addTerm(1, {1,5});
-	obj.addTerm(1, {2,3});
-	obj.addTerm(1, {2,4});
-	obj.addTerm(1, {2,5});
-	obj.addTerm(1, {3,4});
-	obj.addTerm(1, {3,5});
-	obj.addTerm(1, {4,5});
+	//int n = 5;
+	//Polynomial<double> obj(n);
+	//obj.addTerm(1, {0,1});
+	//obj.addTerm(1, {0,2});
+	//obj.addTerm(1, {1,2});
+	//obj.addTerm(1, {2,3});
 
 	// Constraints
 	std::vector<Polynomial<double>> consPositive;
@@ -46,6 +40,6 @@ int main(int argc, char ** argv) {
 	PolynomialBinaryProblem<double> prob(obj, consZero, consPositive);
 	auto sol = prob.bruteForce();
 	std::cout << "brute force = " << sol.first << " " << sol.second << std::endl;
-	prob.lowerBoundNew(100);
+	prob.lowerBound2(10);
 
 }

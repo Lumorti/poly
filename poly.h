@@ -183,7 +183,14 @@ public:
 		addTerm(coeff, inds);
 	}
 
-	// Constructor with a single term
+	// Constructor with a single constant term
+	Polynomial(int maxVariables_, polyType coeff) {
+		maxVariables = maxVariables_;
+		digitsPerInd = std::ceil(std::log10(maxVariables+1));
+		addTerm(coeff);
+	}
+
+	// Constructor with a single term from string index with coeff 1
 	Polynomial(int maxVariables_, std::string inds) {
 		maxVariables = maxVariables_;
 		digitsPerInd = std::ceil(std::log10(maxVariables+1));
@@ -192,6 +199,11 @@ public:
 
 	// Change the digits per index
 	Polynomial changeMaxVariables(int newMaxVariables) {
+
+		// If no change, do nothing
+		if (newMaxVariables == maxVariables) {
+			return *this;
+		}
 
 		// For each coefficient
 		Polynomial newPoly(newMaxVariables);
@@ -765,6 +777,40 @@ public:
 		} else {
 			return true;
 		}
+
+	}
+
+	// Remove doubles from indices, such that given 0012 -> 12, 233 -> 2
+	Polynomial removeDuplicates() {
+
+		// For each element in this polynomial
+		Polynomial newPoly(maxVariables);
+		for (auto const &pair: coeffs) {
+
+			// Remove any instances of this index
+			std::string newKey = "";
+			polyType newVal = pair.second;
+			for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
+				if (i < pair.first.size() - digitsPerInd && pair.first.substr(i, digitsPerInd) == pair.first.substr(i+digitsPerInd, digitsPerInd)) {
+					i += digitsPerInd;
+				} else {
+					newKey += pair.first.substr(i, digitsPerInd); 
+				}
+			}
+
+			// Then add or create this new term
+			if (newPoly.coeffs.find(newKey) != newPoly.coeffs.end()) {
+				newPoly.coeffs[newKey] += newVal;
+				if (std::abs(newPoly.coeffs[newKey]) < zeroTol) {
+					newPoly.coeffs.erase(newKey);
+				}
+			} else {
+				newPoly.coeffs[newKey] = newVal;
+			}
+
+		}
+
+		return newPoly;
 
 	}
 
@@ -2089,11 +2135,10 @@ public:
 	}
 
 	// Given a linearized objective, constraints and a list of SD matrices, form the SDP and solve
-	std::pair<polyType,std::vector<polyType>> solveLinearizedSDP(Polynomial<polyType>& objLinear, std::vector<Polynomial<polyType>>& conZeroLinear, std::vector<Polynomial<polyType>> conPositiveLinear, std::vector<std::string>& monoms, std::vector<std::vector<int>>& monomPairs) {
+	std::pair<polyType,std::vector<polyType>> solveLinear(Polynomial<polyType>& objLinear, std::vector<Polynomial<polyType>>& conZeroLinear, std::vector<Polynomial<polyType>> conPositiveLinear, std::vector<std::string>& monoms, std::vector<std::vector<int>>& monomPairs) {
 
 		// Set some vars
 		int oneIndex = 0;
-		int matPSDWidth = 4;
 		int varsTotal = monoms.size();
 
 		// Create the PSD matrices from this list
@@ -2703,7 +2748,7 @@ public:
 		}
 		
 		// Initial solve
-		auto prevRes = solveLinearizedSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomPairs);
+		auto prevRes = solveLinear(objLinear, conZeroLinear, conPositiveLinear, monoms, monomPairs);
 
 		// Keep iterating
 		std::pair<polyType,std::vector<polyType>> bestVal = {-100000000, {}};
@@ -2744,7 +2789,7 @@ public:
 			}
 
 			// Solve this SDP
-			auto res = solveLinearizedSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomPairs);
+			auto res = solveLinear(objLinear, conZeroLinear, conPositiveLinear, monoms, monomPairs);
 			prevRes = res;
 
 			// Output
@@ -2779,7 +2824,7 @@ public:
 			for (int k=0; k<monomPairs.size(); k++) {
 				auto monomPairsCopy = monomPairs;
 				monomPairsCopy.erase(monomPairsCopy.begin()+k);
-				auto tempRes = solveLinearizedSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomPairsCopy);
+				auto tempRes = solveLinear(objLinear, conZeroLinear, conPositiveLinear, monoms, monomPairsCopy);
 				std::vector<int> tempPair = getBestPair(monoms, monomsAsPolys, monomPairsCopy, tempRes, matLevel);
 				std::cout << k << " / " << monomPairs.size() << " = " << tempRes.first << std::endl;
 				if (tempPair[0] == -2) {
@@ -2787,7 +2832,7 @@ public:
 					k--;
 				}
 			}
-			auto finalRes = solveLinearizedSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomPairs);
+			auto finalRes = solveLinear(objLinear, conZeroLinear, conPositiveLinear, monoms, monomPairs);
 			int totalSize = 0;
 			for (int k=0; k<monomPairs.size(); k++) {
 				totalSize += 1+monomPairs[k].size();
@@ -2882,7 +2927,7 @@ public:
 				}
 			}
 
-		// For level 3 TODO
+		// For level 3
 		} else if (L == 3) {
 
 			// Multiply to get the mixed
@@ -3282,7 +3327,7 @@ public:
 					if (!div.isNaN) {
 						//addCons(newCons, monoms, {monomsAsPolys[monomInd], monomsAsPolys[k], div});
 
-						// L3 constraints TODO
+						// L3 constraints
 						for (int l=0; l<monoms.size(); l++) {
 							if (l != k && monoms[l] != "s" && l != monomInd) {
 
@@ -3302,7 +3347,7 @@ public:
 					if (mul.getDegreePerVariable() == 1) {
 						//addCons(newCons, monoms, {mul, monomsAsPolys[monomInd], monomsAsPolys[k]});
 
-						// L3 constraints TODO
+						// L3 constraints
 						for (int l=0; l<monoms.size(); l++) {
 							if (l != k && monoms[l] != "s" && l != monomInd) {
 
@@ -3371,7 +3416,7 @@ public:
 				continue;
 			}
 
-			// TODO
+			// Keep iterating
 			if (i < 10000) {
 
 				// Get the most constrictive constraint
@@ -3418,7 +3463,7 @@ public:
 				lambda.tail(m-oldm) = Eigen::VectorXd::Zero(m-oldm);
 				c.tail(n-oldn) = Eigen::VectorXd::Zero(n-oldn);
 
-				// Add the relevant values TODO
+				// Add the relevant values 
 				for (int k=0; k<finalConInds.size(); k++) {
 					if (finalConInds[k] >= 0) {
 						tripletsA.push_back(Eigen::Triplet<double>(m-1, finalConInds[k], finalConVals[k]));
@@ -3440,6 +3485,244 @@ public:
 
 	}
 
+	// Given the data from the previous run, guess the next best combo of monoms
+	Polynomial<polyType> getNewCon(std::vector<std::string>& monoms, std::vector<Polynomial<polyType>>& monomsAsPolys, std::pair<polyType,std::vector<polyType>> prevRes) {
+
+		// Get the list of linear monoms and their values
+		//std::vector<polyType> linVals(maxVariables);
+		//int numDone = 0;
+		//for (int i=1; i<monoms.size(); i++) {
+			//if (monoms[i].size() == digitsPerInd) {
+				//if (prevRes.second[i] >= 0) {
+					//linVals[std::stoi(monoms[i])] = 1;
+				//} else {
+					//linVals[std::stoi(monoms[i])] = -1;
+				//}
+				//numDone++;
+				//if (numDone > maxVariables) {
+					//break;
+				//}
+			//}
+		//}
+
+		// Get the probabilities based on the error for each monomial
+		//std::vector<polyType> monomResults(monoms.size());
+		//std::vector<double> monomProbs(monoms.size());
+		//double totalProb = 0;
+		//double totalError = 0;
+		//for (int i=1; i<monoms.size(); i++) {
+			//if (i < prevRes.second.size()) {
+				//monomResults[i] = std::abs(prevRes.second[i] - monomsAsPolys[i].evalFast(linVals));
+			//} else {
+				//monomResults[i] = 0;
+			//}
+			//monomProbs[i] = std::pow(1+monomResults[i],2); // DEBUG
+			//totalProb += monomProbs[i];
+			//totalError += monomResults[i];
+		//}
+
+		// Readjust the probability distribution DEBUG
+		//for (int i=0; i<monoms.size(); i++) {
+			//monomProbs[i] = monomProbs[i] / totalProb;
+		//}
+
+		// Stop if we've found a valid solution
+		//if (totalError < 1e-5) {
+			//return {};
+		//}
+
+		// Get the index permutation based on the size
+		//std::vector<int> orderedIndices(monoms.size(), 0);
+		//for (int i=0; i<orderedIndices.size(); i++) {
+			//orderedIndices[i] = i;
+		//}
+		//std::sort(orderedIndices.begin(), orderedIndices.end(),
+			//[&](const int& a, const int& b) {
+				//return (monoms[a].size() > monoms[b].size());
+			//}
+		//);
+
+		// If we're using the second level
+		int matLevel = 2;
+		if (matLevel == 2) {
+
+			// Consider everything multiplied by everything TODO
+			for (int i=1; i<monoms.size(); i++) {
+				for (int j=i+1; j<monoms.size(); j++) {
+
+					// Multiply these two polys
+					Polynomial<polyType> multi = (monomsAsPolys[i] * monomsAsPolys[j]).removeDuplicates();
+
+					// Find these indices
+					std::vector<int> monomIndices = {-1, i, j};
+					auto loc = std::find(monoms.begin(), monoms.end(), multi.getMonomials()[0]);
+					if (loc != monoms.end()) {
+						monomIndices[0] = loc - monoms.begin();
+					}
+
+					// The various coefficients of the resulting linear cons
+					std::vector<std::vector<int>> levelCoeffs = {
+						{1, 1, 1}, 
+						{1, -1, -1}, 
+						{-1, 1, -1}, 
+						{-1, -1, 1}, 
+					};
+
+					// Check each of these linear cons to see which is violated
+					for (int k=0; k<levelCoeffs.size(); k++) {
+						int sumValue = 1;
+						Polynomial<polyType> sumPoly(maxVariables, 1);
+						for (int l=0; l<levelCoeffs[k].size(); l++) {
+							if (monomIndices[l] >= 0) { 
+								sumValue += levelCoeffs[k][l]*prevRes.second[monomIndices[l]];
+								sumPoly += levelCoeffs[k][l]*monomsAsPolys[monomIndices[l]];
+							} else {
+								sumValue += 1;
+								sumPoly += levelCoeffs[k][l]*multi;
+							}
+						}
+						// TODO sometimes weird
+						if (sumValue < 0) {
+							std::cout << std::endl << "found " << sumPoly << " with viol " << sumValue << std::endl; // DEBUG3
+							std::cout << monomIndices << std::endl;
+							std::cout << prevRes.second << std::endl;
+							return sumPoly;
+						}
+					}
+
+				}
+			}
+
+		// If we're using the third level
+		} else if (matLevel == 3) {
+
+		}
+
+		// This should never happen
+		return Polynomial<polyType>();
+
+	}
+	
+	// Get a lower bound
+	polyType lowerBound2(int maxIters=100000000, int matLevel=2, bool verbose=false, bool elimAtEnd=false, int matsPerIter=20) {
+
+		// Get the monomial list and sort it
+		std::vector<std::string> monoms = getMonomials();
+		std::sort(monoms.begin(), monoms.end(), [](const std::string& first, const std::string& second){return first.size() < second.size();});
+
+		// List of semdefinite matrices
+		std::vector<std::vector<int>> monomPairs;
+
+		// Random seed
+		std::srand(time(0));
+
+		// First monom should always be 1
+		auto loc = std::find(monoms.begin(), monoms.end(), "");
+		if (loc != monoms.end()) {
+			monoms.erase(loc);
+		}
+		monoms.insert(monoms.begin(), "");
+		
+		// Also get the monomials as polynomials and prepare for fast eval
+		std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
+		for (int i=0; i<monoms.size(); i++) {
+			monomsAsPolys[i] = Polynomial<polyType>(maxVariables, monoms[i]);
+			monomsAsPolys[i].prepareEvalMixed();
+		}
+
+		// Create the mapping from monomials to indices (to linearize)
+		std::unordered_map<std::string,std::string> mapping;
+		int digitsPerIndAfterLinear = std::ceil(std::log10(monoms.size()+1));
+		for (int i=1; i<monoms.size(); i++) {
+			std::string newInd = std::to_string(i);
+			newInd.insert(0, digitsPerIndAfterLinear-newInd.size(), ' ');
+			mapping[monoms[i]] = newInd;
+			std::cout << monoms[i] << " -> " << newInd << std::endl;
+		}
+
+		// Linearize the problem
+		Polynomial<polyType> objLinear = obj.changeVariables(mapping);
+		std::vector<Polynomial<polyType>> conZeroLinear(conZero.size());
+		for (int i=0; i<conZero.size(); i++) {
+			conZeroLinear[i] = conZero[i].changeVariables(mapping);
+		}
+		std::vector<Polynomial<polyType>> conPositiveLinear(conPositive.size());
+		for (int i=0; i<conPositive.size(); i++) {
+			conPositiveLinear[i] = conPositive[i].changeVariables(mapping);
+		}
+		
+		// Keep iterating
+		std::pair<polyType,std::vector<polyType>> bestVal = {-100000000, {}};
+		std::pair<polyType,std::vector<polyType>> prevRes = {-100000000, {}};
+		for (int i=0; i<maxIters; i++) {
+
+			// So we have nice output for the first iter
+			if (i > 0) {
+
+				// Find a constraint that is violated
+				Polynomial<polyType> newCon = getNewCon(monoms, monomsAsPolys, prevRes);
+
+				// Check for error or convergence
+				if (newCon.isNaN) {
+					std::cout << "converged to optimum" << std::endl;
+					break;
+				}
+
+				// Adjust the linear program to remove this variable TODO
+				conZeroLinear.push_back(newCon.changeVariables(mapping));
+
+			}
+
+			// Solve this new linear program
+			auto res = solveLinear(objLinear, conZeroLinear, conPositiveLinear, monoms, monomPairs);
+			prevRes = res;
+
+			// Output
+			std::cout << res.first << "   " << bestVal.first << "   " << monoms.size() << std::endl;
+
+			// Update the best val
+			if (res.first > bestVal.first) {
+				bestVal = res;
+			}
+
+		}
+
+		// Output final moment list
+		if (verbose) {
+			std::cout << std::endl << "final moments:" << std::endl;
+			std::cout << monoms << std::endl;
+		}
+
+		// Output final matrix list
+		if (verbose) {
+			std::cout << std::endl << "final mats:" << std::endl;
+			std::cout << "{";
+			for (int i=0; i<monomPairs.size(); i++) {
+				std::cout << "{" << monomPairs[i][0] << "," << monomPairs[i][1] << "," << monomPairs[i][2] << "}";
+				if (i < monomPairs.size()-1) {
+					std::cout << ",";
+				}
+			}
+			std::cout << "}" << std::endl;
+		}
+
+		// Output final matrix list expanded as monoms
+		if (verbose) {
+			std::cout <<std::endl << "final mats as monoms:" << std::endl;
+			std::cout << "{";
+			for (int i=0; i<monomPairs.size(); i++) {
+				std::cout << "{" << monoms[monomPairs[i][0]] << "," << monoms[monomPairs[i][1]] << "," << monoms[monomPairs[i][2]] << "}";
+				if (i < monomPairs.size()-1) {
+					std::cout << ",";
+				}
+			}
+			std::cout << "}" << std::endl;
+			std::cout << std::endl;
+		}
+
+		return bestVal.first;
+
+	}
 	// Convert from a real problem to a binary problem
 	void fromRealProblem(int numBits) {
 
