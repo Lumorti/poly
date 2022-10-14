@@ -3805,30 +3805,47 @@ public:
 			auto res = solveLinear(objLinear, conZeroLinear, conPositiveLinear, monoms, monomPairs);
 			prevRes = res;
 
-			// Find an upper bound
-			std::vector<double> validSpins(maxVariables, 0);
-			validSpins[0] = -1;
-			for (int j=0; j<maxVariables*10; j++) {
-				for (int k=1; k<monoms.size(); k++) {
-					int ind1 = std::stoi(monoms[k].substr(0, digitsPerInd));
-					int ind2 = std::stoi(monoms[k].substr(digitsPerInd, digitsPerInd));
-					if (validSpins[ind1] == 0 && validSpins[ind2] != 0) {
-						validSpins[ind1] = sign(res.second[k]) * validSpins[ind2];
-					}
-					if (validSpins[ind2] == 0 && validSpins[ind1] != 0) {
-						validSpins[ind2] = sign(res.second[k]) * validSpins[ind1];
-					}
-				}
-			}
-			std::cout << validSpins << std::endl;
-			double upperBound = obj.substitute(validSpins)[""];
-
-			// Output
-			std::cout << res.first << "   " << upperBound << "   " << monoms.size() << " " << conPositiveLinear.size() << std::endl;
+			// Find an upper bound TODO3
+			//std::vector<double> roundedVals(monoms.size());
+			//for (int k=0; k<monoms.size(); k++) {
+				//roundedVals[k] = sign(res.second[k]);
+			//}
+			//std::vector<double> validSpins(maxVariables, 0);
+			//validSpins[0] = 1;
+			//for (int j=1; j<maxVariables; j++) {
+				//for (int k=1; k<monoms.size(); k++) {
+					//int ind1 = std::stoi(monoms[k].substr(0, digitsPerInd));
+					//int ind2 = std::stoi(monoms[k].substr(digitsPerInd, digitsPerInd));
+					//if (ind1 == j && validSpins[ind2] != 0) {
+						//validSpins[ind1] = roundedVals[k]*validSpins[ind2];
+					//} else if (ind2 == j && validSpins[ind1] != 0) {
+						//validSpins[ind2] = roundedVals[k]*validSpins[ind1];
+					//}
+				//}
+			//}
+			//validSpins = {-1, -1, 1, -1, -1, -1, 1, 1, 1, 1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1};
+			//bool recreates = true;
+			//for (int k=1; k<monoms.size(); k++) {
+				//int ind1 = std::stoi(monoms[k].substr(0, digitsPerInd));
+				//int ind2 = std::stoi(monoms[k].substr(digitsPerInd, digitsPerInd));
+				//if (validSpins[ind1]*validSpins[ind2] != roundedVals[k]) {
+					//recreates = false;
+				//}
+			//}
+			//std::cout << monoms << std::endl;
+			//std::cout << roundedVals << std::endl;
+			//std::cout << validSpins << std::endl;
+			//double upperBound = obj.substitute(validSpins)[""];
 
 			// DEBUG3
-			//std::cout << monoms << std::endl;
-			//std::cout << prevRes.second << std::endl;
+			double integralityError = 0;
+			for (int k=0; k<monoms.size(); k++) {
+				integralityError += std::abs(res.second[k]-sign(res.second[k]));
+			}
+
+			// Output
+			//std::cout << res.first << "   " << upperBound << "   " << monoms.size() << " " << conPositiveLinear.size() << std::endl;
+			std::cout << res.first << "   " << integralityError << "   " << monoms.size() << " " << conPositiveLinear.size() << std::endl;
 
 			// Find a constraint that is violated
 			//Polynomial<polyType> newCon = getNewCon(monoms, monomsAsPolys, prevRes);
@@ -3864,7 +3881,6 @@ public:
 
 				//conPositive.push_back(allCons[j]);
 				conPositiveLinear.push_back(allCons[j].changeVariables(mapping));
-
 
 			}
 
