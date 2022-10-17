@@ -15,7 +15,7 @@ int main(int argc, char ** argv) {
 
 	// Useful quantities
 	int numVarsNonConj = n*d*d;
-	int numVars = 2*numVarsNonConj;
+	int numVars = 2*numVarsNonConj + 1;
 	int conjDelta = numVarsNonConj;
 	double rt2 = 1.0/std::sqrt(2.0);
 
@@ -25,9 +25,9 @@ int main(int argc, char ** argv) {
 	// Generate equations
 	std::cout << "Generating equations..." << std::endl;
 	for (int i=0; i<n; i++) {
-		for (int j=0; j<n; j++) {
-			for (int k=0; k<d; k++) {
-				for (int l=0; l<d; l++) {
+		for (int j=i; j<n; j++) {
+			for (int k=0; k<4; k++) {
+				for (int l=0; l<4; l++) {
 
 					// (a+ib)*(c+id)
 					Polynomial<std::complex<double>> eqn(numVars);
@@ -53,9 +53,23 @@ int main(int argc, char ** argv) {
 						eqn.addTerm(-1.0/d, {});
 	 				}
 
-					// Both the real and imaginary parts should be 0
-					eqns.push_back(Polynomial<double>(eqn.real()));
-					eqns.push_back(Polynomial<double>(eqn.imag()));
+					// Split into real and imag parts (both should be 0)
+					Polynomial<double> eqnReal = eqn.real();
+					Polynomial<double> eqnImag = eqn.imag();
+
+					// Only allow one element in the final basis
+					//if ((i == n-1 && k > 0) || (j == n-1 && l > 0)) {
+						//continue;
+					//}
+					std::cout << "between " << i << "-" << k << " and " << j << "-" << l << std::endl;
+
+					// Add these equations if they're not empty
+					if (eqnReal.size() > 0) {
+						eqns.push_back(eqnReal);
+					}
+					if (eqnImag.size() > 0) {
+						eqns.push_back(eqnImag);
+					}
 
 				}
 			}
@@ -69,17 +83,25 @@ int main(int argc, char ** argv) {
 		poly += eqns[i]*eqns[i];
 	}
 
+	// Minimize number of equations needed TODO
+	// for d2n4   10 (only one vector each basis)
+	// for d3n5   57 (one less vector per and only one vec in last basis)
+	// for d4n6   225 (one less vector per and only one vec in last basis)
+	// for d5n7   433 (one less vector per and only one vec in last basis)
+	// for d6n4   226 (one less vector per and only one vec in last basis)
+	
 	// Find a lower bound TODO
+	//std::cout << "Finding lower bound..." << std::endl;
 	//PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, {});
-	//std::cout << prob.lowerBound(100000000, 2, false, false, 100) << std::endl;
+	//std::cout << prob << std::endl;
+	//prob.lowerBound();
 	//return 0;
 
-	// Find a root of this, the first value will go to zero but that's okay
-	// (could also use an auxiliary variable, but here not needed)
+	// Find a root of this using an auxilary variable
+	std::cout << "Number of equations: " << eqns.size() << std::endl;
 	std::cout << "Attempting to find a root..." << std::endl;
-	std::vector<double> x = poly.findRoot(0, 0.1, 1e-10, 10000000);
+	std::vector<double> x = poly.findRoot(0, 0.5, 1e-10, 100000, 4, false);
 	std::cout << "Testing this x = " << poly.eval(x) << std::endl;
-
 	return 0;
 
 }
