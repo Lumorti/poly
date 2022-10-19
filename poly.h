@@ -1613,6 +1613,7 @@ public:
 		Eigen::VectorXd g(maxVariables);
 		double maxX = 0;
 		int iter = 0;
+		double minVal = 1e10;
 		double norm = 1;
 		for (iter=0; iter<maxIters; iter++) {
 
@@ -1641,7 +1642,8 @@ public:
 
 			// Per-iteration output
 			norm = std::abs(g.norm());
-			std::cout << iter << " " << norm << " " << g(zeroInd) << " " << x(zeroInd) << "          \r" << std::flush;
+			minVal = std::min(norm, minVal);
+			std::cout << iter << " " << norm << " " << g(zeroInd) << " " << x(zeroInd) << "   " << minVal << "          \r" << std::flush;
 
 			// Convergence criteria
 			if (norm < tolerance) {
