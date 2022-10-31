@@ -4045,6 +4045,144 @@ public:
 
 	}
 
+	// Estimate the size of a feasible SDP region
+	polyType estimateSDP(int numOG, std::vector<Polynomial<polyType>>& conZeroLinear, std::vector<Polynomial<polyType>> conPositiveLinear, std::vector<std::string>& monoms, std::vector<std::vector<Polynomial<polyType>>>& monomProducts) {
+
+		// Set some vars
+		int oneIndex = 0;
+		int varsTotal = monoms.size();
+
+		// Create the PSD matrices from this list
+		std::vector<std::shared_ptr<monty::ndarray<int,1>>> shouldBePSD;
+		for (int j=0; j<monomProducts.size(); j++) {
+
+			// Get the list of all monomial strings in the PSD matrix
+			std::vector<std::string> monStrings;
+			for (int i=0; i<monomProducts[j].size(); i++) {
+				for (int k=0; k<monomProducts[j].size(); k++) {
+					monStrings.push_back((monomProducts[j][i]*monomProducts[j][k]).getMonomials()[0]);
+				}
+			}
+
+			// Find all of these
+			std::vector<int> monLocs(monStrings.size());
+			bool allFound = true;
+			for (int k=0; k<monStrings.size(); k++) {
+				auto loc = std::find(monoms.begin(), monoms.end(), monStrings[k]);
+				if (loc != monoms.end()) {
+					monLocs[k] = loc - monoms.begin();
+				} else {
+					std::cout << "ERROR - unknown monomial: " << monStrings[k] << std::endl;
+					std::cout << monomProducts[j] << std::endl;
+					allFound = false;
+				}
+			}
+
+			// This (when reformatted) should be positive-semidefinite
+			if (allFound) {
+				shouldBePSD.push_back(monty::new_array_ptr<int>(monLocs));
+			}
+
+		}
+
+		// Convert the linear equality constraints to MOSEK form
+		std::vector<int> ARows;
+		std::vector<int> ACols;
+		std::vector<polyType> AVals;
+		for (int i=0; i<conZeroLinear.size(); i++) {
+			for (auto const &pair: conZeroLinear[i].coeffs) {
+				ARows.push_back(i);
+				if (pair.first == "") {
+					ACols.push_back(oneIndex);
+				} else {
+					ACols.push_back(std::stoi(pair.first));
+				}
+				AVals.push_back(pair.second);
+			}
+		}
+		auto AM = mosek::fusion::Matrix::sparse(conZeroLinear.size(), varsTotal, monty::new_array_ptr<int>(ARows), monty::new_array_ptr<int>(ACols), monty::new_array_ptr<polyType>(AVals));
+
+		// Convert the linear positivity constraints to MOSEK form
+		std::vector<int> BRows;
+		std::vector<int> BCols;
+		std::vector<polyType> BVals;
+		for (int i=0; i<conPositiveLinear.size(); i++) {
+			for (auto const &pair: conPositiveLinear[i].coeffs) {
+				BRows.push_back(i);
+				if (pair.first == "") {
+					BCols.push_back(oneIndex);
+				} else {
+					BCols.push_back(std::stoi(pair.first));
+				}
+				BVals.push_back(pair.second);
+			}
+		}
+		auto BM = mosek::fusion::Matrix::sparse(conPositiveLinear.size(), varsTotal, monty::new_array_ptr<int>(BRows), monty::new_array_ptr<int>(BCols), monty::new_array_ptr<polyType>(BVals));
+
+		// Generate a bunch of random edge points
+		polyType volumeEstimate = 0;
+		std::vector<std::vector<double>> points;
+		for (int l=0; l<100; l++) {
+
+			// Randomise the objective function TODO4
+			std::vector<polyType> c(varsTotal, 0);
+			for (int i=0; i<numOG; i++) {
+				c[i] = 10.0*(double(rand())/(RAND_MAX))-5.0;
+			}
+			auto cM = monty::new_array_ptr<polyType>(c);
+
+			// Create a model
+			mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
+
+			// Create the variable
+			mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(-1, 1));
+
+			// The first element of the vector should be one
+			M->constraint(xM->index(oneIndex), mosek::fusion::Domain::equalsTo(1.0));
+
+			// Linear equality constraints
+			M->constraint(mosek::fusion::Expr::mul(AM, xM), mosek::fusion::Domain::equalsTo(0.0));
+
+			// Linear positivity constraints
+			M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(0));
+
+			// SDP constraints
+			for (int i=0; i<shouldBePSD.size(); i++) {
+				int matDim = std::sqrt(shouldBePSD[i]->size());
+				M->constraint(xM->pick(shouldBePSD[i])->reshape(matDim, matDim), mosek::fusion::Domain::inPSDCone(matDim));
+			}
+
+			// Objective is to minimize the sum of the original linear terms
+			M->objective(mosek::fusion::ObjectiveSense::Minimize, mosek::fusion::Expr::dot(cM, xM));
+
+			// Solve the problem
+			M->solve();
+
+			// Get the solution values
+			auto sol = *(xM->level());
+			std::vector<polyType> solVec(numOG);
+			for (int i=0; i<numOG; i++) {
+				solVec[i] = sol[i];
+			}
+			points.push_back(solVec);
+
+			// Estimate the size based on these edge points
+			for (int j=0; j<points.size()-1; j++) {
+				polyType inner = 0;
+				for (int k=0; k<numOG; k++) {
+					inner += std::pow(solVec[k]-points[j][k], 2);
+				}
+				volumeEstimate += std::sqrt(inner);
+			}
+			std::cout << volumeEstimate / std::pow(points.size(), 2) << "                     \r" << std::flush;
+
+		}
+
+		volumeEstimate /= std::pow(points.size(), 2);
+		return volumeEstimate;
+
+	}
+
 	// Solve a SDP program given an objective and zero/positive constraints
 	std::pair<polyType,std::vector<polyType>> solveSDP(Polynomial<polyType>& objLinear, std::vector<Polynomial<polyType>>& conZeroLinear, std::vector<Polynomial<polyType>> conPositiveLinear, std::vector<std::string>& monoms, std::vector<std::vector<Polynomial<polyType>>>& monomProducts) {
 
@@ -4052,60 +4190,16 @@ public:
 		int oneIndex = 0;
 		int varsTotal = monoms.size();
 
-		// Create the PSD matrices from this list TODO4
+		// Create the PSD matrices from this list
 		std::vector<std::shared_ptr<monty::ndarray<int,1>>> shouldBePSD;
 		for (int j=0; j<monomProducts.size(); j++) {
 
 			// Get the list of all monomial strings in the PSD matrix
 			std::vector<std::string> monStrings;
-
-			// If it's just one thing, constrain that this should be positive
-			if (monomProducts[j].size() == 1) {
-
-				// Convert to strings
-				monStrings.push_back(monomProducts[j][0].getMonomials()[0]);
-
-			// If it's the multiplication of two things
-			} else if (monomProducts[j].size() == 2) {
-
-				// Convert to strings RELAXED
-				//monStrings.push_back("");
-				//monStrings.push_back(monomProducts[j][0].getMonomials()[0]);
-				//monStrings.push_back(monomProducts[j][1].getMonomials()[0]);
-				//monStrings.push_back((monomProducts[j][0]*monomProducts[j][1]).getMonomials()[0]);
-
-				// Convert to strings STRICT
-				monStrings.push_back("");
-				monStrings.push_back(monomProducts[j][0].getMonomials()[0]);
-				monStrings.push_back(monomProducts[j][1].getMonomials()[0]);
-				monStrings.push_back(monomProducts[j][0].getMonomials()[0]);
-				monStrings.push_back((monomProducts[j][0]*monomProducts[j][0]).getMonomials()[0]);
-				monStrings.push_back((monomProducts[j][0]*monomProducts[j][1]).getMonomials()[0]);
-				monStrings.push_back(monomProducts[j][1].getMonomials()[0]);
-				monStrings.push_back((monomProducts[j][1]*monomProducts[j][0]).getMonomials()[0]);
-				monStrings.push_back((monomProducts[j][1]*monomProducts[j][1]).getMonomials()[0]);
-
-			// If it's the multiplication of three things TODO4 automate given monoms in top row
-			} else if (monomProducts[j].size() == 3) {
-
-				// Convert to strings STRICT
-				monStrings.push_back("");
-				monStrings.push_back(monomProducts[j][0].getMonomials()[0]);
-				monStrings.push_back(monomProducts[j][1].getMonomials()[0]);
-				monStrings.push_back(monomProducts[j][2].getMonomials()[0]);
-				monStrings.push_back(monomProducts[j][0].getMonomials()[0]);
-				monStrings.push_back((monomProducts[j][0]*monomProducts[j][0]).getMonomials()[0]);
-				monStrings.push_back((monomProducts[j][0]*monomProducts[j][1]).getMonomials()[0]);
-				monStrings.push_back((monomProducts[j][0]*monomProducts[j][2]).getMonomials()[0]);
-				monStrings.push_back(monomProducts[j][1].getMonomials()[0]);
-				monStrings.push_back((monomProducts[j][1]*monomProducts[j][0]).getMonomials()[0]);
-				monStrings.push_back((monomProducts[j][1]*monomProducts[j][1]).getMonomials()[0]);
-				monStrings.push_back((monomProducts[j][1]*monomProducts[j][2]).getMonomials()[0]);
-				monStrings.push_back(monomProducts[j][2].getMonomials()[0]);
-				monStrings.push_back((monomProducts[j][2]*monomProducts[j][0]).getMonomials()[0]);
-				monStrings.push_back((monomProducts[j][2]*monomProducts[j][1]).getMonomials()[0]);
-				monStrings.push_back((monomProducts[j][2]*monomProducts[j][2]).getMonomials()[0]);
-
+			for (int i=0; i<monomProducts[j].size(); i++) {
+				for (int k=0; k<monomProducts[j].size(); k++) {
+					monStrings.push_back((monomProducts[j][i]*monomProducts[j][k]).getMonomials()[0]);
+				}
 			}
 
 			// Find all of these
@@ -4230,6 +4324,13 @@ public:
 		// Random seed
 		std::srand(time(0));
 
+		// First monom should always be 1
+		auto loc = std::find(monoms.begin(), monoms.end(), "");
+		if (loc != monoms.end()) {
+			monoms.erase(loc);
+		}
+		monoms.insert(monoms.begin(), "");
+		
 		int numOGMonoms = monoms.size();
 		std::cout << "og monoms: " << monoms << std::endl;
 
@@ -4347,13 +4448,6 @@ public:
 			}
 		}
 
-		// First monom should always be 1
-		auto loc = std::find(monoms.begin(), monoms.end(), "");
-		if (loc != monoms.end()) {
-			monoms.erase(loc);
-		}
-		monoms.insert(monoms.begin(), "");
-		
 		// Also get the monomials as polynomials and prepare for fast eval
 		std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
 		for (int i=0; i<monoms.size(); i++) {
@@ -4381,131 +4475,230 @@ public:
 			conPositiveLinear[i] = conPositive[i].changeVariables(mapping);
 		}
 		
-		// Initial solve
+		// Initial solve TODO4
 		std::cout << "Solving with no constraints..." << std::endl;
 		auto prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+		polyType sizeEst = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+		std::cout << sizeEst << std::endl;
 
 		// Solve again 
-		std::cout << "Solving with {ii}>=0 and {ii}>={i}*{i} constraints..." << std::endl;
-		for (int i=0; i<maxVariables-1; i++) {
-			monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {i,i})});
-			monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {i}), Polynomial<polyType>(maxVariables, 1, {i})});
-		}
-		prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+		//std::cout << "Solving with indiv 1st-order constraints..." << std::endl;
+		//{
+			//for (int i=0; i<monoms.size(); i++) {
+				//if (monoms[i].size() == 2*digitsPerInd) {
+					//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+					//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+					//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2})});
+				//}
+			//}
+			////prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//sizeEst = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//std::cout << sizeEst << std::endl;
+		//}
 
 		// Solve again 
-		std::cout << "Solving with {ij}>={i}*{j} constraints..." << std::endl;
-		for (int i=0; i<monoms.size(); i++) {
-			if (monoms[i].size() == 2*digitsPerInd) {
-				int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2})});
-			}
-		}
-		prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+		//std::cout << "Solving with general 1st-order constraints..." << std::endl;
+		//{
+			//std::vector<Polynomial<polyType>> toAdd;
+			//toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
+			//for (int i=0; i<monoms.size(); i++) {
+				//if (monoms[i].size() == digitsPerInd) {
+					//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+					//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1}));
+				//}
+			//}
+			//monomProducts.push_back(toAdd);
+			////prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//sizeEst = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//std::cout << sizeEst << std::endl;
+		//}
 
-		// Solve again TODO4
-		std::cout << "Solving with {ijk}>={ij}*{k} constraints..." << std::endl;
-		for (int i=0; i<monoms.size(); i++) {
-			if (monoms[i].size() == 3*digitsPerInd) {
-				int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-				int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind2}), Polynomial<polyType>(maxVariables, 1, {ind3})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind3}), Polynomial<polyType>(maxVariables, 1, {ind2})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind2,ind3}), Polynomial<polyType>(maxVariables, 1, {ind1})});
-			}
-		}
-		prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+		// Solve again 
+		//std::cout << "Solving with indiv 2nd-order constraints..." << std::endl;
+		//{
+			//for (int i=0; i<monoms.size(); i++) {
+				//if (monoms[i].size() == 4*digitsPerInd) {
+					//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+					//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+					//int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
+					//int ind4 = std::stoi(monoms[i].substr(3*digitsPerInd,digitsPerInd));
+					//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1,ind2}), Polynomial<polyType>(maxVariables, 1, {ind3,ind4})});
+					//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1,ind3}), Polynomial<polyType>(maxVariables, 1, {ind2,ind4})});
+					//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1,ind4}), Polynomial<polyType>(maxVariables, 1, {ind2,ind3})});
+				//}
+			//}
+			////prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//sizeEst = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//std::cout << sizeEst << std::endl;
+		//}
 
-		// Solve again TODO4
-		std::cout << "Solving with {ijk}>={i}*{j}*{k} constraints..." << std::endl;
-		for (int i=0; i<monoms.size(); i++) {
-			if (monoms[i].size() == 3*digitsPerInd) {
-				int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-				int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2}), Polynomial<polyType>(maxVariables, 1, {ind3})});
-			}
-		}
-		prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+		// Solve again 
+		//std::cout << "Solving with general 2nd-order constraints..." << std::endl;
+		//{
+			//std::vector<Polynomial<polyType>> toAdd;
+			//toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
+			//for (int i=0; i<monoms.size(); i++) {
+				//if (monoms[i].size() == 2*digitsPerInd) {
+					//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+					//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+					//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1,ind2}));
+				//}
+			//}
+			//monomProducts.push_back(toAdd);
+			////prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//sizeEst = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//std::cout << sizeEst << std::endl;
+		//}
 
-		// Solve again TODO4
-		std::cout << "Solving with {ijkl}>={ij}*{kl} constraints..." << std::endl;
-		for (int i=0; i<monoms.size(); i++) {
-			if (monoms[i].size() == 4*digitsPerInd) {
-				int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-				int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
-				int ind4 = std::stoi(monoms[i].substr(3*digitsPerInd,digitsPerInd));
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind2}), Polynomial<polyType>(maxVariables, 1, {ind3,ind4})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind3}), Polynomial<polyType>(maxVariables, 1, {ind2,ind4})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind4}), Polynomial<polyType>(maxVariables, 1, {ind2,ind3})});
-			}
-		}
-		prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+		// Solve again 
+		//std::cout << "Solving with general 1st+2nd-order constraints..." << std::endl;
+		//{
+			//std::vector<Polynomial<polyType>> toAdd;
+			//toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
+			//for (int i=0; i<monoms.size(); i++) {
+				//if (monoms[i].size() == 2*digitsPerInd) {
+					//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+					//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+					//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1,ind2}));
+				//} else if (monoms[i].size() == digitsPerInd) {
+					//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+					//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1}));
+				//}
+			//}
+			//monomProducts.push_back(toAdd);
+			////prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//sizeEst = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//std::cout << sizeEst << std::endl;
+		//}
 
-		// Solve again TODO4
-		std::cout << "Solving with {ijkl}>={ijk}*{l} constraints..." << std::endl;
-		for (int i=0; i<monoms.size(); i++) {
-			if (monoms[i].size() == 4*digitsPerInd) {
-				int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-				int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
-				int ind4 = std::stoi(monoms[i].substr(3*digitsPerInd,digitsPerInd));
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind2,ind3}), Polynomial<polyType>(maxVariables, 1, {ind4})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind2,ind4}), Polynomial<polyType>(maxVariables, 1, {ind3})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind3,ind4}), Polynomial<polyType>(maxVariables, 1, {ind2})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind2,ind3,ind4}), Polynomial<polyType>(maxVariables, 1, {ind1})});
+		std::cout << "Solving with general 1st+2nd+3rd-order constraints..." << std::endl;
+		{
+			std::vector<Polynomial<polyType>> toAdd;
+			toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
+			for (int i=0; i<monoms.size(); i++) {
+				if (monoms[i].size() == 2*digitsPerInd) {
+					int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+					int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+					toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1,ind2}));
+				} else if (monoms[i].size() == digitsPerInd) {
+					int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+					toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1}));
+				} else if (monoms[i].size() == 3*digitsPerInd) {
+					int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+					int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+					int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
+					toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1,ind2,ind3}));
+				}
 			}
+			monomProducts.push_back(toAdd);
+			//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			sizeEst = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			std::cout << sizeEst << std::endl;
 		}
-		prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
 
-		// Solve again TODO4
-		std::cout << "Solving with {ijkl}>={ij}*{k}*{l} constraints..." << std::endl;
-		for (int i=0; i<monoms.size(); i++) {
-			if (monoms[i].size() == 4*digitsPerInd) {
-				int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-				int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
-				int ind4 = std::stoi(monoms[i].substr(3*digitsPerInd,digitsPerInd));
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind2}), Polynomial<polyType>(maxVariables, 1, {ind3}), Polynomial<polyType>(maxVariables, 1, {ind4})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind3}), Polynomial<polyType>(maxVariables, 1, {ind2}), Polynomial<polyType>(maxVariables, 1, {ind4})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind4}), Polynomial<polyType>(maxVariables, 1, {ind2}), Polynomial<polyType>(maxVariables, 1, {ind3})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind2,ind3}), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind4})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind2,ind4}), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind3})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind3,ind4}), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2})});
-			}
-		}
-		prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
 
-		// Solve again TODO4
-		std::cout << "Solving with {ijklm}>={ij}*{kl}*{m} constraints..." << std::endl;
-		for (int i=0; i<monoms.size(); i++) {
-			if (monoms[i].size() == 5*digitsPerInd) {
-				int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-				int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
-				int ind4 = std::stoi(monoms[i].substr(3*digitsPerInd,digitsPerInd));
-				int ind5 = std::stoi(monoms[i].substr(4*digitsPerInd,digitsPerInd));
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind2}), Polynomial<polyType>(maxVariables, 1, {ind3,ind4}), Polynomial<polyType>(maxVariables, 1, {ind5})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind3}), Polynomial<polyType>(maxVariables, 1, {ind2,ind4}), Polynomial<polyType>(maxVariables, 1, {ind5})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind4}), Polynomial<polyType>(maxVariables, 1, {ind2,ind3}), Polynomial<polyType>(maxVariables, 1, {ind5})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind2}), Polynomial<polyType>(maxVariables, 1, {ind3,ind5}), Polynomial<polyType>(maxVariables, 1, {ind4})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind3}), Polynomial<polyType>(maxVariables, 1, {ind2,ind5}), Polynomial<polyType>(maxVariables, 1, {ind4})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind5}), Polynomial<polyType>(maxVariables, 1, {ind2,ind3}), Polynomial<polyType>(maxVariables, 1, {ind4})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind2}), Polynomial<polyType>(maxVariables, 1, {ind4,ind5}), Polynomial<polyType>(maxVariables, 1, {ind3})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind4}), Polynomial<polyType>(maxVariables, 1, {ind2,ind5}), Polynomial<polyType>(maxVariables, 1, {ind3})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind5}), Polynomial<polyType>(maxVariables, 1, {ind2,ind4}), Polynomial<polyType>(maxVariables, 1, {ind3})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind4}), Polynomial<polyType>(maxVariables, 1, {ind3,ind5}), Polynomial<polyType>(maxVariables, 1, {ind2})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind3}), Polynomial<polyType>(maxVariables, 1, {ind4,ind5}), Polynomial<polyType>(maxVariables, 1, {ind2})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind5}), Polynomial<polyType>(maxVariables, 1, {ind4,ind3}), Polynomial<polyType>(maxVariables, 1, {ind2})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind2,ind4}), Polynomial<polyType>(maxVariables, 1, {ind3,ind5}), Polynomial<polyType>(maxVariables, 1, {ind1})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind3,ind4}), Polynomial<polyType>(maxVariables, 1, {ind2,ind5}), Polynomial<polyType>(maxVariables, 1, {ind1})});
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind5,ind4}), Polynomial<polyType>(maxVariables, 1, {ind2,ind3}), Polynomial<polyType>(maxVariables, 1, {ind1})});
-			}
-		}
-		prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+		// Solve again 
+		//std::cout << "Solving with {ijk}>={ij}*{k} constraints..." << std::endl;
+		//for (int i=0; i<monoms.size(); i++) {
+			//if (monoms[i].size() == 3*digitsPerInd) {
+				//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+				//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+				//int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind2}), Polynomial<polyType>(maxVariables, 1, {ind3})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind3}), Polynomial<polyType>(maxVariables, 1, {ind2})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind2,ind3}), Polynomial<polyType>(maxVariables, 1, {ind1})});
+			//}
+		//}
+		//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+
+		// Solve again 
+		//std::cout << "Solving with {ijk}>={i}*{j}*{k} constraints..." << std::endl;
+		//for (int i=0; i<monoms.size(); i++) {
+			//if (monoms[i].size() == 3*digitsPerInd) {
+				//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+				//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+				//int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2}), Polynomial<polyType>(maxVariables, 1, {ind3})});
+			//}
+		//}
+		//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+
+		// Solve again 
+		//std::cout << "Solving with {ijkl}>={ij}*{kl} constraints..." << std::endl;
+		//for (int i=0; i<monoms.size(); i++) {
+			//if (monoms[i].size() == 4*digitsPerInd) {
+				//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+				//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+				//int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
+				//int ind4 = std::stoi(monoms[i].substr(3*digitsPerInd,digitsPerInd));
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind2}), Polynomial<polyType>(maxVariables, 1, {ind3,ind4})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind3}), Polynomial<polyType>(maxVariables, 1, {ind2,ind4})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind4}), Polynomial<polyType>(maxVariables, 1, {ind2,ind3})});
+			//}
+		//}
+		//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+
+		// Solve again 
+		//std::cout << "Solving with {ijkl}>={ijk}*{l} constraints..." << std::endl;
+		//for (int i=0; i<monoms.size(); i++) {
+			//if (monoms[i].size() == 4*digitsPerInd) {
+				//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+				//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+				//int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
+				//int ind4 = std::stoi(monoms[i].substr(3*digitsPerInd,digitsPerInd));
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind2,ind3}), Polynomial<polyType>(maxVariables, 1, {ind4})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind2,ind4}), Polynomial<polyType>(maxVariables, 1, {ind3})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind3,ind4}), Polynomial<polyType>(maxVariables, 1, {ind2})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind2,ind3,ind4}), Polynomial<polyType>(maxVariables, 1, {ind1})});
+			//}
+		//}
+		//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+
+		// Solve again 
+		//std::cout << "Solving with {ijkl}>={ij}*{k}*{l} constraints..." << std::endl;
+		//for (int i=0; i<monoms.size(); i++) {
+			//if (monoms[i].size() == 4*digitsPerInd) {
+				//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+				//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+				//int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
+				//int ind4 = std::stoi(monoms[i].substr(3*digitsPerInd,digitsPerInd));
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind2}), Polynomial<polyType>(maxVariables, 1, {ind3}), Polynomial<polyType>(maxVariables, 1, {ind4})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind3}), Polynomial<polyType>(maxVariables, 1, {ind2}), Polynomial<polyType>(maxVariables, 1, {ind4})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind4}), Polynomial<polyType>(maxVariables, 1, {ind2}), Polynomial<polyType>(maxVariables, 1, {ind3})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind2,ind3}), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind4})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind2,ind4}), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind3})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind3,ind4}), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2})});
+			//}
+		//}
+		//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+
+		// Solve again 
+		//std::cout << "Solving with {ijklm}>={ij}*{kl}*{m} constraints..." << std::endl;
+		//for (int i=0; i<monoms.size(); i++) {
+			//if (monoms[i].size() == 5*digitsPerInd) {
+				//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+				//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+				//int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
+				//int ind4 = std::stoi(monoms[i].substr(3*digitsPerInd,digitsPerInd));
+				//int ind5 = std::stoi(monoms[i].substr(4*digitsPerInd,digitsPerInd));
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind2}), Polynomial<polyType>(maxVariables, 1, {ind3,ind4}), Polynomial<polyType>(maxVariables, 1, {ind5})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind3}), Polynomial<polyType>(maxVariables, 1, {ind2,ind4}), Polynomial<polyType>(maxVariables, 1, {ind5})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind4}), Polynomial<polyType>(maxVariables, 1, {ind2,ind3}), Polynomial<polyType>(maxVariables, 1, {ind5})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind2}), Polynomial<polyType>(maxVariables, 1, {ind3,ind5}), Polynomial<polyType>(maxVariables, 1, {ind4})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind3}), Polynomial<polyType>(maxVariables, 1, {ind2,ind5}), Polynomial<polyType>(maxVariables, 1, {ind4})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind5}), Polynomial<polyType>(maxVariables, 1, {ind2,ind3}), Polynomial<polyType>(maxVariables, 1, {ind4})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind2}), Polynomial<polyType>(maxVariables, 1, {ind4,ind5}), Polynomial<polyType>(maxVariables, 1, {ind3})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind4}), Polynomial<polyType>(maxVariables, 1, {ind2,ind5}), Polynomial<polyType>(maxVariables, 1, {ind3})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind5}), Polynomial<polyType>(maxVariables, 1, {ind2,ind4}), Polynomial<polyType>(maxVariables, 1, {ind3})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind4}), Polynomial<polyType>(maxVariables, 1, {ind3,ind5}), Polynomial<polyType>(maxVariables, 1, {ind2})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind3}), Polynomial<polyType>(maxVariables, 1, {ind4,ind5}), Polynomial<polyType>(maxVariables, 1, {ind2})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind1,ind5}), Polynomial<polyType>(maxVariables, 1, {ind4,ind3}), Polynomial<polyType>(maxVariables, 1, {ind2})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind2,ind4}), Polynomial<polyType>(maxVariables, 1, {ind3,ind5}), Polynomial<polyType>(maxVariables, 1, {ind1})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind3,ind4}), Polynomial<polyType>(maxVariables, 1, {ind2,ind5}), Polynomial<polyType>(maxVariables, 1, {ind1})});
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1, {ind5,ind4}), Polynomial<polyType>(maxVariables, 1, {ind2,ind3}), Polynomial<polyType>(maxVariables, 1, {ind1})});
+			//}
+		//}
+		//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
 
 		//for (int i=0; i<monoms.size(); i++) {
 			//std::cout << monoms[i] << "   " << prevRes.second[i] << std::endl;
