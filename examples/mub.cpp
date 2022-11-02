@@ -132,6 +132,7 @@ int main(int argc, char ** argv) {
 		// Combine these to create a single polynomial
 		Polynomial<double> poly(numVars);
 		for (int i=0; i<eqns.size(); i++) {
+			std::cout << eqns[i] << std::endl;
 			poly += eqns[i]*eqns[i];
 		}
 
