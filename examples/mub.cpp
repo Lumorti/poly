@@ -103,44 +103,81 @@ int main(int argc, char ** argv) {
 				valsToReplace.push_back(0);
 			}
 		}
+		for (int i=d; i<2*d; i++) {
+			for (int j=0; j<d; j++) {
+				indsToReplace.push_back(i*d+j);
+				indsToReplace.push_back(i*d+j+conjDelta);
+				if (i == 2*d-1 && j == 1) {
+					valsToReplace.push_back(-1.0/std::sqrt(2));
+				} else {
+					valsToReplace.push_back(1.0/std::sqrt(2));
+				}
+				valsToReplace.push_back(0);
+			}
+		}
+		//for (int i=2*d; i<3*d; i++) {
+			//for (int j=0; j<d; j++) {
+				//indsToReplace.push_back(i*d+j);
+				//indsToReplace.push_back(i*d+j+conjDelta);
+				//if (i == 3*d-1 && j == 1) {
+					//valsToReplace.push_back(-1.0/std::sqrt(2));
+				//} else {
+					//valsToReplace.push_back(1.0/std::sqrt(2));
+				//}
+				//valsToReplace.push_back(0);
+			//}
+		//}
+		double overRt2 = 1.0/std::sqrt(2);
+		indsToReplace.push_back(8);
+		valsToReplace.push_back(overRt2);
+		indsToReplace.push_back(24);
+		valsToReplace.push_back(0);
+		//indsToReplace = {0, 1,    2, 3,    4, 5,     6, 7,   8,  
+						 //16, 17,  18, 19,  20, 21,    22, 23,  24};
+		//valsToReplace = {1, 0,    0, 1,    overRt2, overRt2,     overRt2, -overRt2,    0,
+						 //0, 0,    0, 0,    0, 0,                 0, 0};
 		for (int i=0; i<eqns.size(); i++) {
 			eqns[i] = eqns[i].substitute(indsToReplace, valsToReplace);
 		}
 
 		// Collapse to the minimum number of vars
 		std::vector<int> originalInds;
-		for (int i=0; i<numVars; i++) {
-			originalInds.push_back(i);
-		}
-		std::vector<int> newInds(numVars, -1);
+		std::vector<int> newInds;
 		int nextInd = 0;
 		for (int i=0; i<numVars; i++) {
 			for (int j=0; j<eqns.size(); j++) {
 				if (eqns[j].contains(i)) {
-					newInds[i] = nextInd;
+					originalInds.push_back(i);
+					newInds.push_back(nextInd);
 					nextInd++;
 					break;
 				}
 			}
 		}
+		std::cout << originalInds << std::endl;
+		std::cout << newInds << std::endl;
 		numVars = nextInd+1;
+		std::vector<Polynomial<double>> newEqns;
 		for (int i=0; i<eqns.size(); i++) {
 			eqns[i] = eqns[i].changeVariables(originalInds, newInds);
 			eqns[i].maxVariables = numVars;
+			if (eqns[i].size() > 0) {
+				newEqns.push_back(eqns[i]);
+			}
 		}
 
 		// Combine these to create a single polynomial
 		Polynomial<double> poly(numVars);
-		for (int i=0; i<eqns.size(); i++) {
-			std::cout << eqns[i] << std::endl;
-			poly += eqns[i]*eqns[i];
+		for (int i=0; i<newEqns.size(); i++) {
+			std::cout << newEqns[i] << std::endl;
+			poly += newEqns[i]*newEqns[i];
 		}
 
 		// Minimize number of equations needed TODO
-		std::cout << dLimits[i2] << "    " << eqns.size() << "   " << numVars << std::endl;
+		std::cout << dLimits[i2] << "    " << newEqns.size() << "   " << numVars << std::endl;
 		
 		// Find a lower bound TODO
-		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, {});
+		PolynomialProblem<double> prob(Polynomial<double>(numVars), newEqns, {});
 		prob.proveInfeasible();
 
 		// Find a root of this using an auxilary variable

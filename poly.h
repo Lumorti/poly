@@ -4046,6 +4046,150 @@ public:
 
 	}
 
+	// Estimate the size of a feasible SDP region TODO4
+	polyType solveSDPMatrix(Polynomial<polyType>& objLinear, std::vector<Polynomial<polyType>>& conZeroLinear, std::vector<Polynomial<polyType>> conPositiveLinear, std::vector<std::string>& monoms, std::vector<std::vector<Polynomial<polyType>>>& monomProducts) {
+
+		// Create the PSD matrices from this list
+		int matWidth = monomProducts[0].size();
+		std::vector<std::vector<std::string>> momentMatMonoms(matWidth, std::vector<std::string>(matWidth));
+		std::unordered_map<std::string,std::vector<int>> momentToMatLoc;
+
+		// Get the list of all monomial locations for the PSD matrix
+		for (int i=0; i<monomProducts[0].size(); i++) {
+			for (int k=0; k<monomProducts[0].size(); k++) {
+
+				// Calculate the product
+				momentMatMonoms[i][k] = (monomProducts[0][i]*monomProducts[0][k]).getMonomials()[0];
+
+				// Find this in the monomial list
+				auto loc = std::find(monoms.begin(), monoms.end(), momentMatMonoms[i][k]);
+				if (loc == monoms.end()) {
+					monoms.push_back(momentMatMonoms[i][k]);
+				}
+				momentToMatLoc[momentMatMonoms[i][k]] = {i, k};
+
+			}
+		}
+
+		std::cout << "mat width = " << matWidth << std::endl;
+
+		// Equality constraints
+		std::vector<std::vector<int>> equalityCons;
+		for (int i=0; i<matWidth; i++) {
+			for (int j=0; j<matWidth; j++) {
+				for (int k=i+1; k<matWidth; k++) {
+					for (int l=j+1; l<matWidth; l++) {
+						if (momentMatMonoms[i][j] == momentMatMonoms[k][l]) {
+							equalityCons.push_back({i,j,k,l});
+						}
+					}
+				}
+			}
+		}
+
+		std::cout << "num equality = " << equalityCons.size() << std::endl;
+
+		// Set some vars
+		int oneIndex = 0;
+		int varsTotal = monoms.size();
+
+		// Convert the linear equality constraints to MOSEK form
+		std::vector<monty::rc_ptr<mosek::fusion::Matrix>> AMats;
+		for (int i=0; i<conZeroLinear.size(); i++) {
+			std::vector<int> ARows;
+			std::vector<int> ACols;
+			std::vector<polyType> AVals;
+			for (auto const &pair: conZeroLinear[i].coeffs) {
+				if (pair.first == "") {
+					std::vector<int> loc = momentToMatLoc[""];
+					ARows.push_back(loc[0]);
+					ACols.push_back(loc[1]);
+					AVals.push_back(pair.second);
+				} else {
+					std::vector<int> loc = momentToMatLoc[monoms[std::stoi(pair.first)]];
+					ARows.push_back(loc[0]);
+					ACols.push_back(loc[1]);
+					AVals.push_back(pair.second);
+				}
+			}
+			auto AM = mosek::fusion::Matrix::sparse(matWidth, matWidth, monty::new_array_ptr<int>(ARows), monty::new_array_ptr<int>(ACols), monty::new_array_ptr<polyType>(AVals));
+			AMats.push_back(AM);
+		}
+
+		// Convert the linear positivity constraints to MOSEK form
+		std::vector<monty::rc_ptr<mosek::fusion::Matrix>> BMats;
+		for (int i=0; i<conPositiveLinear.size(); i++) {
+			std::vector<int> BRows;
+			std::vector<int> BCols;
+			std::vector<polyType> BVals;
+			for (auto const &pair: conPositiveLinear[i].coeffs) {
+				if (pair.first == "") {
+					std::vector<int> loc = momentToMatLoc[""];
+					BRows.push_back(loc[0]);
+					BCols.push_back(loc[1]);
+					BVals.push_back(pair.second);
+				} else {
+					std::vector<int> loc = momentToMatLoc[monoms[std::stoi(pair.first)]];
+					BRows.push_back(loc[0]);
+					BCols.push_back(loc[1]);
+					BVals.push_back(pair.second);
+				}
+			}
+			auto BM = mosek::fusion::Matrix::sparse(matWidth, matWidth, monty::new_array_ptr<int>(BRows), monty::new_array_ptr<int>(BCols), monty::new_array_ptr<polyType>(BVals));
+			BMats.push_back(BM);
+		}
+		
+		// Convert the objective to MOSEK form
+		std::vector<std::vector<polyType>> c(matWidth, std::vector<polyType>(matWidth, 0));
+		auto cM = monty::new_array_ptr<polyType>(c);
+
+		// Create a model
+		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
+
+		// DEBUG
+		M->setLogHandler([=](const std::string & msg){std::cout << msg << std::flush;});
+
+		// Create the variable
+		mosek::fusion::Variable::t xM = M->variable(mosek::fusion::Domain::inPSDCone(matWidth));
+
+		// The first element of the vector should be one
+		M->constraint(xM->index(oneIndex, oneIndex), mosek::fusion::Domain::equalsTo(1.0));
+
+		// Linear equality constraints
+		for (int i=0; i<AMats.size(); i++) {
+			M->constraint(mosek::fusion::Expr::dot(AMats[i], xM), mosek::fusion::Domain::equalsTo(0.0));
+		}
+
+		// Linear positivity constraints
+		for (int i=0; i<BMats.size(); i++) {
+			M->constraint(mosek::fusion::Expr::dot(BMats[i], xM), mosek::fusion::Domain::greaterThan(0.0));
+		}
+
+		// Matrix equality constraints
+		for (int i=0; i<equalityCons.size(); i++) {
+			M->constraint(mosek::fusion::Expr::sub(xM->index(equalityCons[i][0], equalityCons[i][1]), xM->index(equalityCons[i][2], equalityCons[i][3])), mosek::fusion::Domain::equalsTo(0.0));
+		}
+
+		// Objective is to minimize the sum of the original linear terms
+		M->objective(mosek::fusion::ObjectiveSense::Minimize, mosek::fusion::Expr::dot(cM, xM));
+
+		// Solve the problem
+		M->solve();
+
+		// Get the solution values
+		auto sol = *(xM->level());
+		polyType outer = M->primalObjValue();
+
+		// Output the relevent moments
+		std::vector<polyType> solVec(xM->getSize());
+		for (int i=0; i<solVec.size(); i++) {
+			solVec[i] = sol[i];
+		}
+
+		return outer;
+
+	}
+
 	// Estimate the size of a feasible SDP region
 	std::pair<polyType, std::vector<std::vector<polyType>>> estimateSDP(int numOG, std::vector<Polynomial<polyType>>& conZeroLinear, std::vector<Polynomial<polyType>> conPositiveLinear, std::vector<std::string>& monoms, std::vector<std::vector<Polynomial<polyType>>>& monomProducts) {
 
@@ -4081,7 +4225,6 @@ public:
 		// Set some vars
 		int oneIndex = 0;
 		int varsTotal = monoms.size();
-		numOG = varsTotal;
 
 		// Convert the linear equality constraints to MOSEK form
 		std::vector<int> ARows;
@@ -4150,9 +4293,9 @@ public:
 		// Generate a bunch of random edge points
 		polyType volumeEstimate = 0;
 		std::vector<std::vector<double>> points;
-		for (int l=0; l<1; l++) {
+		for (int l=0; l<10; l++) {
 
-			// Randomise the objective function TODO4
+			// Randomise the objective function
 			std::vector<polyType> c(varsTotal, 0);
 			for (int i=0; i<numOG; i++) {
 				c[i] = 100.0*(double(rand())/(RAND_MAX))-50.0;
@@ -4191,16 +4334,11 @@ public:
 	// Solve a SDP program given an objective and zero/positive constraints
 	std::pair<polyType,std::vector<polyType>> solveSDP(Polynomial<polyType>& objLinear, std::vector<Polynomial<polyType>>& conZeroLinear, std::vector<Polynomial<polyType>> conPositiveLinear, std::vector<std::string>& monoms, std::vector<std::vector<Polynomial<polyType>>>& monomProducts) {
 
-		// Set some vars
-		int oneIndex = 0;
-		int varsTotal = monoms.size();
-
 		// Create the PSD matrices from this list
 		std::vector<std::shared_ptr<monty::ndarray<int,1>>> shouldBePSD;
 		for (int j=0; j<monomProducts.size(); j++) {
 
 			// Get the list of all monomial locations for the PSD matrix
-			bool allFound = true;
 			std::vector<int> monLocs;
 			for (int i=0; i<monomProducts[j].size(); i++) {
 				for (int k=0; k<monomProducts[j].size(); k++) {
@@ -4213,19 +4351,21 @@ public:
 					if (loc != monoms.end()) {
 						monLocs.push_back(loc - monoms.begin());
 					} else {
-						std::cout << "ERROR - unknown monomial: " << monString << std::endl;
-						allFound = false;
+						monLocs.push_back(monoms.size());
+						monoms.push_back(monString);
 					}
 
 				}
 			}
 
 			// This (when reformatted) should be positive-semidefinite
-			if (allFound) {
-				shouldBePSD.push_back(monty::new_array_ptr<int>(monLocs));
-			}
+			shouldBePSD.push_back(monty::new_array_ptr<int>(monLocs));
 
 		}
+
+		// Set some vars
+		int oneIndex = 0;
+		int varsTotal = monoms.size();
 
 		// Convert the objective to MOSEK form
 		std::vector<polyType> c(varsTotal);
@@ -4274,6 +4414,9 @@ public:
 
 		// Create a model
 		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
+
+		// DEBUG
+		M->setLogHandler([=](const std::string & msg){std::cout << msg << std::flush;});
 
 		// Create the variable
 		mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(-1, 1));
@@ -4382,7 +4525,7 @@ public:
 		std::cout << "num og monoms: " << numOGMonoms << std::endl;
 
 		// Certain order monomials should always appear
-		addMonomsOfOrder(monoms, 1);
+		//addMonomsOfOrder(monoms, 1);
 		//addMonomsOfOrder(monoms, 2);
 		//addMonomsOfOrder(monoms, 3);
 		//addMonomsOfOrder(monoms, 4);
@@ -4438,30 +4581,50 @@ public:
 			//}
 		//}
 
-		for (int i=0; i<12; i++) {
-			monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {i})});
-		}
+		//for (int i=0; i<maxVariables-1; i++) {
+			//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {i})});
+		//}
 
-		for (int i=0; i<12; i++) {
-			for (int j=i+1; j<12; j++) {
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {i,i}), Polynomial<polyType>(maxVariables, 1, {j,j})});
-			}
-		}
+		//for (int i=0; i<maxVariables-1; i++) {
+			//for (int j=i+1; j<maxVariables-1; j++) {
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {i,i}), Polynomial<polyType>(maxVariables, 1, {j,j})});
+			//}
+		//}
+
 
 		// Initial solve TODO4
-		std::cout << monomProducts << std::endl;
-		//std::cout << "Solving with no constraints..." << std::endl;
-		//auto prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-		auto estimate = estimateSDP(monoms.size(), conZeroLinear, conPositiveLinear, monoms, monomProducts);
-		for (int i=0; i<1; i++) {
-			for (int j=0; j<estimate.second.size(); j++) {
-				for (int k=0; k<estimate.second[j].size(); k++) {
-					std::cout << monoms[k] << "   " << estimate.second[j][k] << std::endl;
-				}
-				std::cout << std::endl;
+		//std::cout << monomProducts << std::endl;
+		std::cout << "Solving with no constraints..." << std::endl;
+		auto prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+		//auto estimate = estimateSDP(monoms.size(), conZeroLinear, conPositiveLinear, monoms, monomProducts);
+		//std::cout << estimate.first << std::endl;
+		//for (int i=0; i<1; i++) {
+			//for (int j=0; j<estimate.second.size(); j++) {
+				//for (int k=0; k<estimate.second[j].size(); k++) {
+					//std::cout << monoms[k] << "   " << estimate.second[j][k] << std::endl;
+				//}
+				//std::cout << std::endl;
+			//}
+		//}
+
+		//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {3,3}), Polynomial<polyType>(maxVariables, 1, {5,5})});
+		//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {2,2}), Polynomial<polyType>(maxVariables, 1, {3,3})});
+		std::vector<Polynomial<polyType>> toAdd;
+		for (int i=0; i<numOGMonoms; i++) {
+			toAdd.push_back(Polynomial<polyType>(maxVariables, monoms[i]));
+		}
+		for (int i=0; i<numOGMonoms; i++) {
+			for (int j=0; j<numOGMonoms; j++) {
+				toAdd.push_back(Polynomial<polyType>(maxVariables, monoms[i])*Polynomial<polyType>(maxVariables, monoms[j]));
 			}
 		}
-
+		std::cout << toAdd << std::endl;
+		monomProducts.push_back(toAdd);
+		std::cout << "Solving with manual constraints..." << std::endl;
+		//auto res = estimateSDP(monoms.size(), conZeroLinear, conPositiveLinear, monoms, monomProducts);
+		auto res = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+		//auto res = solveSDPMatrix(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+		
 		//std::cout << "Solving with indiv 1st-order constraints..." << std::endl;
 		//{
 			//for (int i=0; i<monoms.size(); i++) {
@@ -4471,8 +4634,9 @@ public:
 					//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2})});
 				//}
 			//}
-			////prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			//std::cout << estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts) << std::endl;
+			//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			////estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			////std::cout << estimate.first << std::endl;
 		//}
 
 		//std::cout << "Solving with general 1st-order constraints..." << std::endl;
@@ -4503,8 +4667,9 @@ public:
 					//}
 				//}
 			//}
-			////prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			//std::cout << estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts) << std::endl;
+			//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			////estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			////std::cout << estimate.first << std::endl;
 		//}
 		
 		//std::cout << "Solving with general 2nd-order constraints..." << std::endl;
@@ -4539,7 +4704,7 @@ public:
 			//}
 			//monomProducts.push_back(toAdd);
 			//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			//std::cout << estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts) << std::endl;
+			////std::cout << estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts) << std::endl;
 		//}
 
 		//std::cout << "Solving with indiv 3rd-order constraints..." << std::endl;
@@ -4555,8 +4720,9 @@ public:
 					//}
 				//}
 			//}
-			////prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			//std::cout << estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts) << std::endl;
+			//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			////estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			////std::cout << estimate.first << std::endl;
 		//}
 
 		//std::cout << "Solving with general 3rd-order constraints..." << std::endl;
@@ -4581,7 +4747,7 @@ public:
 			//for (int i=0; i<monoms.size(); i++) {
 				//if (monoms[i].size() == 4*digitsPerInd) {
 					//for (int j=0; j<monoms.size(); j++) {
-						//if (monoms[j].size() < 4*digitsPerInd) {
+						//if (monoms[j].size() <= 4*digitsPerInd) {
 							//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), 
 													 //Polynomial<polyType>(maxVariables, monoms[i]), 
 													 //Polynomial<polyType>(maxVariables, monoms[j])});
@@ -4589,8 +4755,9 @@ public:
 					//}
 				//}
 			//}
-			////prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			//std::cout << estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts) << std::endl;
+			//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			////estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			////std::cout << estimate.first << std::endl;
 		//}
 		
 		//std::cout << "Solving with general 1st+2nd+3rd-order constraints..." << std::endl;
@@ -4613,8 +4780,9 @@ public:
 				//}
 			//}
 			//monomProducts.push_back(toAdd);
-			//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			//std::cout << estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts) << std::endl;
+			////prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//std::cout << estimate.first << std::endl;
 		//}
 		
 	}
