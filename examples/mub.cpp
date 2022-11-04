@@ -13,11 +13,9 @@ int main(int argc, char ** argv) {
 		n = std::stoi(argv[2]);
 	}
 
-	return 0;
-
 	// Useful quantities
 	int numVarsNonConj = n*d*d;
-	int numVars = 2*numVarsNonConj;
+	int numVars = 2*numVarsNonConj+1000;
 	int conjDelta = numVarsNonConj;
 	double rt2 = 1.0/std::sqrt(2.0);
 
@@ -44,7 +42,8 @@ int main(int argc, char ** argv) {
 		std::vector<Polynomial<double>> eqns;
 
 		// Generate equations
-		for (int i=0; i<n; i++) {
+		int newVarInd = 2*numVarsNonConj;
+		for (int i=1; i<n; i++) {
 			for (int j=i; j<n; j++) {
 				for (int k=0; k<dLimits[i2][i]; k++) {
 					for (int l=0; l<dLimits[i2][j]; l++) {
@@ -64,13 +63,25 @@ int main(int argc, char ** argv) {
 
 						// For the normalisation equations
 						if (i == j && k == l) {
-							eqn.addTerm(-1.0, {});
+							eqn.addTerm(-1, {});
+							continue;
 						}
 
 						// For the MUB-ness equations
 						if (i != j) {
-							eqn = eqn.conjugate() * eqn;
-							eqn.addTerm(-1.0/d, {});
+
+							// Constrain that this should equal a new complex number
+							eqn.addTerm(-1, {newVarInd});
+							eqn.addTerm(-1i, {newVarInd+1});
+
+							// Constrain that this new complex should have mag 1/d
+							Polynomial<std::complex<double>> extraEqn(numVars);
+							extraEqn.addTerm(1, {newVarInd,newVarInd});
+							extraEqn.addTerm(1, {newVarInd+1,newVarInd+1});
+							extraEqn.addTerm(-1.0/d, {});
+							eqns.push_back(extraEqn);
+							newVarInd += 2;
+
 						}
 
 						// Split into real and imag parts (both should be 0)
@@ -90,6 +101,20 @@ int main(int argc, char ** argv) {
 			}
 		}
 
+		int ogEqns = eqns.size();
+		for (int i=d*d; i<numVarsNonConj; i++) {
+			for (int j=0; j<ogEqns; j++) {
+				if (eqns[j].contains(i)) {
+					Polynomial<std::complex<double>> extraEqn(numVars);
+					extraEqn.addTerm(1, {i,i});
+					extraEqn.addTerm(1, {i+conjDelta,i+conjDelta});
+					extraEqn.addTerm(-1.0/d, {});
+					eqns.push_back(extraEqn);
+					break;
+				}
+			}
+		}
+
 		// Can assume the first basis is the computational TODO
 		std::vector<int> indsToReplace;
 		std::vector<double> valsToReplace;
@@ -105,23 +130,22 @@ int main(int argc, char ** argv) {
 				valsToReplace.push_back(0);
 			}
 		}
-		for (int i=d; i<2*d; i++) {
+
+		// Can assume first element of second basis is uniform
+		for (int i=d; i<d+1; i++) {
 			for (int j=0; j<d; j++) {
 				indsToReplace.push_back(i*d+j);
 				indsToReplace.push_back(i*d+j+conjDelta);
-				if (i == 2*d-1 && j == 1) {
-					valsToReplace.push_back(-1.0/std::sqrt(2));
-				} else {
-					valsToReplace.push_back(1.0/std::sqrt(2));
-				}
+				valsToReplace.push_back(1/std::sqrt(d));
 				valsToReplace.push_back(0);
 			}
 		}
-		//for (int i=2*d; i<3*d; i++) {
+
+		//for (int i=d; i<2*d; i++) {
 			//for (int j=0; j<d; j++) {
 				//indsToReplace.push_back(i*d+j);
 				//indsToReplace.push_back(i*d+j+conjDelta);
-				//if (i == 3*d-1 && j == 1) {
+				//if (i == 2*d-1 && j == 1) {
 					//valsToReplace.push_back(-1.0/std::sqrt(2));
 				//} else {
 					//valsToReplace.push_back(1.0/std::sqrt(2));
@@ -130,10 +154,10 @@ int main(int argc, char ** argv) {
 			//}
 		//}
 		double overRt2 = 1.0/std::sqrt(2);
-		indsToReplace.push_back(8);
-		valsToReplace.push_back(overRt2);
-		indsToReplace.push_back(24);
-		valsToReplace.push_back(0);
+		//indsToReplace.push_back(33);
+		//valsToReplace.push_back(0);
+		//indsToReplace.push_back(32);
+		//valsToReplace.push_back(std::sqrt(2));
 		//indsToReplace = {0, 1,    2, 3,    4, 5,     6, 7,   8,  
 						 //16, 17,  18, 19,  20, 21,    22, 23,  24};
 		//valsToReplace = {1, 0,    0, 1,    overRt2, overRt2,     overRt2, -overRt2,    0,
@@ -156,6 +180,26 @@ int main(int argc, char ** argv) {
 				}
 			}
 		}
+		//for (int i=0; i<originalInds.size(); i++) {
+			//if (newInds[i] == 12) {
+				//newInds[i] = 0;
+			//}
+			//if (newInds[i] == 13) {
+				//newInds[i] = 6;
+			//}
+			//if (newInds[i] == 14) {
+				//newInds[i] = 2;
+			//}
+			//if (newInds[i] == 15) {
+				//newInds[i] = 8;
+			//}
+			//if (newInds[i] == 16) {
+				//newInds[i] = 4;
+			//}
+			//if (newInds[i] == 17) {
+				//newInds[i] = 10;
+			//}
+		//}
 		std::cout << originalInds << std::endl;
 		std::cout << newInds << std::endl;
 		numVars = nextInd+1;
@@ -166,6 +210,17 @@ int main(int argc, char ** argv) {
 			if (eqns[i].size() > 0) {
 				newEqns.push_back(eqns[i]);
 			}
+		}
+
+		auto newnewInds = newInds;
+		//newnewInds[12] = 0;
+		//newnewInds[13] = 6;
+		//newnewInds[14] = 2;
+		//newnewInds[15] = 8;
+		//newnewInds[16] = 4;
+		//newnewInds[17] = 10;
+		for (int i=0; i<newEqns.size(); i++) {
+			newEqns[i] = newEqns[i].changeVariables(newInds, newnewInds);
 		}
 
 		// Combine these to create a single polynomial
@@ -184,6 +239,7 @@ int main(int argc, char ** argv) {
 
 		// Find a root of this using an auxilary variable
 		//std::vector<double> x = poly.findRoot(0, 0.5, 1e-10, 10000, 16, false);
+		//std::vector<double> x = poly.findRoot(numVars-1, 0.5, 1e-10, 10000, 16, false);
 		//std::cout << "   Testing this x = " << poly.eval(x) << std::endl;
 
 	}
