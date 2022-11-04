@@ -13,6 +13,8 @@ int main(int argc, char ** argv) {
 		n = std::stoi(argv[2]);
 	}
 
+	return 0;
+
 	// Useful quantities
 	int numVarsNonConj = n*d*d;
 	int numVars = 2*numVarsNonConj;
