@@ -115,6 +115,11 @@ int main(int argc, char ** argv) {
 			}
 		}
 
+		std::cout << "before reductions:" << std::endl;
+		for (int i=0; i<eqns.size(); i++) {
+			std::cout << eqns[i] << std::endl;
+		}
+
 		// Can assume the first basis is the computational TODO
 		std::vector<int> indsToReplace;
 		std::vector<double> valsToReplace;
@@ -141,6 +146,14 @@ int main(int argc, char ** argv) {
 			}
 		}
 
+		// Can assume first value of each vector is 1 / sqrt(d)
+		//for (int i=d; i<d+1; i++) {
+			//indsToReplace.push_back(i*d);
+			//indsToReplace.push_back(i*d+conjDelta);
+			//valsToReplace.push_back(1/std::sqrt(d));
+			//valsToReplace.push_back(0);
+		//}
+
 		//for (int i=d; i<2*d; i++) {
 			//for (int j=0; j<d; j++) {
 				//indsToReplace.push_back(i*d+j);
@@ -162,9 +175,11 @@ int main(int argc, char ** argv) {
 						 //16, 17,  18, 19,  20, 21,    22, 23,  24};
 		//valsToReplace = {1, 0,    0, 1,    overRt2, overRt2,     overRt2, -overRt2,    0,
 						 //0, 0,    0, 0,    0, 0,                 0, 0};
-		for (int i=0; i<eqns.size(); i++) {
-			eqns[i] = eqns[i].substitute(indsToReplace, valsToReplace);
-		}
+		std::cout << indsToReplace << std::endl;
+		std::cout << valsToReplace << std::endl;
+		//for (int i=0; i<eqns.size(); i++) {
+			//eqns[i] = eqns[i].substitute(indsToReplace, valsToReplace);
+		//}
 
 		// Collapse to the minimum number of vars
 		std::vector<int> originalInds;
@@ -224,6 +239,7 @@ int main(int argc, char ** argv) {
 		}
 
 		// Combine these to create a single polynomial
+		std::cout << "reduced equations:" << std::endl;
 		Polynomial<double> poly(numVars);
 		for (int i=0; i<newEqns.size(); i++) {
 			std::cout << newEqns[i] << std::endl;

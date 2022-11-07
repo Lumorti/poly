@@ -4637,19 +4637,19 @@ public:
 		//auto res = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
 		//auto res = solveSDPMatrix(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
 		
-		std::cout << "Solving with indiv 1st-order constraints..." << std::endl;
-		{
-			for (int i=0; i<monoms.size(); i++) {
-				if (monoms[i].size() == 2*digitsPerInd) {
-					int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-					int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-					monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2})});
-				}
-			}
-			prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			//estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			//std::cout << estimate.first << std::endl;
-		}
+		//std::cout << "Solving with indiv 1st-order constraints..." << std::endl;
+		//{
+			//for (int i=0; i<monoms.size(); i++) {
+				//if (monoms[i].size() == 2*digitsPerInd) {
+					//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+					//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+					//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2})});
+				//}
+			//}
+			//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			////estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			////std::cout << estimate.first << std::endl;
+		//}
 
 		//std::cout << "Solving with general 1st-order constraints..." << std::endl;
 		//{
