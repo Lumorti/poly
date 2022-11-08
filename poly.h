@@ -171,7 +171,7 @@ public:
 		isNaN = true;
 	}
 
-	// Main constructor
+	// Simplest constructor
 	Polynomial(int maxVariables_) {
 		maxVariables = maxVariables_;
 		digitsPerInd = std::ceil(std::log10(maxVariables+1));
@@ -184,6 +184,13 @@ public:
 		addTerm(coeff, inds);
 	}
 
+	// Constructor with a single term
+	Polynomial(int maxVariables_, polyType coeff, std::initializer_list<int> inds) {
+		maxVariables = maxVariables_;
+		digitsPerInd = std::ceil(std::log10(maxVariables+1));
+		addTerm(coeff, inds);
+	}
+
 	// Constructor with a single constant term
 	Polynomial(int maxVariables_, polyType coeff) {
 		maxVariables = maxVariables_;
@@ -191,12 +198,48 @@ public:
 		addTerm(coeff);
 	}
 
-	// Constructor with a single term from string index with coeff 1
-	Polynomial(int maxVariables_, std::string inds) {
+	// Constructor with a single term from string index
+	Polynomial(int maxVariables_, polyType coeff, std::string inds) {
 		maxVariables = maxVariables_;
 		digitsPerInd = std::ceil(std::log10(maxVariables+1));
-		addTermString(1, inds);
+		addTerm(coeff, inds);
 	}
+
+	// Constructor from the string form
+	Polynomial(int maxVariables_, std::string asString) {
+		maxVariables = maxVariables_;
+		digitsPerInd = std::ceil(std::log10(maxVariables+1));
+
+		// Loop over the string form
+		std::string currentCoeff = "";
+		std::string currentInd = "";
+		int lookingFor = 0; // 0 = coeff, 1 = ind
+		for (int i=0; i<asString.size(); i++) {
+
+			// When we find this, we know the next thing will be an index list
+			if (asString[i] == '*') {
+				lookingFor = 1;
+				i++;
+
+			// When we find this, we have a coeff + ind
+			} else if (asString[i] == '}') {
+				addTerm(std::stod(currentCoeff), currentInd);
+				currentInd = "";
+				currentCoeff = "";
+				lookingFor = 0;
+
+			// Otherwise add to the correct variable
+			} else if (lookingFor == 0) {
+				currentCoeff += asString[i];
+			} else if (lookingFor == 1) {
+				currentInd += asString[i];
+			}
+
+		}
+
+
+	}
+
 
 	// Change the digits per index
 	Polynomial changeMaxVariables(int newMaxVariables) {
@@ -228,236 +271,6 @@ public:
 
 	}
 
-	// Recursive function to split a list into parts with/without this var
-	void removeVar(std::vector<std::string> monomsSorted, std::vector<polyType> valsSorted, std::vector<int> lexicalOrder, int& count, std::vector<std::pair<std::vector<std::string>,std::vector<polyType>>>& alreadyUsed) {
-
-		// See if this has been used before 
-		bool found = false;
-		for (int j=0; j<alreadyUsed.size(); j++) {
-			if (alreadyUsed[j].first == monomsSorted && alreadyUsed[j].second == valsSorted) {
-				found = true;
-				break;
-			}
-		}
-
-		// Stop if we've used this before
-		if (found) {
-			return;
-		}
-
-		// Cache the ind to replace as a string
-		std::string indString = std::to_string(lexicalOrder[0]);
-		indString.insert(0, digitsPerInd-indString.size(), ' ');
-		lexicalOrder.erase(lexicalOrder.begin());
-
-		// Split into a part with and without the variable
-		std::vector<std::string> monomsLeft;
-		std::vector<polyType> valsLeft;
-		std::vector<std::string> monomsRight;
-		std::vector<polyType> valsRight;
-		int splitInd = 0;
-		for (int j=0; j<monomsSorted.size(); j++) {
-
-			// Check if this monomial contains this variable
-			bool found = false;
-			std::string strippedMonom = "";
-			for (int k=0; k<monomsSorted[j].size(); k+=digitsPerInd) {
-				if (monomsSorted[j].substr(k, digitsPerInd) == indString) {
-					found = true;
-				} else {
-					strippedMonom += monomsSorted[j].substr(k, digitsPerInd);
-				}
-			}
-
-			// Stop when we find something without this variable
-			if (!found) {
-				splitInd = j;
-				break;
-			}
-
-			// Copy to the left
-			monomsLeft.push_back(strippedMonom);
-			valsLeft.push_back(valsSorted[j]);
-
-		}
-
-		// Copy anything left to the right
-		for (int j=splitInd; j<monomsSorted.size(); j++) {
-			monomsRight.push_back(monomsSorted[j]);
-			valsRight.push_back(valsSorted[j]);
-		}
-
-		// Record that we're calculating something 
-		alreadyUsed.push_back({monomsSorted, valsSorted});
-		count += 1;
-
-		// Recurse each branch
-		if (monomsLeft.size() > 1) {
-			removeVar(monomsLeft, valsLeft, lexicalOrder, count, alreadyUsed);
-		}
-		if (monomsRight.size() > 1) {
-			removeVar(monomsRight, valsRight, lexicalOrder, count, alreadyUsed);
-		}
-
-	}
-
-	// Try to find the minimal Horner representation
-	int minimalHorner() {
-
-		// Start with the x_0 < x_1 < x_2 ... lexical order
-		std::vector<int> lexicalOrder(maxVariables);
-		for (int i=0; i<lexicalOrder.size(); i++) {
-			lexicalOrder[i] = i;
-		}
-
-		// Keep trying all the permutations
-		int bestCount = 1000000;
-		std::vector<int> bestOrder(maxVariables);
-		do {
-
-			// Get as vectors rather than unordered map
-			std::vector<std::string> monomsSorted;
-			std::vector<polyType> valsSorted;
-			for (auto const &pair: coeffs) {
-				monomsSorted.push_back(pair.first);
-				valsSorted.push_back(pair.second);
-			}
-
-			// Sort the terms
-			std::vector<int> orderedIndices(monomsSorted.size(), 0);
-			for (int i=0; i<orderedIndices.size(); i++) {
-				orderedIndices[i] = i;
-			}
-			std::vector<int> varToLoc(maxVariables);
-			for (int i=0; i<maxVariables; i++) {
-				varToLoc[lexicalOrder[i]] = i;
-			}
-			std::sort(orderedIndices.begin(), orderedIndices.end(),
-				[&](const int& a, const int& b) {
-					double scoreA = 0;
-					for (int i=0; i<monomsSorted[a].size(); i+=digitsPerInd) {
-						scoreA += 1.0 / std::pow(2, varToLoc[std::stoi(monomsSorted[a].substr(i, digitsPerInd))]);
-					}
-					double scoreB = 0;
-					for (int i=0; i<monomsSorted[b].size(); i+=digitsPerInd) {
-						scoreB += 1.0 / std::pow(2, varToLoc[std::stoi(monomsSorted[b].substr(i, digitsPerInd))]);
-					}
-					//std::cout << monomsSorted[a] << " gives " << scoreA << std::endl;
-					//std::cout << monomsSorted[b] << " gives " << scoreB << std::endl;
-					return (scoreA > scoreB);
-
-				}
-			);
-
-			// Sort both lists
-			std::vector<std::string> monomsTemp = monomsSorted;
-			std::vector<polyType> valsTemp = valsSorted;
-			for (int i=0; i<orderedIndices.size(); i++) {
-				monomsSorted[i] = monomsTemp[orderedIndices[i]];
-				valsSorted[i] = valsTemp[orderedIndices[i]];
-			}
-
-			// Recurse to split this into elementary operations
-			int count = 0;
-			std::vector<std::pair<std::vector<std::string>, std::vector<polyType>>> alreadyUsed;
-			removeVar(monomsSorted, valsSorted, lexicalOrder, count, alreadyUsed);
-
-			// Keep track of the best
-			if (count < bestCount) {
-				bestCount = count;
-				bestOrder = lexicalOrder;
-			}
-			std::cout << count << " " << bestCount << std::endl;
-
-		} while (std::next_permutation(lexicalOrder.begin(), lexicalOrder.end()));
-
-		return bestCount;
-
-	}
-
-	// Output in a form suitable for use elsewhere
-	std::string asMathematica() {
-
-		// For each term
-		std::string toReturn = "";
-		int numSoFar = 0;
-		for (auto const &pair: coeffs) {
-
-			// If it contains at least one variable
-			if (pair.first != "") {
-
-				// First the coeff
-				if (pair.second != 1 && std::abs(pair.second) > zeroTol) {
-					toReturn += std::to_string(pair.second);
-					toReturn += "*";
-				}
-
-				// Then the indices
-				for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
-					toReturn += "x[";
-					toReturn += pair.first.substr(i, digitsPerInd);
-					toReturn += "]";
-					if (i < pair.first.size()-1) {
-						toReturn += "*";
-					}
-				}
-
-			// For the constant, don't need any variables
-			} else {
-				toReturn += std::to_string(pair.second);
-			}
-
-			// Output an addition on everything but the last
-			numSoFar += 1;
-			if (numSoFar < coeffs.size()) {
-				toReturn += " + ";
-			}
-
-		}
-
-		return toReturn;
-
-	}
-	
-	// Output in a form suitable for use elsewhere
-	std::string asLaTeX() {
-
-		// For each term
-		std::string toReturn = "";
-		int numSoFar = 0;
-		for (auto const &pair: coeffs) {
-
-			// If it contains at least one variable
-			if (pair.first != "") {
-
-				// First the coeff
-				if (pair.second != 1 && std::abs(pair.second) > zeroTol) {
-					toReturn += std::to_string(pair.second);
-				}
-
-				// Then the indices
-				for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
-					toReturn += "x_";
-					toReturn += pair.first.substr(i, digitsPerInd);
-				}
-
-			// For the constant, don't need any variables
-			} else {
-				toReturn += std::to_string(pair.second);
-			}
-
-			// Output an addition on everything but the last
-			numSoFar += 1;
-			if (numSoFar < coeffs.size()) {
-				toReturn += " + ";
-			}
-
-		}
-
-		return toReturn;
-
-	}
-
 	// Constructor from another poly
 	template <typename type2>
 	Polynomial(Polynomial<type2> other) {
@@ -482,30 +295,6 @@ public:
 
 	}
 
-	// Constructor from a complex poly
-	template <typename type2>
-	Polynomial(Polynomial<std::complex<type2>> other) {
-
-		// Copy metadata
-		maxVariables = other.maxVariables;
-		digitsPerInd = other.digitsPerInd;
-		fastEvalReady = other.fastEvalReady;
-
-		// Copy coeffs
-		coeffs = std::unordered_map<std::string, polyType>(other.coeffs.size());
-		for (auto const &pair: other.coeffs) {
-			coeffs[pair.first] = polyType(std::real(pair.second));
-		}
-
-		// Copy fast eval coeffs
-		inds = other.inds;
-		vals = std::vector<polyType>(other.vals.size());
-		for (int i=0; i<other.vals.size(); i++) {
-			vals[i] = polyType(std::real(other.vals[i]));
-		}
-
-	}
-
 	// Get a list of all the monomials
 	std::vector<std::string> getMonomials() const {
 		std::vector<std::string> monoms;
@@ -519,7 +308,7 @@ public:
 	std::vector<Polynomial<polyType>> getMonomialsAsPolynomials() const {
 		std::vector<Polynomial<polyType>> monoms;
 		for (auto const &pair: coeffs) {
-			monoms.push_back(Polynomial<polyType>(maxVariables, pair.first));
+			monoms.push_back(Polynomial<polyType>(maxVariables, 1, pair.first));
 		}
 		return monoms;
 	}
@@ -591,77 +380,6 @@ public:
 
 	}
 
-	// Given a list of input and a list of output, map variables to different indices
-	Polynomial changeVariables(std::vector<int> from, std::vector<int> to) {
-
-		// Count the number of unique new indices
-		std::unordered_set<int> uniques(to.begin(), to.end());
-
-		// Create a new polynomial with this number of vars
-		Polynomial newPoly(uniques.size());
-
-		// Turn the int vecs into string vec
-		std::unordered_map<std::string,std::string> mapString;
-		for (int i=0; i<from.size(); i++) {
-			std::string fromString = std::to_string(from[i]);
-			std::string toString = std::to_string(to[i]);
-			fromString.insert(0, digitsPerInd-fromString.size(), ' ');
-			toString.insert(0, newPoly.digitsPerInd-toString.size(), ' ');
-			mapString[fromString] = toString;
-		}
-
-		// For each term
-		for (auto const &pair: coeffs) {
-
-			std::string newInd = "";
-			polyType coeff = pair.second;
-
-			// For each var in the original term
-			for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
-				newInd += mapString[pair.first.substr(i, digitsPerInd)];
-			}
-
-			// Add this new term if it's non-zero
-			if (std::abs(coeff) > zeroTol) {
-
-				// Add it, combining it if the term already exists
-				if (newPoly.coeffs.find(newInd) != newPoly.coeffs.end()) {
-					newPoly.coeffs[newInd] += coeff;
-					if (std::abs(newPoly.coeffs[newInd]) < zeroTol) {
-						newPoly.coeffs.erase(newInd);
-					}
-				} else {
-					newPoly.coeffs[newInd] = coeff;
-				}
-
-			}
-
-		}
-
-		return newPoly;
-
-	}
-
-	// Given a list of input and a list of output, map variables to different indices
-	Polynomial changeVariables(std::unordered_map<std::string,std::string> mapping) {
-
-		// Create a new polynomial with this number of vars
-		Polynomial newPoly(mapping.size());
-
-		// For each term
-		for (auto const &pair: coeffs) {
-
-			// Add this new term if it's non-zero
-			if (std::abs(pair.second) > zeroTol) {
-				newPoly.coeffs[mapping[pair.first]] = pair.second;
-			}
-
-		}
-
-		return newPoly;
-
-	}
-
 	// Add a term given just a coefficient
 	void addTerm(polyType coeff) {
 
@@ -705,9 +423,37 @@ public:
 		}
 
 	}
+	
+	// Add a term given a coefficient and an index list
+	void addTerm(polyType coeff, std::initializer_list<int> initList) {
+
+		// Sort the list
+		std::vector<int> list(initList.size());
+		std::copy(initList.begin(), initList.end(), list.begin());
+		std::sort(list.begin(), list.end());
+
+		// Convert the vector to a string
+		std::string asString = "";
+		for (int i=0; i<list.size(); i++) {
+			std::string padded = std::to_string(list[i]);
+			padded.insert(0, digitsPerInd-padded.size(), ' ');
+			asString += padded;
+		}
+
+		// Add it, combining it if the term already exists
+		if (coeffs.find(asString) != coeffs.end()) {
+			coeffs[asString] += coeff;
+			if (std::abs(coeffs[asString]) < zeroTol) {
+				coeffs.erase(asString);
+			}
+		} else {
+			coeffs[asString] = coeff;
+		}
+
+	}
 
 	// Add a term given a coefficient and an index string
-	void addTermString(polyType coeff, std::string asString) {
+	void addTerm(polyType coeff, std::string asString) {
 
 		// Add it, combining it if the term already exists
 		if (coeffs.find(asString) != coeffs.end()) {
@@ -825,6 +571,92 @@ public:
 
 	}
 
+	// Apply an int index to int index mapping
+	Polynomial replaceWithVariable(std::unordered_map<int, int> mapping) {
+
+		// Create a new polynomial with this number of vars
+		Polynomial newPoly(maxVariables);
+
+		// Turn the int vecs into string vec
+		std::unordered_map<std::string, std::string> mapString;
+		for (auto const &pair: mapping) {
+			std::string fromString = std::to_string(pair.first);
+			std::string toString = std::to_string(pair.second);
+			fromString.insert(0, digitsPerInd-fromString.size(), ' ');
+			toString.insert(0, newPoly.digitsPerInd-toString.size(), ' ');
+			mapString[fromString] = toString;
+		}
+
+		// For each term
+		for (auto const &pair: coeffs) {
+
+			std::string newInd = "";
+			polyType coeff = pair.second;
+
+			// For each var in the original term
+			for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
+				if (mapString.find(pair.first.substr(i, digitsPerInd)) != mapString.end()) {
+					newInd += mapString[pair.first.substr(i, digitsPerInd)];
+				} else {
+					newInd += pair.first.substr(i, digitsPerInd);
+				}
+			}
+
+			// Add this new term if it's non-zero
+			if (std::abs(coeff) > zeroTol) {
+
+				// Add it, combining it if the term already exists
+				if (newPoly.coeffs.find(newInd) != newPoly.coeffs.end()) {
+					newPoly.coeffs[newInd] += coeff;
+					if (std::abs(newPoly.coeffs[newInd]) < zeroTol) {
+						newPoly.coeffs.erase(newInd);
+					}
+				} else {
+					newPoly.coeffs[newInd] = coeff;
+				}
+
+			}
+
+		}
+
+		return newPoly;
+
+	}
+
+	// Apply a string index to string index mapping
+	Polynomial replaceWithVariable(std::unordered_map<std::string, std::string> mapping) {
+
+		// Create a new polynomial with this number of vars
+		Polynomial newPoly(mapping.size());
+
+		// For each term
+		for (auto const &pair: coeffs) {
+
+			// Add this new term if it's non-zero
+			if (std::abs(pair.second) > zeroTol) {
+
+				// Apply the mapping to get the new index
+				std::string newInd = mapping[pair.first];
+				polyType coeff = pair.second;
+
+				// Add it, combining it if the term already exists
+				if (newPoly.coeffs.find(newInd) != newPoly.coeffs.end()) {
+					newPoly.coeffs[newInd] += coeff;
+					if (std::abs(newPoly.coeffs[newInd]) < zeroTol) {
+						newPoly.coeffs.erase(newInd);
+					}
+				} else {
+					newPoly.coeffs[newInd] = coeff;
+				}
+
+			}
+
+		}
+
+		return newPoly;
+
+	}
+
 	// Substitute a variable for a polynomial
 	Polynomial replaceWithPoly(int ind, Polynomial<polyType> toReplace) {
 
@@ -849,7 +681,7 @@ public:
 
 			// Get this monomial as a seperate poly
 			Polynomial toMultiply1(toReplace.maxVariables);
-			toMultiply1.addTermString(pair.second, remainingIndex);
+			toMultiply1.addTerm(pair.second, remainingIndex);
 
 			// Add to the main poly
 			newPoly += toMultiply1*toMultiply2;
@@ -859,9 +691,49 @@ public:
 		return newPoly;
 
 	}
-	
+
+	// Substitute several variables for several polynomials
+	Polynomial replaceWithPoly(std::vector<int> inds, std::vector<Polynomial<polyType>> toReplace) {
+
+		// Cache the inds to replace as a string
+		std::unordered_map<std::string,int> stringToLoc;
+		for (int i=0; i<inds.size(); i++) {
+			std::string indString = std::to_string(inds[i]);
+			indString.insert(0, digitsPerInd-indString.size(), ' ');
+			stringToLoc[indString] = i;
+		}
+
+		// For each element in this polynomial
+		Polynomial newPoly(toReplace[0].maxVariables);
+		for (auto const &pair: coeffs) {
+
+			// Find any instance of this index
+			Polynomial toMultiply2(toReplace[0].maxVariables, 1, {});
+			std::string remainingIndex = "";
+			for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
+				if (stringToLoc.find(pair.first.substr(i, digitsPerInd)) != stringToLoc.end()) {
+					toMultiply2 *= toReplace[stringToLoc[pair.first.substr(i, digitsPerInd)]];
+				} else {
+					remainingIndex += pair.first.substr(i, digitsPerInd);
+				}
+			}
+			
+			// Get whatever's left as a seperate poly
+			Polynomial toMultiply1(toReplace[0].maxVariables);
+			toMultiply1.addTerm(pair.second, remainingIndex);
+			toMultiply2 *= toMultiply1;
+
+			// Add to the main poly
+			newPoly += toMultiply2;
+
+		}
+
+		return newPoly;
+
+	}
+
 	// Substitute a variable for a value
-	Polynomial substitute(int ind, polyType toReplace) {
+	Polynomial replaceWithValue(int ind, polyType toReplace) {
 
 		// Cache the ind to replace as a string
 		std::string indString = std::to_string(ind);
@@ -899,7 +771,7 @@ public:
 	}	
 
 	// Substitute a string variable for a value 
-	Polynomial substitute(std::string indString, polyType toReplace) {
+	Polynomial replaceWithValue(std::string indString, polyType toReplace) {
 
 		// For each element in this polynomial
 		Polynomial newPoly(maxVariables);
@@ -933,77 +805,37 @@ public:
 	}
 
 	// Substitute several variables for several values
-	Polynomial substitute(std::vector<int> ind, std::vector<polyType> toReplace) {
+	Polynomial replaceWithValue(std::vector<int> ind, std::vector<polyType> toReplace) {
 		if (ind.size() == 0) {
 			return *this;
 		}
-		Polynomial newPoly = substitute(ind[0], toReplace[0]);
+		Polynomial newPoly = replaceWithValue(ind[0], toReplace[0]);
 		for (int i=1; i<ind.size(); i++) {
-			newPoly = newPoly.substitute(ind[i], toReplace[i]);
+			newPoly = newPoly.replaceWithValue(ind[i], toReplace[i]);
 		}
 		return newPoly;
 	}
 
 	// Substitute several variables for several values
-	Polynomial substitute(std::vector<polyType> toReplace) {
+	Polynomial replaceWithValue(std::vector<polyType> toReplace) {
 		if (toReplace.size() == 0) {
 			return *this;
 		}
-		Polynomial newPoly = substitute(0, toReplace[0]);
+		Polynomial newPoly = replaceWithValue(0, toReplace[0]);
 		for (int i=1; i<toReplace.size(); i++) {
-			newPoly = newPoly.substitute(i, toReplace[i]);
+			newPoly = newPoly.replaceWithValue(i, toReplace[i]);
 		}
 		return newPoly;
-	}
-
-	// Substitute several variables for several polynomials
-	Polynomial replaceWithPoly(std::vector<int> inds, std::vector<Polynomial<polyType>> toReplace) {
-
-		// Cache the inds to replace as a string
-		std::unordered_map<std::string,int> stringToLoc;
-		for (int i=0; i<inds.size(); i++) {
-			std::string indString = std::to_string(inds[i]);
-			indString.insert(0, digitsPerInd-indString.size(), ' ');
-			stringToLoc[indString] = i;
-		}
-
-		// For each element in this polynomial
-		Polynomial newPoly(toReplace[0].maxVariables);
-		for (auto const &pair: coeffs) {
-
-			// Find any instance of this index
-			Polynomial toMultiply2(toReplace[0].maxVariables, 1, {});
-			std::string remainingIndex = "";
-			for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
-				if (stringToLoc.find(pair.first.substr(i, digitsPerInd)) != stringToLoc.end()) {
-					toMultiply2 *= toReplace[stringToLoc[pair.first.substr(i, digitsPerInd)]];
-				} else {
-					remainingIndex += pair.first.substr(i, digitsPerInd);
-				}
-			}
-			
-			// Get whatever's left as a seperate poly
-			Polynomial toMultiply1(toReplace[0].maxVariables);
-			toMultiply1.addTermString(pair.second, remainingIndex);
-			toMultiply2 *= toMultiply1;
-
-			// Add to the main poly
-			newPoly += toMultiply2;
-
-		}
-
-		return newPoly;
-
 	}
 
 	// Substitute several variables for several values (with strings)
-	Polynomial substitute(std::vector<std::string> ind, std::vector<polyType> toReplace) {
+	Polynomial replaceWithValue(std::vector<std::string> ind, std::vector<polyType> toReplace) {
 		if (ind.size() == 0) {
 			return *this;
 		}
-		Polynomial newPoly = substitute(ind[0], toReplace[0]);
+		Polynomial newPoly = replaceWithValue(ind[0], toReplace[0]);
 		for (int i=1; i<ind.size(); i++) {
-			newPoly = newPoly.substitute(ind[i], toReplace[i]);
+			newPoly = newPoly.replaceWithValue(ind[i], toReplace[i]);
 		}
 		return newPoly;
 	}
@@ -1313,8 +1145,8 @@ public:
 	}
 
 	// Get the real part of the polynomial
-	Polynomial real() {
-		Polynomial con(maxVariables);
+	Polynomial<double> real() {
+		Polynomial<double> con(maxVariables);
 		for (auto const &pair: coeffs) {
 			if (std::abs(std::real(pair.second)) > zeroTol) {
 				con.coeffs[pair.first] = std::real(pair.second);
@@ -1324,8 +1156,8 @@ public:
 	}
 
 	// Get the imaginary part of the polynomial
-	Polynomial imag() {
-		Polynomial con(maxVariables);
+	Polynomial<double> imag() {
+		Polynomial<double> con(maxVariables);
 		for (auto const &pair: coeffs) {
 			if (std::abs(std::imag(pair.second)) > zeroTol) {
 				con.coeffs[pair.first] = std::imag(pair.second);
@@ -1353,46 +1185,6 @@ public:
 		}
 
 		return soFar;
-
-	}
-
-	// Go from a1*a2 = 0
-	//         -> f = (a1+ib1)*(a2+ib2)
-	//         -> real(f)**2 + imag(f)**2 = 0
-	Polynomial<double> getComplexRelaxation() {
-
-		// First convert this poly to complex
-		Polynomial<std::complex<double>> complexPoly(maxVariables*2);
-
-		// For each term in the original
-		for (auto const &pair: coeffs) {
-
-			// Start with the coefficient
-			Polynomial<std::complex<double>> newTerm(maxVariables*2);
-			newTerm.addTerm(pair.second, {});
-
-			// Then for every index
-			for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
-
-				// Go from c -> a+ib
-				Polynomial<std::complex<double>> thisTerm(maxVariables*2);
-				int ind = std::stoi(pair.first.substr(j, digitsPerInd));
-				thisTerm.addTerm(1, {ind});
-				thisTerm.addTerm(1i, {ind+maxVariables});
-
-				// If there's c1*c2 need (a1+ib1)*(a2+ib2)
-				newTerm *= thisTerm;
-
-			}
-
-			// Add this term to the full equation
-			complexPoly += newTerm;
-
-		}
-
-		// Square the real and imag parts
-		Polynomial<double> newPoly = complexPoly.real()*complexPoly.real() + complexPoly.imag()*complexPoly.imag();
-		return newPoly;
 
 	}
 
@@ -1453,41 +1245,129 @@ public:
 
 	}
 
-	// When doing std::cout << Polynomial
-	friend std::ostream &operator<<(std::ostream &output, const Polynomial &other) {
-
-		// If null poly
-		if (other.isNaN) {
-			output << "NaN";
-			return output;
-		}
-
-		// If empty
-		if (other.coeffs.size() == 0) {
-			output << "0*{}";
-			return output;
-		}
+	// Output in a form suitable for use elsewhere
+	std::string asMathematica() const {
 
 		// For each term
+		std::string toReturn = "";
 		int numSoFar = 0;
-		for (auto const &pair: other.coeffs) {
+		for (auto const &pair: coeffs) {
 
-			// First the coeff
-			output << pair.second << "*{";
+			// If it contains at least one variable
+			if (pair.first != "") {
 
-			// Then the indices
-			output << pair.first << "}";
+				// First the coeff
+				if (pair.second != 1 && std::abs(pair.second) > zeroTol) {
+					toReturn += std::to_string(pair.second);
+					toReturn += "*";
+				}
+
+				// Then the indices
+				for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
+					toReturn += "x[";
+					toReturn += pair.first.substr(i, digitsPerInd);
+					toReturn += "]";
+					if (i < pair.first.size()-1) {
+						toReturn += "*";
+					}
+				}
+
+			// For the constant, don't need any variables
+			} else {
+				toReturn += std::to_string(pair.second);
+			}
 
 			// Output an addition on everything but the last
 			numSoFar += 1;
-			if (numSoFar < other.coeffs.size()) {
-				output << " + ";
+			if (numSoFar < coeffs.size()) {
+				toReturn += " + ";
 			}
 
 		}
 
-		return output;
+		return toReturn;
 
+	}
+	
+	// Output in a form suitable for use elsewhere
+	std::string asLaTeX() const {
+
+		// For each term
+		std::string toReturn = "";
+		int numSoFar = 0;
+		for (auto const &pair: coeffs) {
+
+			// If it contains at least one variable
+			if (pair.first != "") {
+
+				// First the coeff
+				if (pair.second != 1 && std::abs(pair.second) > zeroTol) {
+					toReturn += std::to_string(pair.second);
+				}
+
+				// Then the indices
+				for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
+					toReturn += "x_";
+					toReturn += pair.first.substr(i, digitsPerInd);
+				}
+
+			// For the constant, don't need any variables
+			} else {
+				toReturn += std::to_string(pair.second);
+			}
+
+			// Output an addition on everything but the last
+			numSoFar += 1;
+			if (numSoFar < coeffs.size()) {
+				toReturn += " + ";
+			}
+
+		}
+
+		return toReturn;
+
+	}
+
+	// Output in a form suitable for use elsewhere
+	std::string asString() const {
+
+		// If null poly
+		if (isNaN) {
+			return "NaN";
+		}
+
+		// If empty
+		if (coeffs.size() == 0) {
+			return "0*{}";
+		}
+
+		// For each term
+		std::string toReturn = "";
+		int numSoFar = 0;
+		for (auto const &pair: coeffs) {
+
+			// First the coeff
+			toReturn += std::to_string(pair.second) + "*{";
+
+			// Then the indices
+			toReturn += pair.first + "}";
+
+			// Output an addition on everything but the last
+			numSoFar += 1;
+			if (numSoFar < coeffs.size()) {
+				toReturn += " + ";
+			}
+
+		}
+
+		return toReturn;
+
+	}
+
+	// When doing std::cout << Polynomial
+	friend std::ostream &operator<<(std::ostream &output, const Polynomial &other) {
+		output << other.asString();
+		return output;
 	}
 
 	// Assigning with a constant
@@ -1567,19 +1447,43 @@ public:
 
 	}
 
-	// Try to find a root, with one variable being optimized towards zero
-	std::vector<polyType> findRoot(int zeroInd=0, double alpha=0.1, double tolerance=1e-10, int maxIters=10000000, int threads=4, bool verbose=false) {
-		return integrate(zeroInd).findLocalMinimum(zeroInd, alpha, tolerance, maxIters, threads, verbose);
-	}
-
 	// Size operator (returns number of non-zero monomials)
 	long int size() const {
 		return coeffs.size();
 	}
 
-	// Overload index operator
+	// Overload index operator with int index
+	polyType& operator[](std::vector<int> indexAsInts) {
+		std::string index = "";
+		for (int i=0; i<indexAsInts.size(); i++) {
+			std::string indString = std::to_string(indexAsInts[i]);
+			indString.insert(0, digitsPerInd-indString.size(), ' ');
+			index += indString;
+		}
+		return coeffs[index];
+	}
+
+	// Overload index operator with int index
+	polyType& operator[](std::initializer_list<int> initList) {
+		std::vector<int> indexAsInts(initList.size());
+		std::copy(initList.begin(), initList.end(), indexAsInts);
+		std::string index = "";
+		for (int i=0; i<indexAsInts.size(); i++) {
+			std::string indString = std::to_string(indexAsInts[i]);
+			indString.insert(0, digitsPerInd-indString.size(), ' ');
+			index += indString;
+		}
+		return coeffs[index];
+	}
+
+	// Overload index operator with string index
 	polyType& operator[](std::string index) {
 		return coeffs[index];
+	}
+
+	// Try to find a root, with one variable being optimized towards zero
+	std::vector<polyType> findRoot(int zeroInd=0, double alpha=0.1, double tolerance=1e-10, int maxIters=10000000, int threads=4, bool verbose=false) {
+		return integrate(zeroInd).findLocalMinimum(zeroInd, alpha, tolerance, maxIters, threads, verbose);
 	}
 
 	// Use the Newton method to find a local minimum
@@ -1773,8 +1677,6 @@ public:
 		return system[index];
 	}
 
-	
-
 	// Get the max output width of the polynomial matrix
 	std::vector<int> getOutputWidths() const {
 
@@ -1918,7 +1820,7 @@ public:
 	}
 
 	// Set each to a new variable
-	PolynomialMatrix changeVariables(std::unordered_map<std::string,std::string> mapping) {
+	PolynomialMatrix replaceWithVariable(std::unordered_map<std::string,std::string> mapping) {
 		
 		// The new matrix may have more variables
 		PolynomialMatrix newMat(mapping.size(), rows, columns);
@@ -1928,7 +1830,7 @@ public:
 			for (int j=0; j<columns; j++) {
 
 				// Apply the mapping
-				newMat[i][j] = system[i][j].changeVariables(mapping);
+				newMat[i][j] = system[i][j].replaceWithVariable(mapping);
 
 			}
 		}
@@ -2048,7 +1950,7 @@ public:
 
 	// Given a list of var indices and values, replace everything
 	template <typename otherType>
-	PolynomialBinaryProblem substitute(std::vector<int> indsToReplace, std::vector<otherType> valsToReplace) {
+	PolynomialBinaryProblem replaceWithValue(std::vector<int> indsToReplace, std::vector<otherType> valsToReplace) {
 
 		// Convert the list to the correct type
 		std::vector<polyType> convertedList(valsToReplace.size());
@@ -2060,12 +1962,12 @@ public:
 		PolynomialBinaryProblem newPolyProblem({}, {}, {});
 
 		// Copy each equation, substituting
-		newPolyProblem.obj = obj.substitute(indsToReplace, convertedList);
+		newPolyProblem.obj = obj.replaceWithValue(indsToReplace, convertedList);
 		for (int i=0; i<conZero.size(); i++) {
-			newPolyProblem.conZero.push_back(conZero[i].substitute(indsToReplace, convertedList));
+			newPolyProblem.conZero.push_back(conZero[i].replaceWithValue(indsToReplace, convertedList));
 		}
 		for (int i=0; i<conPositive.size(); i++) {
-			newPolyProblem.conPositive.push_back(conPositive[i].substitute(indsToReplace, convertedList));
+			newPolyProblem.conPositive.push_back(conPositive[i].replaceWithValue(indsToReplace, convertedList));
 		}
 
 		return newPolyProblem;
@@ -2076,7 +1978,7 @@ public:
 	friend std::ostream &operator<<(std::ostream &output, const PolynomialBinaryProblem &other) {
 
 		// Output the objective
-		output << "Minimize: " << std::endl;
+		output << "Minimize: " << std::endl << std::endl;;
 		output << other.obj << std::endl << std::endl;
 
 		// Output each constraint
@@ -2096,6 +1998,7 @@ public:
 				output << std::endl << std::endl;
 			}
 		}
+		output << std::endl;
 
 		return output;
 
@@ -2146,7 +2049,7 @@ public:
 			}
 
 			// Substitute all the values
-			PolynomialBinaryProblem testing = substitute(inds, sol);
+			PolynomialBinaryProblem testing = replaceWithValue(inds, sol);
 
 			// If it's a valid interior point
 			if (testing.isSatisfied()) {
@@ -2543,7 +2446,7 @@ public:
 							} else {
 								secondLoc = monoms.size();
 								monoms.push_back(secondString);
-								monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, secondString));
+								monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, 1, secondString));
 								monomsAsPolys[monomsAsPolys.size()-1].prepareEvalMixed();
 							}
 
@@ -2627,7 +2530,7 @@ public:
 											auto loc = std::find(monoms.begin(), monoms.end(), monStrings[k]);
 											if (loc == monoms.end()) {
 												monoms.push_back(monStrings[k]);
-												monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, monStrings[k]));
+												monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, 1, monStrings[k]));
 												monomsAsPolys[monomsAsPolys.size()-1].prepareEvalMixed();
 												monLocs[k] = monoms.size()-1;
 											} else {
@@ -2674,7 +2577,7 @@ public:
 								auto loc = std::find(monoms.begin(), monoms.end(), monStrings[k]);
 								if (loc == monoms.end()) {
 									monoms.push_back(monStrings[k]);
-									monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, monStrings[k]));
+									monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, 1, monStrings[k]));
 									monomsAsPolys[monomsAsPolys.size()-1].prepareEvalMixed();
 									monLocs[k] = monoms.size()-1;
 								} else {
@@ -2754,7 +2657,7 @@ public:
 		// Also get the monomials as polynomials and prepare for fast eval
 		std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
 		for (int i=0; i<monoms.size(); i++) {
-			monomsAsPolys[i] = Polynomial<polyType>(maxVariables, monoms[i]);
+			monomsAsPolys[i] = Polynomial<polyType>(maxVariables, 1, monoms[i]);
 			monomsAsPolys[i].prepareEvalMixed();
 		}
 
@@ -2768,14 +2671,14 @@ public:
 		}
 
 		// Linearize the problem
-		Polynomial<polyType> objLinear = obj.changeVariables(mapping);
+		Polynomial<polyType> objLinear = obj.replaceWithVariable(mapping);
 		std::vector<Polynomial<polyType>> conZeroLinear(conZero.size());
 		for (int i=0; i<conZero.size(); i++) {
-			conZeroLinear[i] = conZero[i].changeVariables(mapping);
+			conZeroLinear[i] = conZero[i].replaceWithVariable(mapping);
 		}
 		std::vector<Polynomial<polyType>> conPositiveLinear(conPositive.size());
 		for (int i=0; i<conPositive.size(); i++) {
-			conPositiveLinear[i] = conPositive[i].changeVariables(mapping);
+			conPositiveLinear[i] = conPositive[i].replaceWithVariable(mapping);
 		}
 		
 		// Initial solve
@@ -3049,7 +2952,7 @@ public:
 		//// Also get the monomials as polynomials and prepare for fast eval
 		//std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
 		//for (int i=0; i<monoms.size(); i++) {
-			//monomsAsPolys[i] = Polynomial<polyType>(maxVariables, monoms[i]);
+			//monomsAsPolys[i] = Polynomial<polyType>(maxVariables, 1, monoms[i]);
 			//monomsAsPolys[i].prepareEvalMixed();
 		//}
 
@@ -3070,14 +2973,14 @@ public:
 		//}
 
 		//// Linearize the problem
-		//Polynomial<polyType> objLinear = obj.changeVariables(mapping);
+		//Polynomial<polyType> objLinear = obj.replaceWithVariable(mapping);
 		//std::vector<Polynomial<polyType>> conZeroLinear(conZero.size());
 		//for (int i=0; i<conZero.size(); i++) {
-			//conZeroLinear[i] = conZero[i].changeVariables(mapping);
+			//conZeroLinear[i] = conZero[i].replaceWithVariable(mapping);
 		//}
 		//std::vector<Polynomial<polyType>> conPositiveLinear(conPositive.size());
 		//for (int i=0; i<conPositive.size(); i++) {
-			//conPositiveLinear[i] = conPositive[i].changeVariables(mapping);
+			//conPositiveLinear[i] = conPositive[i].replaceWithVariable(mapping);
 		//}
 
 		//// All vars should be at most one 
@@ -3467,7 +3370,7 @@ public:
 				//int oldm = m;
 				//for (int k=finalConMonoms.size()-1; k>=0; k--) {
 					//monoms.push_back(finalConMonoms[k]);
-					//monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, finalConMonoms[k]));
+					//monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, 1, finalConMonoms[k]));
 					//monomsAsPolys[monomsAsPolys.size()-1].prepareEvalMixed();
 					//n += 1;
 				//}
@@ -3790,7 +3693,7 @@ public:
 		// Also get the monomials as polynomials and prepare for fast eval
 		std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
 		for (int i=0; i<monoms.size(); i++) {
-			monomsAsPolys[i] = Polynomial<polyType>(maxVariables, monoms[i]);
+			monomsAsPolys[i] = Polynomial<polyType>(maxVariables, 1, monoms[i]);
 			monomsAsPolys[i].prepareEvalMixed();
 		}
 
@@ -3805,14 +3708,14 @@ public:
 		}
 
 		// Linearize the problem
-		Polynomial<polyType> objLinear = obj.changeVariables(mapping);
+		Polynomial<polyType> objLinear = obj.replaceWithVariable(mapping);
 		std::vector<Polynomial<polyType>> conZeroLinear(conZero.size());
 		for (int i=0; i<conZero.size(); i++) {
-			conZeroLinear[i] = conZero[i].changeVariables(mapping);
+			conZeroLinear[i] = conZero[i].replaceWithVariable(mapping);
 		}
 		std::vector<Polynomial<polyType>> conPositiveLinear(conPositive.size());
 		for (int i=0; i<conPositive.size(); i++) {
-			conPositiveLinear[i] = conPositive[i].changeVariables(mapping);
+			conPositiveLinear[i] = conPositive[i].replaceWithVariable(mapping);
 		}
 		
 		// Keep iterating
@@ -3878,7 +3781,7 @@ public:
 
 			// Adjust the linear program to remove this variable
 			//conPositive.push_back(newCon);
-			//conPositiveLinear.push_back(newCon.changeVariables(mapping));
+			//conPositiveLinear.push_back(newCon.replaceWithVariable(mapping));
 
 			std::vector<Polynomial<polyType>> allCons = getAllCons(monoms, monomsAsPolys, prevRes);
 			for (int j=0; j<allCons.size(); j++) {
@@ -3889,7 +3792,7 @@ public:
 					//auto loc = std::find(monoms.begin(), monoms.end(), newMons[k]);
 					//if (loc == monoms.end()) {
 						//monoms.push_back(newMons[k]);
-						//monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, newMons[k]));
+						//monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, 1, newMons[k]));
 						//monomsAsPolys[monomsAsPolys.size()-1].prepareEvalMixed();
 						//std::string newInd = std::to_string(mapping.size());
 						//newInd.insert(0, digitsPerIndAfterLinear-newInd.size(), ' ');
@@ -3899,7 +3802,7 @@ public:
 				//}
 
 				//conPositive.push_back(allCons[j]);
-				conPositiveLinear.push_back(allCons[j].changeVariables(mapping));
+				conPositiveLinear.push_back(allCons[j].replaceWithVariable(mapping));
 
 			}
 
@@ -3920,9 +3823,11 @@ public:
 		return bestVal.first;
 
 	}
+
 	// Convert from a real problem to a binary problem
 	void fromRealProblem(int numBits) {
 
+		// Now we have more variables
 		int maxVariablesNew = maxVariables + maxVariables*numBits;
 
 		// Want to replace every x with x1+x2*0.5+x3*0.25-1
@@ -3930,7 +3835,7 @@ public:
 		std::vector<Polynomial<polyType>> polyToReplace(maxVariables);
 		for (int i=0; i<maxVariables; i++) {
 			indsToReplace[i] = i;
-			polyToReplace[i] = Polynomial<polyType>(maxVariablesNew, -1, {});
+			polyToReplace[i] = Polynomial<polyType>(maxVariablesNew, -1);
 			for (int j=0; j<numBits; j++) {
 				polyToReplace[i].addTerm(1.0/std::pow(2,j), {maxVariables+numBits*i+j});
 			}
@@ -4003,7 +3908,7 @@ public:
 
 	// Given a list of var indices and values, replace everything
 	template <typename otherType>
-	PolynomialProblem substitute(std::vector<int> indsToReplace, std::vector<otherType> valsToReplace) {
+	PolynomialProblem replaceWithValue(std::vector<int> indsToReplace, std::vector<otherType> valsToReplace) {
 
 		// Convert the list to the correct type
 		std::vector<polyType> convertedList(valsToReplace.size());
@@ -4015,12 +3920,12 @@ public:
 		PolynomialProblem newPolyProblem({}, {}, {});
 
 		// Copy each equation, substituting
-		newPolyProblem.obj = obj.substitute(indsToReplace, convertedList);
+		newPolyProblem.obj = obj.replaceWithValue(indsToReplace, convertedList);
 		for (int i=0; i<conZero.size(); i++) {
-			newPolyProblem.conZero.push_back(conZero[i].substitute(indsToReplace, convertedList));
+			newPolyProblem.conZero.push_back(conZero[i].replaceWithValue(indsToReplace, convertedList));
 		}
 		for (int i=0; i<conPositive.size(); i++) {
-			newPolyProblem.conPositive.push_back(conPositive[i].substitute(indsToReplace, convertedList));
+			newPolyProblem.conPositive.push_back(conPositive[i].replaceWithValue(indsToReplace, convertedList));
 		}
 
 		return newPolyProblem;
@@ -4031,7 +3936,7 @@ public:
 	friend std::ostream &operator<<(std::ostream &output, const PolynomialProblem &other) {
 
 		// Output the objective
-		output << "Minimize: " << std::endl;
+		output << "Minimize: " << std::endl << std::endl;
 		output << other.obj << std::endl << std::endl;
 
 		// Output each constraint
@@ -4051,12 +3956,13 @@ public:
 				output << std::endl << std::endl;
 			}
 		}
+		output << std::endl;
 
 		return output;
 
 	}
 
-	// Estimate the size of a feasible SDP region TODO4
+	// Estimate the size of a feasible SDP region
 	polyType solveSDPMatrix(Polynomial<polyType>& objLinear, std::vector<Polynomial<polyType>>& conZeroLinear, std::vector<Polynomial<polyType>> conPositiveLinear, std::vector<std::string>& monoms, std::vector<std::vector<Polynomial<polyType>>>& monomProducts) {
 
 		// Create the PSD matrices from this list
@@ -4426,7 +4332,7 @@ public:
 		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
 
 		// DEBUG
-		M->setLogHandler([=](const std::string & msg){std::cout << msg << std::flush;});
+		//M->setLogHandler([=](const std::string & msg){std::cout << msg << std::flush;});
 
 		// Create the variable
 		mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(-1, 1));
@@ -4538,19 +4444,12 @@ public:
 
 		// Certain order monomials should always appear
 		addMonomsOfOrder(monoms, 1);
-		//addMonomsOfOrder(monoms, 2);
-		//addMonomsOfOrder(monoms, 3);
-		//addMonomsOfOrder(monoms, 4);
-		//addMonomsOfOrder(monoms, 5);
-		//addMonomsOfOrder(monoms, 6);
-		//addMonomsOfOrder(monoms, 7);
-		//addMonomsOfOrder(monoms, 8);
 		std::cout << "num monoms total: " << monoms.size() << std::endl;
 
 		// Also get the monomials as polynomials and prepare for fast eval
 		std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
 		for (int i=0; i<monoms.size(); i++) {
-			monomsAsPolys[i] = Polynomial<polyType>(maxVariables, monoms[i]);
+			monomsAsPolys[i] = Polynomial<polyType>(maxVariables, 1, monoms[i]);
 			monomsAsPolys[i].prepareEvalMixed();
 		}
 
@@ -4564,46 +4463,16 @@ public:
 		}
 
 		// Linearize the problem
-		Polynomial<polyType> objLinear = obj.changeVariables(mapping);
+		Polynomial<polyType> objLinear = obj.replaceWithVariable(mapping);
 		std::vector<Polynomial<polyType>> conZeroLinear(conZero.size());
 		for (int i=0; i<conZero.size(); i++) {
-			conZeroLinear[i] = conZero[i].changeVariables(mapping);
+			conZeroLinear[i] = conZero[i].replaceWithVariable(mapping);
 		}
 		std::vector<Polynomial<polyType>> conPositiveLinear(conPositive.size());
 		for (int i=0; i<conPositive.size(); i++) {
-			conPositiveLinear[i] = conPositive[i].changeVariables(mapping);
+			conPositiveLinear[i] = conPositive[i].replaceWithVariable(mapping);
 		}
 		
-		//for (int i=0; i<monoms.size(); i++) {
-			//if (monoms[i].size() == 2*digitsPerInd) {
-				//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-				//if (ind1 == ind2) {
-					//conPositiveLinear.push_back(Polynomial<polyType>(maxVariables, 1, {ind1,ind2}).changeVariables(mapping));
-				//}
-			//}
-			//if (monoms[i].size() == 4*digitsPerInd) {
-				//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-				//int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
-				//int ind4 = std::stoi(monoms[i].substr(3*digitsPerInd,digitsPerInd));
-				//if (ind1 == ind2 && ind3 == ind4) {
-					//conPositiveLinear.push_back(Polynomial<polyType>(maxVariables, 1, {ind1,ind2,ind3,ind4}).changeVariables(mapping));
-				//}
-			//}
-		//}
-
-		//for (int i=0; i<maxVariables-1; i++) {
-			//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {i})});
-		//}
-
-		//for (int i=0; i<maxVariables-1; i++) {
-			//for (int j=i+1; j<maxVariables-1; j++) {
-				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {i,i}), Polynomial<polyType>(maxVariables, 1, {j,j})});
-			//}
-		//}
-
-
 		// Initial solve TODO4
 		//std::cout << monomProducts << std::endl;
 		std::cout << "Solving with no constraints..." << std::endl;
@@ -4623,11 +4492,11 @@ public:
 		//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {2,2}), Polynomial<polyType>(maxVariables, 1, {3,3})});
 		//std::vector<Polynomial<polyType>> toAdd;
 		//for (int i=0; i<numOGMonoms; i++) {
-			//toAdd.push_back(Polynomial<polyType>(maxVariables, monoms[i]));
+			//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, monoms[i]));
 		//}
 		//for (int i=0; i<numOGMonoms; i++) {
 			//for (int j=0; j<numOGMonoms; j++) {
-				//toAdd.push_back(Polynomial<polyType>(maxVariables, monoms[i])*Polynomial<polyType>(maxVariables, monoms[j]));
+				//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, monoms[i])*Polynomial<polyType>(maxVariables, 1, monoms[j]));
 			//}
 		//}
 		//std::cout << toAdd << std::endl;
@@ -4637,19 +4506,19 @@ public:
 		//auto res = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
 		//auto res = solveSDPMatrix(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
 		
-		//std::cout << "Solving with indiv 1st-order constraints..." << std::endl;
-		//{
-			//for (int i=0; i<monoms.size(); i++) {
-				//if (monoms[i].size() == 2*digitsPerInd) {
-					//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-					//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-					//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2})});
-				//}
-			//}
-			//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			////estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			////std::cout << estimate.first << std::endl;
-		//}
+		std::cout << "Solving with indiv 1st-order constraints..." << std::endl;
+		{
+			for (int i=0; i<monoms.size(); i++) {
+				if (monoms[i].size() == 2*digitsPerInd) {
+					int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+					int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+					monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2})});
+				}
+			}
+			prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//std::cout << estimate.first << std::endl;
+		}
 
 		//std::cout << "Solving with general 1st-order constraints..." << std::endl;
 		//{
@@ -4661,28 +4530,29 @@ public:
 					//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1}));
 				//}
 			//}
-			//monomProducts.push_back(toAdd);
+			//monomProducts = {toAdd};
 			//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
 			////std::cout << estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts) << std::endl;
 		//}
 
-		//std::cout << "Solving with indiv 2nd-order constraints..." << std::endl;
-		//{
-			//for (int i=0; i<monoms.size(); i++) {
-				//if (monoms[i].size() == 2*digitsPerInd) {
-					//for (int j=0; j<monoms.size(); j++) {
-						//if (monoms[j].size() <= 2*digitsPerInd) {
-							//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), 
-													 //Polynomial<polyType>(maxVariables, monoms[i]), 
-													 //Polynomial<polyType>(maxVariables, monoms[j])});
-						//}
-					//}
-				//}
-			//}
-			//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			////estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			////std::cout << estimate.first << std::endl;
-		//}
+		addMonomsOfOrder(monoms, 2);
+		std::cout << "Solving with indiv 2nd-order constraints..." << std::endl;
+		{
+			for (int i=0; i<monoms.size(); i++) {
+				if (monoms[i].size() == 2*digitsPerInd) {
+					for (int j=0; j<monoms.size(); j++) {
+						if (monoms[j].size() <= 2*digitsPerInd) {
+							monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), 
+													 Polynomial<polyType>(maxVariables, 1, monoms[i]), 
+													 Polynomial<polyType>(maxVariables, 1, monoms[j])});
+						}
+					}
+				}
+			}
+			prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//std::cout << estimate.first << std::endl;
+		}
 		
 		//std::cout << "Solving with general 2nd-order constraints..." << std::endl;
 		//{
@@ -4696,8 +4566,9 @@ public:
 				//}
 			//}
 			//monomProducts.push_back(toAdd);
-			////prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			//std::cout << estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts) << std::endl;
+			//std::cout << "added " << toAdd << std::endl;
+			//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			////estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts) << std::endl;
 		//}
 
 		//std::cout << "Solving with general 1st+2nd-order constraints..." << std::endl;
@@ -4719,23 +4590,24 @@ public:
 			////std::cout << estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts) << std::endl;
 		//}
 
-		//std::cout << "Solving with indiv 3rd-order constraints..." << std::endl;
-		//{
-			//for (int i=0; i<monoms.size(); i++) {
-				//if (monoms[i].size() == 3*digitsPerInd) {
-					//for (int j=0; j<monoms.size(); j++) {
-						//if (monoms[j].size() <= 3*digitsPerInd) {
-							//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), 
-													 //Polynomial<polyType>(maxVariables, monoms[i]), 
-													 //Polynomial<polyType>(maxVariables, monoms[j])});
-						//}
-					//}
-				//}
-			//}
-			//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			////estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			////std::cout << estimate.first << std::endl;
-		//}
+		addMonomsOfOrder(monoms, 3);
+		std::cout << "Solving with indiv 3rd-order constraints..." << std::endl;
+		{
+			for (int i=0; i<monoms.size(); i++) {
+				if (monoms[i].size() == 3*digitsPerInd) {
+					for (int j=0; j<monoms.size(); j++) {
+						if (monoms[j].size() <= 3*digitsPerInd) {
+							monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), 
+													 Polynomial<polyType>(maxVariables, 1, monoms[i]), 
+													 Polynomial<polyType>(maxVariables, 1, monoms[j])});
+						}
+					}
+				}
+			}
+			prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//std::cout << estimate.first << std::endl;
+		}
 
 		//std::cout << "Solving with general 3rd-order constraints..." << std::endl;
 		//{
@@ -4754,24 +4626,6 @@ public:
 			//std::cout << estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts) << std::endl;
 		//}
 
-		//std::cout << "Solving with indiv 4th-order constraints..." << std::endl;
-		//{
-			//for (int i=0; i<monoms.size(); i++) {
-				//if (monoms[i].size() == 4*digitsPerInd) {
-					//for (int j=0; j<monoms.size(); j++) {
-						//if (monoms[j].size() <= 4*digitsPerInd) {
-							//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), 
-													 //Polynomial<polyType>(maxVariables, monoms[i]), 
-													 //Polynomial<polyType>(maxVariables, monoms[j])});
-						//}
-					//}
-				//}
-			//}
-			//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			////estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			////std::cout << estimate.first << std::endl;
-		//}
-		
 		//std::cout << "Solving with general 1st+2nd+3rd-order constraints..." << std::endl;
 		//{
 			//std::vector<Polynomial<polyType>> toAdd;
@@ -4796,11 +4650,137 @@ public:
 			////estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
 			////std::cout << estimate.first << std::endl;
 		//}
-		
-		for (int k=0; k<prevRes.second.size(); k++) {
-			std::cout << monoms[k] << "   " << prevRes.second[k] << std::endl;
+
+		addMonomsOfOrder(monoms, 4);
+		std::cout << "Solving with indiv 4th-order constraints..." << std::endl;
+		{
+			for (int i=0; i<monoms.size(); i++) {
+				if (monoms[i].size() == 4*digitsPerInd) {
+					for (int j=0; j<monoms.size(); j++) {
+						if (monoms[j].size() <= 4*digitsPerInd) {
+							monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), 
+													 Polynomial<polyType>(maxVariables, 1, monoms[i]), 
+													 Polynomial<polyType>(maxVariables, 1, monoms[j])});
+						}
+					}
+				}
+			}
+			prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//std::cout << estimate.first << std::endl;
 		}
-		std::cout << std::endl;
+
+		addMonomsOfOrder(monoms, 5);
+		std::cout << "Solving with indiv 5th-order constraints..." << std::endl;
+		{
+			for (int i=0; i<monoms.size(); i++) {
+				if (monoms[i].size() == 5*digitsPerInd) {
+					for (int j=0; j<monoms.size(); j++) {
+						if (monoms[j].size() <= 5*digitsPerInd) {
+							monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), 
+													 Polynomial<polyType>(maxVariables, 1, monoms[i]), 
+													 Polynomial<polyType>(maxVariables, 1, monoms[j])});
+						}
+					}
+				}
+			}
+			prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//std::cout << estimate.first << std::endl;
+		}
+
+		addMonomsOfOrder(monoms, 6);
+		std::cout << "Solving with indiv 6th-order constraints..." << std::endl;
+		{
+			for (int i=0; i<monoms.size(); i++) {
+				if (monoms[i].size() == 6*digitsPerInd) {
+					for (int j=0; j<monoms.size(); j++) {
+						if (monoms[j].size() <= 6*digitsPerInd) {
+							monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), 
+													 Polynomial<polyType>(maxVariables, 1, monoms[i]), 
+													 Polynomial<polyType>(maxVariables, 1, monoms[j])});
+						}
+					}
+				}
+			}
+			prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//std::cout << estimate.first << std::endl;
+		}
+
+		addMonomsOfOrder(monoms, 7);
+		std::cout << "Solving with indiv 7th-order constraints..." << std::endl;
+		{
+			for (int i=0; i<monoms.size(); i++) {
+				if (monoms[i].size() == 7*digitsPerInd) {
+					for (int j=0; j<monoms.size(); j++) {
+						if (monoms[j].size() <= 7*digitsPerInd) {
+							monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), 
+													 Polynomial<polyType>(maxVariables, 1, monoms[i]), 
+													 Polynomial<polyType>(maxVariables, 1, monoms[j])});
+						}
+					}
+				}
+			}
+			prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//std::cout << estimate.first << std::endl;
+		}
+
+		addMonomsOfOrder(monoms, 8);
+		std::cout << "Solving with indiv 8th-order constraints..." << std::endl;
+		{
+			for (int i=0; i<monoms.size(); i++) {
+				if (monoms[i].size() == 8*digitsPerInd) {
+					for (int j=0; j<monoms.size(); j++) {
+						if (monoms[j].size() <= 8*digitsPerInd) {
+							monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), 
+													 Polynomial<polyType>(maxVariables, 1, monoms[i]), 
+													 Polynomial<polyType>(maxVariables, 1, monoms[j])});
+						}
+					}
+				}
+			}
+			prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//std::cout << estimate.first << std::endl;
+		}
+
+		//std::cout << "Solving with general 1st+2nd+3rd+4th-order constraints..." << std::endl;
+		//{
+			//std::vector<Polynomial<polyType>> toAdd;
+			//toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
+			//for (int i=0; i<monoms.size(); i++) {
+				//if (monoms[i].size() == digitsPerInd) {
+					//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+				//} else if (monoms[i].size() == 2*digitsPerInd) {
+					//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+					//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+					//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1,ind2}));
+					//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1}));
+				//} else if (monoms[i].size() == 3*digitsPerInd) {
+					//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+					//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+					//int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
+					//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1,ind2,ind3}));
+				//} else if (monoms[i].size() == 3*digitsPerInd) {
+					//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+					//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+					//int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
+					//int ind4 = std::stoi(monoms[i].substr(3*digitsPerInd,digitsPerInd));
+					//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1,ind2,ind3,ind4}));
+				//}
+			//}
+			//monomProducts.push_back(toAdd);
+			//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			////estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			////std::cout << estimate.first << std::endl;
+		//}
+
+		//for (int k=0; k<prevRes.second.size(); k++) {
+			//std::cout << monoms[k] << "   " << prevRes.second[k] << std::endl;
+		//}
+		//std::cout << std::endl;
 
 	}
 

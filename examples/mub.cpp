@@ -3,6 +3,27 @@
 // Standard cpp entry point 
 int main(int argc, char ** argv) {
 
+	// Find a lower bound TODO
+	PolynomialProblem<double> testProb(Polynomial<double>(4), {
+			Polynomial<double>(4, "1*{00}+1*{11}-1*{}"),
+			Polynomial<double>(4, "1*{22}+1*{33}-1*{}"),
+			Polynomial<double>(4, "1*{01}-1*{23}-0.9*{}"),
+			Polynomial<double>(4, "1*{03}-1*{12}-0.1*{}"),
+		}, {});
+	std::cout << testProb << std::endl;
+
+	Polynomial<double> testPoly(testProb.obj.maxVariables);
+	for (int i=0; i<testProb.conZero.size(); i++) {
+		testPoly += testProb.conZero[i]*testProb.conZero[i];
+	}
+	testPoly = testPoly.changeMaxVariables(testPoly.maxVariables+1);
+	auto solVec = testPoly.findRoot(4, 0.5, 1e-10, 10000, 16, false);
+	std::cout << solVec << std::endl;;
+
+	testProb.proveInfeasible();
+	
+	return 0;
+
 	// Get the problem from the args
 	int d = 2;
 	int n = 2;
@@ -75,7 +96,7 @@ int main(int argc, char ** argv) {
 							eqn.addTerm(-1i, {newVarInd+1});
 
 							// Constrain that this new complex should have mag 1/d
-							Polynomial<std::complex<double>> extraEqn(numVars);
+							Polynomial<double> extraEqn(numVars);
 							extraEqn.addTerm(1, {newVarInd,newVarInd});
 							extraEqn.addTerm(1, {newVarInd+1,newVarInd+1});
 							extraEqn.addTerm(-1.0/d, {});
@@ -105,7 +126,7 @@ int main(int argc, char ** argv) {
 		for (int i=d*d; i<numVarsNonConj; i++) {
 			for (int j=0; j<ogEqns; j++) {
 				if (eqns[j].contains(i)) {
-					Polynomial<std::complex<double>> extraEqn(numVars);
+					Polynomial<double> extraEqn(numVars);
 					extraEqn.addTerm(1, {i,i});
 					extraEqn.addTerm(1, {i+conjDelta,i+conjDelta});
 					extraEqn.addTerm(-1.0/d, {});
@@ -166,7 +187,7 @@ int main(int argc, char ** argv) {
 				//valsToReplace.push_back(0);
 			//}
 		//}
-		double overRt2 = 1.0/std::sqrt(2);
+		//double overRt2 = 1.0/std::sqrt(2);
 		//indsToReplace.push_back(33);
 		//valsToReplace.push_back(0);
 		//indsToReplace.push_back(32);
@@ -175,68 +196,44 @@ int main(int argc, char ** argv) {
 						 //16, 17,  18, 19,  20, 21,    22, 23,  24};
 		//valsToReplace = {1, 0,    0, 1,    overRt2, overRt2,     overRt2, -overRt2,    0,
 						 //0, 0,    0, 0,    0, 0,                 0, 0};
-		std::cout << indsToReplace << std::endl;
-		std::cout << valsToReplace << std::endl;
-		//for (int i=0; i<eqns.size(); i++) {
-			//eqns[i] = eqns[i].substitute(indsToReplace, valsToReplace);
-		//}
+		//std::cout << indsToReplace << std::endl;
+		//std::cout << valsToReplace << std::endl;
+		for (int i=0; i<eqns.size(); i++) {
+			eqns[i] = eqns[i].replaceWithValue(indsToReplace, valsToReplace);
+		}
 
 		// Collapse to the minimum number of vars
-		std::vector<int> originalInds;
-		std::vector<int> newInds;
+		std::unordered_map<int,int> indMap;
 		int nextInd = 0;
 		for (int i=0; i<numVars; i++) {
 			for (int j=0; j<eqns.size(); j++) {
 				if (eqns[j].contains(i)) {
-					originalInds.push_back(i);
-					newInds.push_back(nextInd);
+					indMap[i] = nextInd;
 					nextInd++;
 					break;
 				}
 			}
 		}
-		//for (int i=0; i<originalInds.size(); i++) {
-			//if (newInds[i] == 12) {
-				//newInds[i] = 0;
-			//}
-			//if (newInds[i] == 13) {
-				//newInds[i] = 6;
-			//}
-			//if (newInds[i] == 14) {
-				//newInds[i] = 2;
-			//}
-			//if (newInds[i] == 15) {
-				//newInds[i] = 8;
-			//}
-			//if (newInds[i] == 16) {
-				//newInds[i] = 4;
-			//}
-			//if (newInds[i] == 17) {
-				//newInds[i] = 10;
-			//}
-		//}
-		std::cout << originalInds << std::endl;
-		std::cout << newInds << std::endl;
 		numVars = nextInd+1;
 		std::vector<Polynomial<double>> newEqns;
 		for (int i=0; i<eqns.size(); i++) {
-			eqns[i] = eqns[i].changeVariables(originalInds, newInds);
+			eqns[i] = eqns[i].replaceWithVariable(indMap);
 			eqns[i].maxVariables = numVars;
 			if (eqns[i].size() > 0) {
 				newEqns.push_back(eqns[i]);
 			}
 		}
 
-		auto newnewInds = newInds;
+		//auto newnewInds = newInds;
 		//newnewInds[12] = 0;
 		//newnewInds[13] = 6;
 		//newnewInds[14] = 2;
 		//newnewInds[15] = 8;
 		//newnewInds[16] = 4;
 		//newnewInds[17] = 10;
-		for (int i=0; i<newEqns.size(); i++) {
-			newEqns[i] = newEqns[i].changeVariables(newInds, newnewInds);
-		}
+		//for (int i=0; i<newEqns.size(); i++) {
+			//newEqns[i] = newEqns[i].replaceWithVariable(newInds, newnewInds);
+		//}
 
 		// Combine these to create a single polynomial
 		std::cout << "reduced equations:" << std::endl;
