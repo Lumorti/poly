@@ -9,7 +9,8 @@ int main(int argc, char ** argv) {
 			Polynomial<double>(4, "1*{22}+1*{33}-1*{}"),
 			Polynomial<double>(4, "1*{01}-1*{23}-0.9*{}"),
 			Polynomial<double>(4, "1*{03}-1*{12}-0.1*{}"),
-		}, {});
+		}, {
+		});
 	std::cout << testProb << std::endl;
 
 	Polynomial<double> testPoly(testProb.obj.maxVariables);

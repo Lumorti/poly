@@ -1984,21 +1984,14 @@ public:
 		// Output each constraint
 		int numSoFar = 0;
 		if (other.conZero.size() + other.conPositive.size() > 0) {
-			output << "Subject to: " << std::endl << std::endl;
-		}
-		for (int i=0; i<other.conZero.size(); i++) {
-			output << other.conZero[i] << " = 0 ";
-			if (i < other.conZero.size()-1) {
-				output << std::endl << std::endl;
+			output << "Subject to: " << std::endl;
+			for (int i=0; i<other.conZero.size(); i++) {
+				output << std::endl << other.conZero[i] << " = 0 " << std::endl;;
+			}
+			for (int i=0; i<other.conPositive.size(); i++) {
+				output << std::endl << other.conPositive[i] << " > 0 " << std::endl;
 			}
 		}
-		for (int i=0; i<other.conPositive.size(); i++) {
-			output << other.conPositive[i] << " > 0 ";
-			if (i < other.conPositive.size()-1) {
-				output << std::endl << std::endl;
-			}
-		}
-		output << std::endl;
 
 		return output;
 
@@ -3942,21 +3935,14 @@ public:
 		// Output each constraint
 		int numSoFar = 0;
 		if (other.conZero.size() + other.conPositive.size() > 0) {
-			output << "Subject to: " << std::endl << std::endl;
-		}
-		for (int i=0; i<other.conZero.size(); i++) {
-			output << other.conZero[i] << " = 0 ";
-			if (i < other.conZero.size()-1) {
-				output << std::endl << std::endl;
+			output << "Subject to: " << std::endl;
+			for (int i=0; i<other.conZero.size(); i++) {
+				output << std::endl << other.conZero[i] << " = 0 " << std::endl;;
+			}
+			for (int i=0; i<other.conPositive.size(); i++) {
+				output << std::endl << other.conPositive[i] << " > 0 " << std::endl;
 			}
 		}
-		for (int i=0; i<other.conPositive.size(); i++) {
-			output << other.conPositive[i] << " > 0 ";
-			if (i < other.conPositive.size()-1) {
-				output << std::endl << std::endl;
-			}
-		}
-		output << std::endl;
 
 		return output;
 
