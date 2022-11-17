@@ -4,26 +4,26 @@
 int main(int argc, char ** argv) {
 
 	// Find a lower bound TODO
-	PolynomialProblem<double> testProb(Polynomial<double>(4), {
-			Polynomial<double>(4, "1*{00}+1*{11}-1*{}"),
-			Polynomial<double>(4, "1*{22}+1*{33}-1*{}"),
-			Polynomial<double>(4, "1*{01}-1*{23}-0.9*{}"),
-			Polynomial<double>(4, "1*{03}-1*{12}-0.1*{}"),
-		}, {
-		});
-	std::cout << testProb << std::endl;
+	//PolynomialProblem<double> testProb(Polynomial<double>(4), {
+			//Polynomial<double>(4, "1*{00}+1*{11}-1*{}"),
+			//Polynomial<double>(4, "1*{22}+1*{33}-1*{}"),
+			//Polynomial<double>(4, "1*{01}-1*{23}-0.9*{}"),
+			//Polynomial<double>(4, "1*{03}-1*{12}-0.1*{}"),
+		//}, {
+		//});
+	//std::cout << testProb << std::endl;
 
-	Polynomial<double> testPoly(testProb.obj.maxVariables);
-	for (int i=0; i<testProb.conZero.size(); i++) {
-		testPoly += testProb.conZero[i]*testProb.conZero[i];
-	}
-	testPoly = testPoly.changeMaxVariables(testPoly.maxVariables+1);
-	auto solVec = testPoly.findRoot(4, 0.5, 1e-10, 10000, 16, false);
-	std::cout << solVec << std::endl;;
+	//Polynomial<double> testPoly(testProb.obj.maxVariables);
+	//for (int i=0; i<testProb.conZero.size(); i++) {
+		//testPoly += testProb.conZero[i]*testProb.conZero[i];
+	//}
+	//testPoly = testPoly.changeMaxVariables(testPoly.maxVariables+1);
+	//auto solVec = testPoly.findRoot(4, 0.5, 1e-10, 10000, 16, false);
+	//std::cout << solVec << std::endl;;
 
-	testProb.proveInfeasible();
+	//testProb.proveInfeasible();
 	
-	return 0;
+	//return 0;
 
 	// Get the problem from the args
 	int d = 2;
@@ -37,7 +37,7 @@ int main(int argc, char ** argv) {
 
 	// Useful quantities
 	int numVarsNonConj = n*d*d;
-	int numVars = 2*numVarsNonConj+1000;
+	int numVars = 2*numVarsNonConj+100;
 	int conjDelta = numVarsNonConj;
 	double rt2 = 1.0/std::sqrt(2.0);
 
@@ -51,8 +51,10 @@ int main(int argc, char ** argv) {
 		dLimits.push_back({7, 3, 3, 3});
 	} else if (d == 10 && n == 4) {
 		dLimits.push_back({10, 3, 3, 3});
+	} else if (d == 2 && n == 3) {
+		dLimits.push_back({2, 1, 1});
 	} else if (d == 2 && n == 4) {
-		dLimits.push_back({1, 1, 1, 1});
+		dLimits.push_back({2, 1, 1, 1});
 	} else {
 		dLimits.push_back(std::vector<int>(n, d));
 	}
@@ -69,6 +71,10 @@ int main(int argc, char ** argv) {
 			for (int j=i; j<n; j++) {
 				for (int k=0; k<dLimits[i2][i]; k++) {
 					for (int l=0; l<dLimits[i2][j]; l++) {
+
+						if (i == j && l < k) {
+							continue;
+						}
 
 						// (a+ib)*(c+id)
 						Polynomial<std::complex<double>> eqn(numVars);
@@ -159,13 +165,11 @@ int main(int argc, char ** argv) {
 		}
 
 		// Can assume first element of second basis is uniform
-		for (int i=d; i<d+1; i++) {
-			for (int j=0; j<d; j++) {
-				indsToReplace.push_back(i*d+j);
-				indsToReplace.push_back(i*d+j+conjDelta);
-				valsToReplace.push_back(1/std::sqrt(d));
-				valsToReplace.push_back(0);
-			}
+		for (int j=0; j<d; j++) {
+			indsToReplace.push_back(d*d+j);
+			indsToReplace.push_back(d*d+j+conjDelta);
+			valsToReplace.push_back(1/std::sqrt(d));
+			valsToReplace.push_back(0);
 		}
 
 		// Can assume first value of each vector is 1 / sqrt(d)
@@ -218,8 +222,7 @@ int main(int argc, char ** argv) {
 		numVars = nextInd+1;
 		std::vector<Polynomial<double>> newEqns;
 		for (int i=0; i<eqns.size(); i++) {
-			eqns[i] = eqns[i].replaceWithVariable(indMap);
-			eqns[i].maxVariables = numVars;
+			eqns[i] = eqns[i].replaceWithVariable(indMap).changeMaxVariables(numVars);
 			if (eqns[i].size() > 0) {
 				newEqns.push_back(eqns[i]);
 			}
@@ -248,12 +251,20 @@ int main(int argc, char ** argv) {
 		std::cout << dLimits[i2] << "    " << newEqns.size() << "   " << numVars << std::endl;
 		
 		// Find a lower bound TODO
-		PolynomialProblem<double> prob(Polynomial<double>(numVars), newEqns, {});
+		Polynomial<double> obj(numVars);
+		for (int i=0; i<numVars-1; i++) {
+			obj.addTerm(-1.0, {i,i});
+		}
+		for (int i=0; i<numVars-1; i++) {
+			obj.addTerm(1.0, {i});
+		}
+		std::cout << obj << std::endl;
+		PolynomialProblem<double> prob(obj, newEqns, {});
 		prob.proveInfeasible();
 
 		// Find a root of this using an auxilary variable
 		//std::vector<double> x = poly.findRoot(0, 0.5, 1e-10, 10000, 16, false);
-		//std::vector<double> x = poly.findRoot(numVars-1, 0.5, 1e-10, 10000, 16, false);
+		//std::vector<double> x = poly.findRoot(numVars-1, 0.1, 1e-10, 10000, 16, false);
 		//std::cout << "   Testing this x = " << poly.eval(x) << std::endl;
 
 	}
