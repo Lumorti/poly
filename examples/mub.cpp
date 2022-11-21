@@ -72,6 +72,7 @@ int main(int argc, char ** argv) {
 				for (int k=0; k<dLimits[i2][i]; k++) {
 					for (int l=0; l<dLimits[i2][j]; l++) {
 
+						// Prevent repeat equations
 						if (i == j && l < k) {
 							continue;
 						}
@@ -103,12 +104,12 @@ int main(int argc, char ** argv) {
 							eqn.addTerm(-1i, {newVarInd+1});
 
 							// Constrain that this new complex should have mag 1/d
-							//Polynomial<double> extraEqn(numVars);
-							//extraEqn.addTerm(1, {newVarInd,newVarInd});
-							//extraEqn.addTerm(1, {newVarInd+1,newVarInd+1});
-							//extraEqn.addTerm(-1.0/d, {});
-							//eqns.push_back(extraEqn);
-							//newVarInd += 2;
+							Polynomial<double> extraEqn(numVars);
+							extraEqn.addTerm(1, {newVarInd,newVarInd});
+							extraEqn.addTerm(1, {newVarInd+1,newVarInd+1});
+							extraEqn.addTerm(-1.0/d, {});
+							eqns.push_back(extraEqn);
+							newVarInd += 2;
 
 						}
 
@@ -129,19 +130,20 @@ int main(int argc, char ** argv) {
 			}
 		}
 
+		// All should have mag 1
 		int ogEqns = eqns.size();
-		//for (int i=d*d; i<numVarsNonConj; i++) {
-			//for (int j=0; j<ogEqns; j++) {
-				//if (eqns[j].contains(i)) {
-					//Polynomial<double> extraEqn(numVars);
-					//extraEqn.addTerm(1, {i,i});
-					//extraEqn.addTerm(1, {i+conjDelta,i+conjDelta});
-					//extraEqn.addTerm(-1.0/d, {});
-					//eqns.push_back(extraEqn);
-					//break;
-				//}
-			//}
-		//}
+		for (int i=d*d; i<numVarsNonConj; i++) {
+			for (int j=0; j<ogEqns; j++) {
+				if (eqns[j].contains(i)) {
+					Polynomial<double> extraEqn(numVars);
+					extraEqn.addTerm(1, {i,i});
+					extraEqn.addTerm(1, {i+conjDelta,i+conjDelta});
+					extraEqn.addTerm(-1.0/d, {});
+					eqns.push_back(extraEqn);
+					break;
+				}
+			}
+		}
 
 		//std::cout << "before reductions:" << std::endl;
 		//for (int i=0; i<eqns.size(); i++) {
@@ -219,9 +221,9 @@ int main(int argc, char ** argv) {
 				}
 			}
 		}
-		numVars = nextInd+1;
+		numVars = nextInd;
 		std::vector<Polynomial<double>> newEqns;
-		for (int i=4; i<eqns.size(); i++) {
+		for (int i=0; i<eqns.size(); i++) {
 			eqns[i] = eqns[i].replaceWithVariable(indMap).changeMaxVariables(numVars);
 			if (eqns[i].size() > 0) {
 				newEqns.push_back(eqns[i]);
@@ -239,26 +241,26 @@ int main(int argc, char ** argv) {
 			//newEqns[i] = newEqns[i].replaceWithVariable(newInds, newnewInds);
 		//}
 
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 0}-0.70710678118*{}"));
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 4}-0*{}"));
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 1}-0*{}"));
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 5}-0.70710678118*{}"));
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 2}-0.70710678118*{}"));
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 6}-0*{}"));
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 3}-0*{}"));
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 7}-0.70710678118*{}"));
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 8}-0.70710678118*{}"));
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 9}-0*{}"));
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 0 0}-0.5*{}"));
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 1 1}-0*{}"));
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 2 2}-0.5*{}"));
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 3 3}-0*{}"));
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 4 4}-0*{}"));
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 5 5}-0.5*{}"));
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 6 6}-0*{}"));
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 7 7}-0.5*{}"));
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 8 8}-0.5*{}"));
-		newEqns.push_back(Polynomial<double>(numVars, "1*{ 9 9}-0*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 0}-0.70710678118*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 4}-0*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 1}-0*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 5}-0.70710678118*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 2}-0.70710678118*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 6}-0*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 3}-0*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 7}-0.70710678118*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 8}-0.70710678118*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 9}-0*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 0 0}-0.5*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 1 1}-0*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 2 2}-0.5*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 3 3}-0*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 4 4}-0*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 5 5}-0.5*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 6 6}-0*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 7 7}-0.5*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 8 8}-0.5*{}"));
+		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 9 9}-0*{}"));
 		
 		// Combine these to create a single polynomial
 		//std::cout << "reduced equations:" << std::endl;
@@ -273,13 +275,6 @@ int main(int argc, char ** argv) {
 
 		// Find a lower bound TODO
 		Polynomial<double> obj(numVars);
-		//for (int i=0; i<numVars-1; i++) {
-			//obj.addTerm(-1.0, {i,i});
-		//}
-		//for (int i=0; i<numVars-1; i++) {
-			//obj.addTerm(1.0, {i});
-		//}
-		//std::cout << obj << std::endl;
 		PolynomialProblem<double> prob(obj, newEqns, {});
 		prob.proveInfeasible();
 

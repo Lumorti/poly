@@ -40,6 +40,20 @@ std::ostream& operator<<(std::ostream& os, const std::vector<std::string>& v) {
     return os;
 }
 
+// Generic overload for outputting vector of pairs
+template <class type1, class type2>
+std::ostream& operator<<(std::ostream& os, const std::vector<std::pair<type1,type2>>& v) {
+    os << "{";
+    for (typename std::vector<std::pair<type1,type2>>::const_iterator ii = v.begin(); ii != v.end(); ++ii) {
+        os << "{" << (*ii).first << "," << (*ii).second << "}";
+		if (ii+1 != v.end()) {
+			os << ", ";
+		}
+    }
+    os << "}";
+    return os;
+}
+
 // Generic overload for outputting vector
 template <class T>
 std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
@@ -4234,6 +4248,161 @@ public:
 	}
 
 	// Solve a SDP program given an objective and zero/positive constraints
+	std::pair<bool,std::vector<polyType>> solveSDPWithCuts(std::vector<std::pair<double,double>>& varMinMax, std::vector<Polynomial<polyType>>& conZeroLinear, std::vector<Polynomial<polyType>> conPositiveLinear, std::vector<std::string>& monoms, std::vector<std::vector<Polynomial<polyType>>>& monomProducts) {
+
+		// Create the PSD matrices from this list
+		std::vector<std::shared_ptr<monty::ndarray<int,1>>> shouldBePSD;
+		for (int j=0; j<monomProducts.size(); j++) {
+
+			// Get the list of all monomial locations for the PSD matrix
+			std::vector<int> monLocs;
+			for (int i=0; i<monomProducts[j].size(); i++) {
+				for (int k=0; k<monomProducts[j].size(); k++) {
+
+					// Calculate the product
+					std::string monString = (monomProducts[j][i]*monomProducts[j][k]).getMonomials()[0];
+
+					// Find this in the monomial list
+					auto loc = std::find(monoms.begin(), monoms.end(), monString);
+					if (loc != monoms.end()) {
+						monLocs.push_back(loc - monoms.begin());
+					} else {
+						monLocs.push_back(monoms.size());
+						monoms.push_back(monString);
+					}
+
+				}
+			}
+
+			// This (when reformatted) should be positive-semidefinite
+			shouldBePSD.push_back(monty::new_array_ptr<int>(monLocs));
+
+		}
+
+		// Set some vars
+		int oneIndex = 0;
+		int varsTotal = monoms.size();
+
+		// Get the inds of the first order monomials and their squares
+		std::vector<int> firstMonomInds(varMinMax.size());
+		std::vector<int> squaredMonomInds(varMinMax.size());
+		for (int i=0; i<monoms.size(); i++) {
+			if (monoms[i].size() == digitsPerInd) {
+				firstMonomInds[std::stoi(monoms[i])] = i;
+			} else if (monoms[i].size() == 2*digitsPerInd && monoms[i].substr(0,digitsPerInd) == monoms[i].substr(digitsPerInd,digitsPerInd)) {
+				squaredMonomInds[std::stoi(monoms[i].substr(0,digitsPerInd))] = i;
+			}
+		}
+
+		// Calculate the linear constraints based on the min/maxes 
+		for (int i=0; i<varMinMax.size(); i++) {
+
+			// Given two points, find ax+by+c=0
+			std::vector<double> point1 = {varMinMax[i].first, varMinMax[i].first*varMinMax[i].first};
+			std::vector<double> point2 = {varMinMax[i].second, varMinMax[i].second*varMinMax[i].second};
+			double a = point2[1]-point1[1];
+			double b = point1[0]-point2[0];
+			double c = -a*point1[0]-b*point1[1];
+
+			// Add this as a linear pos con
+			Polynomial<polyType> newCon1(varsTotal);
+			newCon1.addTerm(a, {firstMonomInds[i]});
+			newCon1.addTerm(b, {squaredMonomInds[i]});
+			newCon1.addTerm(c, {});
+			conPositiveLinear.push_back(newCon1);
+
+		}
+
+		// Convert the linear equality constraints to MOSEK form
+		std::vector<int> ARows;
+		std::vector<int> ACols;
+		std::vector<polyType> AVals;
+		for (int i=0; i<conZeroLinear.size(); i++) {
+			for (auto const &pair: conZeroLinear[i].coeffs) {
+				ARows.push_back(i);
+				if (pair.first == "") {
+					ACols.push_back(oneIndex);
+				} else {
+					ACols.push_back(std::stoi(pair.first));
+				}
+				AVals.push_back(pair.second);
+			}
+		}
+		auto AM = mosek::fusion::Matrix::sparse(conZeroLinear.size(), varsTotal, monty::new_array_ptr<int>(ARows), monty::new_array_ptr<int>(ACols), monty::new_array_ptr<polyType>(AVals));
+
+		// Convert the linear positivity constraints to MOSEK form
+		std::vector<int> BRows;
+		std::vector<int> BCols;
+		std::vector<polyType> BVals;
+		for (int i=0; i<conPositiveLinear.size(); i++) {
+			for (auto const &pair: conPositiveLinear[i].coeffs) {
+				BRows.push_back(i);
+				if (pair.first == "") {
+					BCols.push_back(oneIndex);
+				} else {
+					BCols.push_back(std::stoi(pair.first));
+				}
+				BVals.push_back(pair.second);
+			}
+		}
+		auto BM = mosek::fusion::Matrix::sparse(conPositiveLinear.size(), varsTotal, monty::new_array_ptr<int>(BRows), monty::new_array_ptr<int>(BCols), monty::new_array_ptr<polyType>(BVals));
+
+		// Create a model
+		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
+
+		// DEBUG
+		//M->setLogHandler([=](const std::string & msg){std::cout << msg << std::flush;});
+
+		// Create the variable
+		mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(-1, 1));
+
+		// The first element of the vector should be one
+		M->constraint(xM->index(oneIndex), mosek::fusion::Domain::equalsTo(1.0));
+
+		// Linear equality constraints
+		M->constraint(mosek::fusion::Expr::mul(AM, xM), mosek::fusion::Domain::equalsTo(0.0));
+
+		// Linear positivity constraints
+		M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(0));
+
+		// SDP constraints
+		for (int i=0; i<shouldBePSD.size(); i++) {
+			int matDim = std::sqrt(shouldBePSD[i]->size());
+			M->constraint(xM->pick(shouldBePSD[i])->reshape(matDim, matDim), mosek::fusion::Domain::inPSDCone(matDim));
+		}
+
+		// Objective is to maximize this angular distance
+		//M->objective(mosek::fusion::ObjectiveSense::Maximize, mosek::fusion::Expr::dot(cM, xM));
+
+		// Solve the problem
+		M->solve();
+		auto statProb = M->getProblemStatus();
+		auto statSol = M->getPrimalSolutionStatus();
+
+		// If valid, return this fact
+		if (statProb == mosek::fusion::ProblemStatus::PrimalInfeasible || statSol == mosek::fusion::SolutionStatus::Unknown) {
+			return std::pair<bool,std::vector<polyType>>(false, {});
+
+		// Otherwise, extract the result
+		} else {
+
+			// Get the solution values
+			auto sol = *(xM->level());
+			polyType outer = M->primalObjValue();
+
+			// Output the relevent moments
+			std::vector<polyType> solVec(xM->getSize());
+			for (int i=0; i<solVec.size(); i++) {
+				solVec[i] = sol[i];
+			}
+
+			return std::pair<bool,std::vector<polyType>>(true, solVec);
+
+		}
+
+	}
+
+	// Solve a SDP program given an objective and zero/positive constraints
 	std::pair<polyType,std::vector<polyType>> solveSDP(Polynomial<polyType>& objLinear, std::vector<Polynomial<polyType>>& conZeroLinear, std::vector<Polynomial<polyType>> conPositiveLinear, std::vector<std::string>& monoms, std::vector<std::vector<Polynomial<polyType>>>& monomProducts) {
 
 		// Create the PSD matrices from this list
@@ -4459,12 +4628,12 @@ public:
 			conPositiveLinear[i] = conPositive[i].replaceWithVariable(mapping);
 		}
 		
-		// Initial solve TODO4
+		// Initial solve
 		//std::cout << monomProducts << std::endl;
-		std::cout << "Solving with no constraints..." << std::endl;
-		auto prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-		std::cout << prevRes.first << std::endl;
-		std::cout << prevRes.second << std::endl;
+		//std::cout << "Solving with no constraints..." << std::endl;
+		//auto prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+		//std::cout << prevRes.first << std::endl;
+		//std::cout << prevRes.second << std::endl;
 		//auto estimate = estimateSDP(monoms.size(), conZeroLinear, conPositiveLinear, monoms, monomProducts);
 		//std::cout << estimate.first << std::endl;
 		//for (int i=0; i<1; i++) {
@@ -4475,6 +4644,88 @@ public:
 				//std::cout << std::endl;
 			//}
 		//}
+
+		// Add first order SDP cons (1, i, j)
+		for (int i=0; i<monoms.size(); i++) {
+			if (monoms[i].size() == 2*digitsPerInd) {
+				int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+				int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2})});
+			}
+		}
+
+		// Add first order SDP cons (1, i)
+		for (int i=0; i<monoms.size(); i++) {
+			if (monoms[i].size() == 1*digitsPerInd) {
+				int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1})});
+			}
+		}
+
+		// Start with the most general area
+		std::vector<std::vector<std::pair<double,double>>> toProcess;
+		std::vector<std::pair<double,double>> varMinMax(obj.maxVariables);
+		for (int i=0; i<obj.maxVariables; i++) {
+			varMinMax[i].first = -0.707106781;
+			varMinMax[i].second = 0.707106781;
+		}
+		toProcess.push_back(varMinMax);
+
+		// Keep splitting until all fail
+		int iter = 0;
+		while (toProcess.size() > 0) {
+
+			// Test this TODO4
+			auto cutRes = solveSDPWithCuts(toProcess[0], conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			std::cout << toProcess[0] << std::endl;
+			std::cout << iter << " " << cutRes.first << " " << toProcess.size() << std::endl;
+
+			// If feasbile, split the region TODO4
+			if (cutRes.first) {
+
+				// Find the biggest section
+				double biggestDiff = -10000;
+				int bestInd = -1;
+				for (int i=0; i<obj.maxVariables; i++) {
+					double diff = toProcess[0][i].second-toProcess[0][i].first;
+					if (diff > biggestDiff) {
+						biggestDiff = diff;
+						bestInd = i;
+					}
+				}
+
+				// Split it
+				double midPoint = (toProcess[0][bestInd].first + toProcess[0][bestInd].second) / 2.0;
+				auto copyLeft = toProcess[0];
+				auto copyRight = toProcess[0];
+				copyLeft[bestInd].second = midPoint;
+				copyRight[bestInd].first = midPoint;
+
+				// Add the new paths to the queue
+				toProcess.insert(toProcess.begin()+1, copyLeft);
+				toProcess.insert(toProcess.begin()+1, copyRight);
+
+			}
+
+			// Remove the one we just processed
+			toProcess.erase(toProcess.begin());
+
+			// Keep track of the iteration number
+			iter++;
+			if (iter > 100000000) {
+				break;
+			}
+
+		}
+
+		// Benchmarks TODO4
+		// disprove d2n4 43422 iterations, maybe like 10 mins
+
+		// Output the result for debugging
+		//for (int k=0; k<angleRes.second.size(); k++) {
+			//std::cout << k << "  " << monoms[k] << "   " << angleRes.second[k] << std::endl;
+		//}
+		//std::cout << std::endl;
 
 		//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {3,3}), Polynomial<polyType>(maxVariables, 1, {5,5})});
 		//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {2,2}), Polynomial<polyType>(maxVariables, 1, {3,3})});
@@ -4510,22 +4761,22 @@ public:
 			////std::cout << estimate.first << std::endl;
 		//}
 
-		std::cout << "Solving with general 1st-order constraints..." << std::endl;
-		{
-			std::vector<Polynomial<polyType>> toAdd;
-			toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
-			for (int i=0; i<monoms.size(); i++) {
-				if (monoms[i].size() == digitsPerInd) {
-					int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-					toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1}));
-				}
-			}
-			monomProducts.push_back(toAdd);
-			prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			std::cout << prevRes.first << std::endl;
-			std::cout << prevRes.second << std::endl;
-			//std::cout << estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts) << std::endl;
-		}
+		//std::cout << "Solving with general 1st-order constraints..." << std::endl;
+		//{
+			//std::vector<Polynomial<polyType>> toAdd;
+			//toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
+			//for (int i=0; i<monoms.size(); i++) {
+				//if (monoms[i].size() == digitsPerInd) {
+					//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+					//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1}));
+				//}
+			//}
+			//monomProducts.push_back(toAdd);
+			//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//std::cout << prevRes.first << std::endl;
+			//std::cout << prevRes.second << std::endl;
+			////std::cout << estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts) << std::endl;
+		//}
 
 		//addMonomsOfOrder(monoms, 2);
 		//std::cout << "Solving with indiv 2nd-order constraints..." << std::endl;
@@ -4770,11 +5021,6 @@ public:
 			////estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
 			////std::cout << estimate.first << std::endl;
 		//}
-
-		for (int k=0; k<prevRes.second.size(); k++) {
-			std::cout << monoms[k] << "   " << prevRes.second[k] << std::endl;
-		}
-		std::cout << std::endl;
 
 	}
 
