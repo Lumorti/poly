@@ -4429,7 +4429,7 @@ public:
 		std::cout << "num og monoms: " << numOGMonoms << std::endl;
 
 		// Certain order monomials should always appear
-		addMonomsOfOrder(monoms, 1);
+		//addMonomsOfOrder(monoms, 1);
 		std::cout << "num monoms total: " << monoms.size() << std::endl;
 
 		// Also get the monomials as polynomials and prepare for fast eval
@@ -4494,36 +4494,38 @@ public:
 		//auto res = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
 		//auto res = solveSDPMatrix(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
 		
-		std::cout << "Solving with indiv 1st-order constraints..." << std::endl;
+		//std::cout << "Solving with indiv 1st-order constraints..." << std::endl;
+		//{
+			//for (int i=0; i<monoms.size(); i++) {
+				//if (monoms[i].size() == 2*digitsPerInd) {
+					//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+					//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+					//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2})});
+				//}
+			//}
+			//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//std::cout << prevRes.first << std::endl;
+			//std::cout << prevRes.second << std::endl;
+			////estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			////std::cout << estimate.first << std::endl;
+		//}
+
+		std::cout << "Solving with general 1st-order constraints..." << std::endl;
 		{
+			std::vector<Polynomial<polyType>> toAdd;
+			toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
 			for (int i=0; i<monoms.size(); i++) {
-				if (monoms[i].size() == 2*digitsPerInd) {
+				if (monoms[i].size() == digitsPerInd) {
 					int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-					int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-					monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2})});
+					toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1}));
 				}
 			}
+			monomProducts.push_back(toAdd);
 			prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
 			std::cout << prevRes.first << std::endl;
 			std::cout << prevRes.second << std::endl;
-			//estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			//std::cout << estimate.first << std::endl;
+			//std::cout << estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts) << std::endl;
 		}
-
-		//std::cout << "Solving with general 1st-order constraints..." << std::endl;
-		//{
-			//std::vector<Polynomial<polyType>> toAdd;
-			//toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
-			//for (int i=0; i<monoms.size(); i++) {
-				//if (monoms[i].size() == digitsPerInd) {
-					//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-					//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1}));
-				//}
-			//}
-			//monomProducts = {toAdd};
-			//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			////std::cout << estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts) << std::endl;
-		//}
 
 		//addMonomsOfOrder(monoms, 2);
 		//std::cout << "Solving with indiv 2nd-order constraints..." << std::endl;
@@ -4561,6 +4563,7 @@ public:
 			////estimate = estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts) << std::endl;
 		//}
 
+		//addMonomsOfOrder(monoms, 1);
 		//addMonomsOfOrder(monoms, 2);
 		//std::cout << "Solving with general 1st+2nd-order constraints..." << std::endl;
 		//{
@@ -4580,7 +4583,6 @@ public:
 			//prevRes = solveSDP(objLinear, conZeroLinear, conPositiveLinear, monoms, monomProducts);
 			////std::cout << estimateSDP(numOGMonoms, conZeroLinear, conPositiveLinear, monoms, monomProducts) << std::endl;
 		//}
-		//std::cout << prevRes.first << std::endl;
 
 		//addMonomsOfOrder(monoms, 3);
 		//std::cout << "Solving with indiv 3rd-order constraints..." << std::endl;
@@ -4769,10 +4771,10 @@ public:
 			////std::cout << estimate.first << std::endl;
 		//}
 
-		//for (int k=0; k<prevRes.second.size(); k++) {
-			//std::cout << monoms[k] << "   " << prevRes.second[k] << std::endl;
-		//}
-		//std::cout << std::endl;
+		for (int k=0; k<prevRes.second.size(); k++) {
+			std::cout << monoms[k] << "   " << prevRes.second[k] << std::endl;
+		}
+		std::cout << std::endl;
 
 	}
 
