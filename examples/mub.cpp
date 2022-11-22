@@ -3,28 +3,6 @@
 // Standard cpp entry point 
 int main(int argc, char ** argv) {
 
-	// Find a lower bound TODO
-	//PolynomialProblem<double> testProb(Polynomial<double>(4), {
-			//Polynomial<double>(4, "1*{00}+1*{11}-1*{}"),
-			//Polynomial<double>(4, "1*{22}+1*{33}-1*{}"),
-			//Polynomial<double>(4, "1*{01}-1*{23}-0.9*{}"),
-			//Polynomial<double>(4, "1*{03}-1*{12}-0.1*{}"),
-		//}, {
-		//});
-	//std::cout << testProb << std::endl;
-
-	//Polynomial<double> testPoly(testProb.obj.maxVariables);
-	//for (int i=0; i<testProb.conZero.size(); i++) {
-		//testPoly += testProb.conZero[i]*testProb.conZero[i];
-	//}
-	//testPoly = testPoly.changeMaxVariables(testPoly.maxVariables+1);
-	//auto solVec = testPoly.findRoot(4, 0.5, 1e-10, 10000, 16, false);
-	//std::cout << solVec << std::endl;;
-
-	//testProb.proveInfeasible();
-	
-	//return 0;
-
 	// Get the problem from the args
 	int d = 2;
 	int n = 2;
@@ -230,40 +208,7 @@ int main(int argc, char ** argv) {
 			}
 		}
 
-		//auto newnewInds = newInds;
-		//newnewInds[12] = 0;
-		//newnewInds[13] = 6;
-		//newnewInds[14] = 2;
-		//newnewInds[15] = 8;
-		//newnewInds[16] = 4;
-		//newnewInds[17] = 10;
-		//for (int i=0; i<newEqns.size(); i++) {
-			//newEqns[i] = newEqns[i].replaceWithVariable(newInds, newnewInds);
-		//}
-
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 0}-0.70710678118*{}"));
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 4}-0*{}"));
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 1}-0*{}"));
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 5}-0.70710678118*{}"));
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 2}-0.70710678118*{}"));
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 6}-0*{}"));
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 3}-0*{}"));
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 7}-0.70710678118*{}"));
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 8}-0.70710678118*{}"));
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 9}-0*{}"));
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 0 0}-0.5*{}"));
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 1 1}-0*{}"));
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 2 2}-0.5*{}"));
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 3 3}-0*{}"));
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 4 4}-0*{}"));
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 5 5}-0.5*{}"));
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 6 6}-0*{}"));
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 7 7}-0.5*{}"));
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 8 8}-0.5*{}"));
-		//newEqns.push_back(Polynomial<double>(numVars, "1*{ 9 9}-0*{}"));
-		
 		// Combine these to create a single polynomial
-		//std::cout << "reduced equations:" << std::endl;
 		Polynomial<double> poly(numVars);
 		for (int i=0; i<newEqns.size(); i++) {
 			std::cout << newEqns[i] << std::endl;

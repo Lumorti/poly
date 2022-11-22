@@ -4349,14 +4349,6 @@ public:
 			}
 		}
 
-		// Add first order SDP cons (1, i) TODO4 needed?
-		for (int i=0; i<monoms.size(); i++) {
-			if (monoms[i].size() == 1*digitsPerInd) {
-				int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1})});
-			}
-		}
-
 		// Start with the most general area
 		std::vector<std::vector<std::pair<double,double>>> toProcess;
 		std::vector<std::pair<double,double>> varMinMax(obj.maxVariables);
@@ -4366,16 +4358,124 @@ public:
 		}
 		toProcess.push_back(varMinMax);
 
-		// Keep splitting until all fail
+		// Get list of general bad regions TODO4
+		std::vector<std::vector<std::pair<double,double>>> noGoRegions;
+		std::vector<std::vector<int>> indicesToCheck = {
+			{0, 4},
+			{1, 5},
+			{2, 6},
+			{3, 7},
+		};
 		int iter = 0;
+		auto toProcessBackup = toProcess;
+		for (int k=0; k<indicesToCheck.size(); k++) {
+			toProcess = toProcessBackup;
+			while (toProcess.size() > 0) {
+
+				// Test this subregion
+				auto cutRes = solveSDPWithCuts(toProcess[0], conZeroLinear, conPositiveLinear, monoms, monomProducts);
+
+				// If feasbile, split the region
+				if (cutRes.first) {
+
+					// Find the biggest section
+					double biggestDiff = -10000;
+					int bestInd = -1;
+					for (int i=0; i<indicesToCheck[k].size(); i++) {
+						double diff = toProcess[0][indicesToCheck[k][i]].second-toProcess[0][indicesToCheck[k][i]].first;
+						if (diff > biggestDiff) {
+							biggestDiff = diff;
+							bestInd = indicesToCheck[k][i];
+						}
+					}
+
+					// Split it
+					double midPoint = (toProcess[0][bestInd].first + toProcess[0][bestInd].second) / 2.0;
+					auto copyLeft = toProcess[0];
+					auto copyRight = toProcess[0];
+					copyLeft[bestInd].second = midPoint;
+					copyRight[bestInd].first = midPoint;
+
+					// Here only allow region of at least a certain size
+					if (copyLeft[bestInd].second - copyLeft[bestInd].first > 0.1) {
+
+						// Add the new paths to the queue
+						toProcess.insert(toProcess.begin()+1, copyLeft);
+						toProcess.insert(toProcess.begin()+1, copyRight);
+
+					}
+
+				// Otherwise add it to the list of invalid regions
+				} else {
+					noGoRegions.push_back(toProcess[0]);
+
+					// Check to see if it can be combined with any larger regions TODO4
+					for (int i=0; i<noGoRegions.size(); i++) {
+
+						// Get all the indices of dimensions which are non-equal
+						std::vector<int> sectionsNonEqual;
+						for (int j=0; j<noGoRegions[i].size(); j++) {
+							if () {
+
+							}
+
+						}
+
+						// If everything is equal apart from one side
+						if (sectionsNonEqual.size() == 1) {
+
+						}
+
+					}
+
+				}
+
+				// Remove the one we just processed
+				toProcess.erase(toProcess.begin());
+
+				// Keep track of the iteration number
+				iter++;
+				if (iter > 100000000) {
+					break;
+				}
+
+			}
+		}
+		std::cout << "no go regions found: " << noGoRegions.size() << " / " << iter << std::endl;
+
+		// Keep splitting until all fail
+		toProcess = toProcessBackup;
+		iter = 0;
 		while (toProcess.size() > 0) {
 
-			// Test this TODO4
+			// Check if this subregion is contained within one of the no-go regions
+			bool valid = true;
+			for (int i=0; i<noGoRegions.size(); i++) {
+				bool regionWithin = true;
+				for (int j=0; j<noGoRegions[i].size(); j++) {
+					if (toProcess[0][j].first < noGoRegions[i][j].first || toProcess[0][j].second > noGoRegions[i][j].second) {
+						regionWithin = false;
+						break;
+					}
+				}
+				if (regionWithin) {
+					valid = false;
+					break;
+				}
+			}
+
+			// If it is, skip it
+			if (!valid) {
+				toProcess.erase(toProcess.begin());
+				continue;
+			}
+
+			// Test this subregion
 			auto cutRes = solveSDPWithCuts(toProcess[0], conZeroLinear, conPositiveLinear, monoms, monomProducts);
 			std::cout << toProcess[0] << std::endl;
 			std::cout << iter << " " << cutRes.first << " " << toProcess.size() << std::endl;
 
-			// If feasbile, split the region TODO4
+			// If feasbile, split the region
 			if (cutRes.first) {
 
 				// Find the biggest section
@@ -4414,7 +4514,8 @@ public:
 		}
 
 		// Benchmarks TODO4
-		// disprove d2n4 43422 iterations, maybe like 10 mins
+		// d2n4 43422 iterations 18m44,356s
+		// d2n4 43422 iterations 14m25,365s
 
 		// Output the result for debugging
 		//for (int k=0; k<angleRes.second.size(); k++) {
