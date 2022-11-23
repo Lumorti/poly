@@ -4358,13 +4358,27 @@ public:
 		}
 		toProcess.push_back(varMinMax);
 
+		// E.g. If we go from {0,1}->{1,0}, there exists a permutation
+		// that recreates the original set of equations
+		// (in this case swapping all other real<->imag)
+		std::vector<std::vector<std::vector<int>>> syms = {
+			{{0,1}, {1,0}, {4,5}, {5,4}, {2,3}, {3,2}, {6,7}, {7,6}},
+			{{0,4}, {4,0}, {1,5}, {5,1}, {2,6}, {6,2}, {3,7}, {7,3}},
+			{{8,9}, {9,8}, {10,11}, {11,10}},
+			{{12,13}, {13,12}},
+			{{0,1,8}, {1,0,8}, {5,4,9}, {4,5,9}, {2,3,10}, {3,2,10}, {6,7,11}, {7,6,11}},
+			{{0,1,4,5}, {1,0,5,4}, {2,3,6,7}, {3,2,7,6}},
+		};
+
 		// Get list of general bad regions TODO4
 		std::vector<std::vector<std::pair<double,double>>> noGoRegions;
 		std::vector<std::vector<int>> indicesToCheck = {
-			{0, 4},
-			{1, 5},
-			{2, 6},
-			{3, 7},
+			//{0,1},
+			{0,4},
+			//{8,9},
+			//{12,13},
+			//{0,1,8},
+			//{0,1,4,5},
 		};
 		int iter = 0;
 		auto toProcessBackup = toProcess;
@@ -4397,7 +4411,7 @@ public:
 					copyRight[bestInd].first = midPoint;
 
 					// Here only allow region of at least a certain size
-					if (copyLeft[bestInd].second - copyLeft[bestInd].first > 0.1) {
+					if (copyLeft[bestInd].second - copyLeft[bestInd].first > 0.05) {
 
 						// Add the new paths to the queue
 						toProcess.insert(toProcess.begin()+1, copyLeft);
@@ -4407,26 +4421,51 @@ public:
 
 				// Otherwise add it to the list of invalid regions
 				} else {
-					noGoRegions.push_back(toProcess[0]);
 
-					// Check to see if it can be combined with any larger regions TODO4
-					for (int i=0; i<noGoRegions.size(); i++) {
+					// Check to see if it can be combined with any larger regions
+					int swapsDone = 1;
+					while (swapsDone > 0) {
+						swapsDone = 0;
+						for (int i=0; i<noGoRegions.size(); i++) {
 
-						// Get all the indices of dimensions which are non-equal
-						std::vector<int> sectionsNonEqual;
-						for (int j=0; j<noGoRegions[i].size(); j++) {
-							if () {
+							// Get all the indices of dimensions which are non-equal
+							std::vector<int> sectionsNonEqual;
+							for (int j=0; j<noGoRegions[i].size(); j++) {
+								if (std::abs(noGoRegions[i][j].first-toProcess[0][j].first) > 1e-5 || std::abs(noGoRegions[i][j].second-toProcess[0][j].second) > 1e-5) {
+									sectionsNonEqual.push_back(j);
+								}
+							}
+
+							// If everything is equal apart from one side
+							if (sectionsNonEqual.size() == 1) {
+
+								// If connecting at second->first
+								if (std::abs(noGoRegions[i][sectionsNonEqual[0]].first-toProcess[0][sectionsNonEqual[0]].second) < 1e-5) {
+									std::cout << "before 1 = " << toProcess[0] << std::endl;
+									toProcess[0][sectionsNonEqual[0]].second = noGoRegions[i][sectionsNonEqual[0]].second;
+									swapsDone++;
+									noGoRegions.erase(noGoRegions.begin()+i);
+									i--;
+									std::cout << "after 1 = " << toProcess[0] << std::endl;
+
+								// If connecting at first->second
+								} else if (std::abs(noGoRegions[i][sectionsNonEqual[0]].second-toProcess[0][sectionsNonEqual[0]].first) < 1e-5) {
+									std::cout << "before 2 = " << toProcess[0] << std::endl;
+									toProcess[0][sectionsNonEqual[0]].first = noGoRegions[i][sectionsNonEqual[0]].first;
+									swapsDone++;
+									noGoRegions.erase(noGoRegions.begin()+i);
+									i--;
+									std::cout << "after 2 = " << toProcess[0] << std::endl;
+
+								}
 
 							}
 
 						}
-
-						// If everything is equal apart from one side
-						if (sectionsNonEqual.size() == 1) {
-
-						}
-
 					}
+
+					// Then add this larger region
+					noGoRegions.push_back(toProcess[0]);
 
 				}
 
@@ -4442,6 +4481,10 @@ public:
 			}
 		}
 		std::cout << "no go regions found: " << noGoRegions.size() << " / " << iter << std::endl;
+
+		// Duplicate these no-go regions using symmetry TODO4
+
+		return;
 
 		// Keep splitting until all fail
 		toProcess = toProcessBackup;
