@@ -4341,13 +4341,33 @@ public:
 		}
 		
 		// Add first order SDP cons (1, i, j)
+		//for (int i=0; i<monoms.size(); i++) {
+			//if (monoms[i].size() == 2*digitsPerInd) {
+				//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+				//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2})});
+			//}
+		//}
+
+		// Add everything less than second order
 		for (int i=0; i<monoms.size(); i++) {
-			if (monoms[i].size() == 2*digitsPerInd) {
-				int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2})});
+			if (monoms[i].size() <= 2*digitsPerInd) {
+				for (int j=0; j<monoms.size(); j++) {
+					if (monoms[j].size() <= 2*digitsPerInd) {
+						monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, monoms[i]), Polynomial<polyType>(maxVariables, 1, monoms[j])});
+					}
+				}
 			}
 		}
+
+
+		// Add first order SDP con (1, i, j, k, ...)
+		//std::vector<Polynomial<polyType>> toAdd;
+		//toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
+		//for (int i=0; i<maxVariables; i++) {
+			//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {i}));
+		//}
+		//monomProducts.push_back(toAdd);
 
 		// Start with the most general area
 		std::vector<std::vector<std::pair<double,double>>> toProcess;
@@ -4372,17 +4392,15 @@ public:
 
 		// Get list of general bad regions TODO4
 		std::vector<std::vector<std::pair<double,double>>> noGoRegions;
-		std::vector<std::vector<int>> indicesToCheck = {
-			//{0,1},
-			{0,4},
-			//{8,9},
-			//{12,13},
-			//{0,1,8},
-			//{0,1,4,5},
-		};
+		std::vector<std::vector<int>> indicesToCheck;
+		for (int k=0; k<syms.size(); k++) {
+			indicesToCheck.push_back(syms[k][0]);
+		}
 		int iter = 0;
 		auto toProcessBackup = toProcess;
+		int totalCombinations = 0;
 		for (int k=0; k<indicesToCheck.size(); k++) {
+			std::cout << "checking " << indicesToCheck[k] << std::endl;
 			toProcess = toProcessBackup;
 			while (toProcess.size() > 0) {
 
@@ -4411,7 +4429,7 @@ public:
 					copyRight[bestInd].first = midPoint;
 
 					// Here only allow region of at least a certain size
-					if (copyLeft[bestInd].second - copyLeft[bestInd].first > 0.05) {
+					if (copyLeft[bestInd].second - copyLeft[bestInd].first > 0.1) {
 
 						// Add the new paths to the queue
 						toProcess.insert(toProcess.begin()+1, copyLeft);
@@ -4441,21 +4459,19 @@ public:
 
 								// If connecting at second->first
 								if (std::abs(noGoRegions[i][sectionsNonEqual[0]].first-toProcess[0][sectionsNonEqual[0]].second) < 1e-5) {
-									std::cout << "before 1 = " << toProcess[0] << std::endl;
 									toProcess[0][sectionsNonEqual[0]].second = noGoRegions[i][sectionsNonEqual[0]].second;
 									swapsDone++;
+									totalCombinations++;
 									noGoRegions.erase(noGoRegions.begin()+i);
 									i--;
-									std::cout << "after 1 = " << toProcess[0] << std::endl;
 
 								// If connecting at first->second
 								} else if (std::abs(noGoRegions[i][sectionsNonEqual[0]].second-toProcess[0][sectionsNonEqual[0]].first) < 1e-5) {
-									std::cout << "before 2 = " << toProcess[0] << std::endl;
 									toProcess[0][sectionsNonEqual[0]].first = noGoRegions[i][sectionsNonEqual[0]].first;
 									swapsDone++;
+									totalCombinations++;
 									noGoRegions.erase(noGoRegions.begin()+i);
 									i--;
-									std::cout << "after 2 = " << toProcess[0] << std::endl;
 
 								}
 
@@ -4466,6 +4482,17 @@ public:
 
 					// Then add this larger region
 					noGoRegions.push_back(toProcess[0]);
+
+					// Duplicate this regions using symmetry TODO4
+					for (int l=1; l<syms[k].size(); l++) {
+						auto processCopy = toProcess[0];
+						for (int i=0; i<syms[k][l].size(); i++) {
+							auto temp = processCopy[syms[k][l][i]];
+							processCopy[syms[k][l][i]] = processCopy[syms[k][l][0]];
+							processCopy[syms[k][l][0]] = temp;
+						}
+						noGoRegions.push_back(processCopy);
+					}
 
 				}
 
@@ -4479,12 +4506,10 @@ public:
 				}
 
 			}
+
 		}
 		std::cout << "no go regions found: " << noGoRegions.size() << " / " << iter << std::endl;
-
-		// Duplicate these no-go regions using symmetry TODO4
-
-		return;
+		std::cout << "combined: " << totalCombinations << std::endl;
 
 		// Keep splitting until all fail
 		toProcess = toProcessBackup;
@@ -4557,8 +4582,11 @@ public:
 		}
 
 		// Benchmarks TODO4
-		// d2n4 43422 iterations 18m44,356s
-		// d2n4 43422 iterations 14m25,365s
+		// d2n4 43422 iterations 18m44s
+		// d2n4 43422 iterations 14m25s
+		// d2n4 41286 iterations 14m47s
+		// d2n4 36050 iterations 12m40s (partial first order + sym at 0.1)
+		// d2n4 30442 iterations 13m26s (full first order + sym at 0.1)
 
 		// Output the result for debugging
 		//for (int k=0; k<angleRes.second.size(); k++) {
