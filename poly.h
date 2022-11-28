@@ -4378,33 +4378,68 @@ public:
 		}
 		toProcess.push_back(varMinMax);
 
-		// E.g. If we go from {0,1}->{1,0}, there exists a permutation
-		// that recreates the original set of equations
-		// (in this case swapping all other real<->imag)
-		std::vector<std::vector<std::vector<int>>> syms = {
-			{{0,1}, {1,0}, {4,5}, {5,4}, {2,3}, {3,2}, {6,7}, {7,6}},
-			{{0,4}, {4,0}, {1,5}, {5,1}, {2,6}, {6,2}, {3,7}, {7,3}},
-			{{8,9}, {9,8}, {10,11}, {11,10}},
-			{{12,13}, {13,12}},
-			{{0,1,8}, {1,0,8}, {5,4,9}, {4,5,9}, {2,3,10}, {3,2,10}, {6,7,11}, {7,6,11}},
-			{{0,1,4,5}, {1,0,5,4}, {2,3,6,7}, {3,2,7,6}},
+		// Symmetry lists, e.g. if going from x->-y and y->-x results in the same equation
+		std::vector<std::tuple<std::vector<int>,std::vector<int>,std::vector<std::pair<std::vector<int>,std::vector<double>>>>> syms = {
+
+			// For -0.5*{} + 1*{ 9 9} + 1*{ 8 8}
+			{
+				{0}, 
+				{8,9}, 
+				{
+					{{9,8}, {1,1}}, {{9,8}, {-1,-1}}, {{9,8}, {-1,1}}, {{9,8}, {1,-1}}, 
+					{{8,9}, {1,1}},	{{8,9}, {-1,-1}}, {{8,9}, {-1,1}}, {{8,9}, {1,-1}}, 
+					{{4,0}, {1,1}}, {{4,0}, {-1,-1}}, {{4,0}, {-1,1}}, {{4,0}, {1,-1}}, 
+					{{0,4}, {1,1}}, {{0,4}, {-1,-1}}, {{0,4}, {-1,1}}, {{0,4}, {1,-1}}, 
+					{{5,1}, {1,1}}, {{5,1}, {-1,-1}}, {{5,1}, {-1,1}}, {{5,1}, {1,-1}}, 
+					{{1,5}, {1,1}}, {{1,5}, {-1,-1}}, {{1,5}, {-1,1}}, {{1,5}, {1,-1}}, 
+					{{6,2}, {1,1}}, {{6,2}, {-1,-1}}, {{6,2}, {-1,1}}, {{6,2}, {1,-1}}, 
+					{{2,6}, {1,1}}, {{2,6}, {-1,-1}}, {{2,6}, {-1,1}}, {{2,6}, {1,-1}}, 
+					{{7,3}, {1,1}}, {{7,3}, {-1,-1}}, {{7,3}, {-1,1}}, {{7,3}, {1,-1}}, 
+					{{3,7}, {1,1}}, {{3,7}, {-1,-1}}, {{3,7}, {-1,1}}, {{3,7}, {1,-1}}, 
+					{{10,11}, {1,1}}, {{10,11}, {-1,-1}}, {{10,11}, {-1,1}}, {{10,11}, {1,-1}}, 
+					{{11,10}, {1,1}}, {{11,10}, {-1,-1}}, {{11,10}, {-1,1}}, {{11,10}, {1,-1}}, 
+					{{12,13}, {1,1}}, {{12,13}, {-1,-1}}, {{12,13}, {-1,1}}, {{12,13}, {1,-1}}, 
+					{{13,12}, {1,1}}, {{13,12}, {-1,-1}}, {{13,12}, {-1,1}}, {{13,12}, {1,-1}}, 
+				}
+			},
+
+			// For 0.707107*{ 0} + 0.707107*{ 1} + -1*{ 8}
+			//{
+				//{1}, 
+				//{0,1,8}, 
+				//{
+					//{{0,1,8}, {1,1,1}}, {{0,1,8}, {-1,-1,-1}}, {{1,0,8}, {1,1,1}}, {{1,0,8}, {-1,-1,-1}},
+					//{{4,5,9}, {1,1,1}}, {{4,5,9}, {-1,-1,-1}}, {{5,4,9}, {1,1,1}}, {{5,4,9}, {-1,-1,-1}},
+					//{{2,3,10}, {1,1,1}}, {{2,3,10}, {-1,-1,-1}}, {{3,2,10}, {1,1,1}}, {{3,2,10}, {-1,-1,-1}},
+					//{{6,7,11}, {1,1,1}}, {{6,7,11}, {-1,-1,-1}}, {{6,7,11}, {1,1,1}}, {{6,7,11}, {-1,-1,-1}},
+				//}
+			//},
+
+			// Full symmetries
+			//{
+				//{0,1,2,3,4,5,6,7,8,9,10,11,12}, 
+				//{0,1,2,3,4,5,6,7,8,9,10,11,12,13}, 
+				//{
+					//{{0,1,2,3,4,5,6,7,8,9,10,11,12,13}, {1,1,1,1,1,1,1,1,1,1,1,1,1,1}}, 
+					//{{0,1,2,3,4,5,6,7,8,9,10,11,12,13}, {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1}}, 
+					//{{4,5,6,7,0,1,2,3,9,8,11,10,13,12}, {1,1,1,1,1,1,1,1,1,1,1,1,1,1}},
+				//}
+			//},
+
 		};
 
 		// Get list of general bad regions TODO4
 		std::vector<std::vector<std::pair<double,double>>> noGoRegions;
-		std::vector<std::vector<int>> indicesToCheck;
-		for (int k=0; k<syms.size(); k++) {
-			indicesToCheck.push_back(syms[k][0]);
-		}
 		int iter = 0;
 		auto toProcessBackup = toProcess;
 		int totalCombinations = 0;
-		for (int k=0; k<indicesToCheck.size(); k++) {
-			std::cout << "checking " << indicesToCheck[k] << std::endl;
+		int totalDuplications = 0;
+		for (int k=0; k<syms.size(); k++) {
+			std::cout << "checking " << std::get<0>(syms[k]) << "  " << std::get<1>(syms[k]) << std::endl;
 			toProcess = toProcessBackup;
 			while (toProcess.size() > 0) {
 
-				// Test this subregion
+				// Test this subregion TODO4 restrict the equation set
 				auto cutRes = solveSDPWithCuts(toProcess[0], conZeroLinear, conPositiveLinear, monoms, monomProducts);
 
 				// If feasbile, split the region
@@ -4413,11 +4448,12 @@ public:
 					// Find the biggest section
 					double biggestDiff = -10000;
 					int bestInd = -1;
-					for (int i=0; i<indicesToCheck[k].size(); i++) {
-						double diff = toProcess[0][indicesToCheck[k][i]].second-toProcess[0][indicesToCheck[k][i]].first;
+					std::vector<int> indicesToCheck = std::get<1>(syms[k]);
+					for (int i=0; i<indicesToCheck.size(); i++) {
+						double diff = toProcess[0][indicesToCheck[i]].second-toProcess[0][indicesToCheck[i]].first;
 						if (diff > biggestDiff) {
 							biggestDiff = diff;
-							bestInd = indicesToCheck[k][i];
+							bestInd = indicesToCheck[i];
 						}
 					}
 
@@ -4483,7 +4519,7 @@ public:
 					// Then add this larger region
 					noGoRegions.push_back(toProcess[0]);
 
-					// Duplicate this regions using symmetry TODO4
+					// Duplicate this regions using symmetry TODO4 for the new format
 					for (int l=1; l<syms[k].size(); l++) {
 						auto processCopy = toProcess[0];
 						for (int i=0; i<syms[k][l].size(); i++) {
@@ -4492,6 +4528,7 @@ public:
 							processCopy[syms[k][l][0]] = temp;
 						}
 						noGoRegions.push_back(processCopy);
+						totalDuplications++;
 					}
 
 				}
@@ -4508,78 +4545,92 @@ public:
 			}
 
 		}
-		std::cout << "no go regions found: " << noGoRegions.size() << " / " << iter << std::endl;
-		std::cout << "combined: " << totalCombinations << std::endl;
+
+		// Calculate the area of this
+		double areaExcluded = 0;
+		for (int i=0; i<noGoRegions.size(); i++) {
+			double areaOfThis = 1;
+			for (int j=0; j<noGoRegions[i].size(); j++) {
+				areaOfThis *= noGoRegions[i][j].second - noGoRegions[i][j].first;
+			}
+			areaExcluded += areaOfThis;
+		}
+
+		// Output some stats
+		std::cout << "no go regions found: " << noGoRegions.size() << std::endl;
+		std::cout << "number combined: " << totalCombinations << std::endl;
+		std::cout << "number duplicated: " << totalCombinations << std::endl;
+		std::cout << "total area excluded: " << areaExcluded << std::endl;
 
 		// Keep splitting until all fail
-		toProcess = toProcessBackup;
-		iter = 0;
-		while (toProcess.size() > 0) {
+		//toProcess = toProcessBackup;
+		//iter = 0;
+		//while (toProcess.size() > 0) {
 
-			// Check if this subregion is contained within one of the no-go regions
-			bool valid = true;
-			for (int i=0; i<noGoRegions.size(); i++) {
-				bool regionWithin = true;
-				for (int j=0; j<noGoRegions[i].size(); j++) {
-					if (toProcess[0][j].first < noGoRegions[i][j].first || toProcess[0][j].second > noGoRegions[i][j].second) {
-						regionWithin = false;
-						break;
-					}
-				}
-				if (regionWithin) {
-					valid = false;
-					break;
-				}
-			}
+			//// Check if this subregion is contained within one of the no-go regions
+			//bool valid = true;
+			//for (int i=0; i<noGoRegions.size(); i++) {
+				//bool regionWithin = true;
+				//for (int j=0; j<noGoRegions[i].size(); j++) {
+					//if (toProcess[0][j].first < noGoRegions[i][j].first || toProcess[0][j].second > noGoRegions[i][j].second) {
+						//regionWithin = false;
+						//break;
+					//}
+				//}
+				//if (regionWithin) {
+					//valid = false;
+					//break;
+				//}
+			//}
 
-			// If it is, skip it
-			if (!valid) {
-				toProcess.erase(toProcess.begin());
-				continue;
-			}
+			//// If it is, skip it
+			//if (!valid) {
+				//toProcess.erase(toProcess.begin());
+				//continue;
+			//}
 
-			// Test this subregion
-			auto cutRes = solveSDPWithCuts(toProcess[0], conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			std::cout << toProcess[0] << std::endl;
-			std::cout << iter << " " << cutRes.first << " " << toProcess.size() << std::endl;
+			//// Test this subregion
+			//auto cutRes = solveSDPWithCuts(toProcess[0], conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			//std::cout << toProcess[0] << std::endl;
+			//std::cout << iter << " " << cutRes.first << " " << toProcess.size() << std::endl;
 
-			// If feasbile, split the region
-			if (cutRes.first) {
+			//// If feasbile, split the region
+			//if (cutRes.first) {
 
-				// Find the biggest section
-				double biggestDiff = -10000;
-				int bestInd = -1;
-				for (int i=0; i<obj.maxVariables; i++) {
-					double diff = toProcess[0][i].second-toProcess[0][i].first;
-					if (diff > biggestDiff) {
-						biggestDiff = diff;
-						bestInd = i;
-					}
-				}
+				//// Find the biggest section
+				//double biggestDiff = -10000;
+				//int bestInd = -1;
+				//for (int i=0; i<obj.maxVariables; i++) {
+					//double diff = toProcess[0][i].second-toProcess[0][i].first;
+					//if (diff > biggestDiff) {
+						//biggestDiff = diff;
+						//bestInd = i;
+					//}
+				//}
 
-				// Split it
-				double midPoint = (toProcess[0][bestInd].first + toProcess[0][bestInd].second) / 2.0;
-				auto copyLeft = toProcess[0];
-				auto copyRight = toProcess[0];
-				copyLeft[bestInd].second = midPoint;
-				copyRight[bestInd].first = midPoint;
+				//// Split it
+				//double midPoint = (toProcess[0][bestInd].first + toProcess[0][bestInd].second) / 2.0;
+				//auto copyLeft = toProcess[0];
+				//auto copyRight = toProcess[0];
+				//copyLeft[bestInd].second = midPoint;
+				//copyRight[bestInd].first = midPoint;
 
-				// Add the new paths to the queue
-				toProcess.insert(toProcess.begin()+1, copyLeft);
-				toProcess.insert(toProcess.begin()+1, copyRight);
+				//// Add the new paths to the queue
+				//toProcess.insert(toProcess.begin()+1, copyLeft);
+				//toProcess.insert(toProcess.begin()+1, copyRight);
 
-			}
+			//}
 
-			// Remove the one we just processed
-			toProcess.erase(toProcess.begin());
+			//// Remove the one we just processed
+			//toProcess.erase(toProcess.begin());
 
-			// Keep track of the iteration number
-			iter++;
-			if (iter > 100000000) {
-				break;
-			}
+			//// Keep track of the iteration number
+			//iter++;
+			//if (iter > 100000000) {
+				//break;
+			//}
 
-		}
+		//}
 
 		// Benchmarks TODO4
 		// d2n4 43422 iterations 18m44s
