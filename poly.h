@@ -41,16 +41,23 @@ std::ostream& operator<<(std::ostream& os, const std::vector<std::string>& v) {
 }
 
 // Generic overload for outputting vector of pairs
+//template <class type1, class type2>
+//std::ostream& operator<<(std::ostream& os, const std::vector<std::pair<type1,type2>>& v) {
+    //os << "{";
+    //for (typename std::vector<std::pair<type1,type2>>::const_iterator ii = v.begin(); ii != v.end(); ++ii) {
+        //os << "{" << (*ii).first << "," << (*ii).second << "}";
+		//if (ii+1 != v.end()) {
+			//os << ", ";
+		//}
+    //}
+    //os << "}";
+    //return os;
+//}
+
+// Generic overload for outputting a pair
 template <class type1, class type2>
-std::ostream& operator<<(std::ostream& os, const std::vector<std::pair<type1,type2>>& v) {
-    os << "{";
-    for (typename std::vector<std::pair<type1,type2>>::const_iterator ii = v.begin(); ii != v.end(); ++ii) {
-        os << "{" << (*ii).first << "," << (*ii).second << "}";
-		if (ii+1 != v.end()) {
-			os << ", ";
-		}
-    }
-    os << "}";
+std::ostream& operator<<(std::ostream& os, const std::pair<type1,type2>& v) {
+	os << "{" << v.first << "," << v.second << "}";
     return os;
 }
 
@@ -4378,30 +4385,48 @@ public:
 		}
 		toProcess.push_back(varMinMax);
 
-		// Symmetry lists, e.g. if going from x->-y and y->-x results in the same equation
-		std::vector<std::tuple<std::vector<int>,std::vector<int>,std::vector<std::pair<std::vector<int>,std::vector<double>>>>> syms = {
+		struct variableChange {
+			std::vector<int> indices;
+			std::vector<double> coeffs;
+		};
 
-			// For -0.5*{} + 1*{ 9 9} + 1*{ 8 8}
-			{
-				{0}, 
-				{8,9}, 
-				{
-					{{9,8}, {1,1}}, {{9,8}, {-1,-1}}, {{9,8}, {-1,1}}, {{9,8}, {1,-1}}, 
-					{{8,9}, {1,1}},	{{8,9}, {-1,-1}}, {{8,9}, {-1,1}}, {{8,9}, {1,-1}}, 
-					{{4,0}, {1,1}}, {{4,0}, {-1,-1}}, {{4,0}, {-1,1}}, {{4,0}, {1,-1}}, 
-					{{0,4}, {1,1}}, {{0,4}, {-1,-1}}, {{0,4}, {-1,1}}, {{0,4}, {1,-1}}, 
-					{{5,1}, {1,1}}, {{5,1}, {-1,-1}}, {{5,1}, {-1,1}}, {{5,1}, {1,-1}}, 
-					{{1,5}, {1,1}}, {{1,5}, {-1,-1}}, {{1,5}, {-1,1}}, {{1,5}, {1,-1}}, 
-					{{6,2}, {1,1}}, {{6,2}, {-1,-1}}, {{6,2}, {-1,1}}, {{6,2}, {1,-1}}, 
-					{{2,6}, {1,1}}, {{2,6}, {-1,-1}}, {{2,6}, {-1,1}}, {{2,6}, {1,-1}}, 
-					{{7,3}, {1,1}}, {{7,3}, {-1,-1}}, {{7,3}, {-1,1}}, {{7,3}, {1,-1}}, 
-					{{3,7}, {1,1}}, {{3,7}, {-1,-1}}, {{3,7}, {-1,1}}, {{3,7}, {1,-1}}, 
-					{{10,11}, {1,1}}, {{10,11}, {-1,-1}}, {{10,11}, {-1,1}}, {{10,11}, {1,-1}}, 
-					{{11,10}, {1,1}}, {{11,10}, {-1,-1}}, {{11,10}, {-1,1}}, {{11,10}, {1,-1}}, 
-					{{12,13}, {1,1}}, {{12,13}, {-1,-1}}, {{12,13}, {-1,1}}, {{12,13}, {1,-1}}, 
-					{{13,12}, {1,1}}, {{13,12}, {-1,-1}}, {{13,12}, {-1,1}}, {{13,12}, {1,-1}}, 
-				}
-			},
+		struct symmetry {
+			std::vector<int> eqnList;
+			std::vector<int> varsToBranch;
+			std::vector<variableChange> variableChanges;
+		};
+
+		// Symmetry lists, e.g. if going from x->-y and y->-x results in the same equation
+		std::vector<symmetry> syms;
+
+		// For -0.5*{} + 1*{ 9 9} + 1*{ 8 8}
+		symmetry symNorm;
+		symNorm.eqnList = {0};
+		symNorm.varsToBranch = {8,9};
+		symNorm.variableChanges = {
+			{{9,8}, {1,1}}, 
+			{{0,4}, {1,1}}, 
+			{{1,5}, {1,1}}, 
+			{{2,6}, {1,1}}, 
+			{{3,7}, {1,1}}, 
+			//{{9,8}, {-1,-1}}, 
+			//{{9,8}, {-1,1}}, 
+			//{{9,8}, {1,-1}}, 
+			//{{8,9}, {1,1}},	{{8,9}, {-1,-1}}, {{8,9}, {-1,1}}, {{8,9}, {1,-1}}, 
+			//{{4,0}, {1,1}}, {{4,0}, {-1,-1}}, {{4,0}, {-1,1}}, {{4,0}, {1,-1}}, 
+			//{{0,4}, {1,1}}, {{0,4}, {-1,-1}}, {{0,4}, {-1,1}}, {{0,4}, {1,-1}}, 
+			//{{5,1}, {1,1}}, {{5,1}, {-1,-1}}, {{5,1}, {-1,1}}, {{5,1}, {1,-1}}, 
+			//{{1,5}, {1,1}}, {{1,5}, {-1,-1}}, {{1,5}, {-1,1}}, {{1,5}, {1,-1}}, 
+			//{{6,2}, {1,1}}, {{6,2}, {-1,-1}}, {{6,2}, {-1,1}}, {{6,2}, {1,-1}}, 
+			//{{2,6}, {1,1}}, {{2,6}, {-1,-1}}, {{2,6}, {-1,1}}, {{2,6}, {1,-1}}, 
+			//{{7,3}, {1,1}}, {{7,3}, {-1,-1}}, {{7,3}, {-1,1}}, {{7,3}, {1,-1}}, 
+			//{{3,7}, {1,1}}, {{3,7}, {-1,-1}}, {{3,7}, {-1,1}}, {{3,7}, {1,-1}}, 
+			//{{10,11}, {1,1}}, {{10,11}, {-1,-1}}, {{10,11}, {-1,1}}, {{10,11}, {1,-1}}, 
+			//{{11,10}, {1,1}}, {{11,10}, {-1,-1}}, {{11,10}, {-1,1}}, {{11,10}, {1,-1}}, 
+			//{{12,13}, {1,1}}, {{12,13}, {-1,-1}}, {{12,13}, {-1,1}}, {{12,13}, {1,-1}}, 
+			//{{13,12}, {1,1}}, {{13,12}, {-1,-1}}, {{13,12}, {-1,1}}, {{13,12}, {1,-1}}, 
+		};
+		syms.push_back(symNorm);
 
 			// For 0.707107*{ 0} + 0.707107*{ 1} + -1*{ 8}
 			//{
@@ -4426,7 +4451,6 @@ public:
 				//}
 			//},
 
-		};
 
 		// Get list of general bad regions TODO4
 		std::vector<std::vector<std::pair<double,double>>> noGoRegions;
@@ -4435,12 +4459,46 @@ public:
 		int totalCombinations = 0;
 		int totalDuplications = 0;
 		for (int k=0; k<syms.size(); k++) {
-			std::cout << "checking " << std::get<0>(syms[k]) << "  " << std::get<1>(syms[k]) << std::endl;
+			std::cout << "checking " << syms[k].eqnList << "  " << syms[k].varsToBranch << std::endl;
+
+			// Start with the most general search space
 			toProcess = toProcessBackup;
+
+			// Restrict the equations to a subset
+			std::vector<Polynomial<polyType>> conZeroSubset;
+			for (int i=0; i<syms[k].eqnList.size(); i++) {
+				conZeroSubset.push_back(conZeroLinear[syms[k].eqnList[i]]);
+			}
+
+			std::cout << conZeroSubset << std::endl;
+
+			// Keep going till we run out
 			while (toProcess.size() > 0) {
 
-				// Test this subregion TODO4 restrict the equation set
-				auto cutRes = solveSDPWithCuts(toProcess[0], conZeroLinear, conPositiveLinear, monoms, monomProducts);
+				// Check if this subregion is contained within one of the no-go regions
+				bool valid = true;
+				for (int i=0; i<noGoRegions.size(); i++) {
+					bool regionWithin = true;
+					for (int j=0; j<noGoRegions[i].size(); j++) {
+						if (toProcess[0][j].first < noGoRegions[i][j].first || toProcess[0][j].second > noGoRegions[i][j].second) {
+							regionWithin = false;
+							break;
+						}
+					}
+					if (regionWithin) {
+						valid = false;
+						break;
+					}
+				}
+
+				// If it is, skip it
+				if (!valid) {
+					toProcess.erase(toProcess.begin());
+					continue;
+				}
+				
+				// Test this subregion
+				auto cutRes = solveSDPWithCuts(toProcess[0], conZeroSubset, conPositiveLinear, monoms, monomProducts);
 
 				// If feasbile, split the region
 				if (cutRes.first) {
@@ -4448,12 +4506,11 @@ public:
 					// Find the biggest section
 					double biggestDiff = -10000;
 					int bestInd = -1;
-					std::vector<int> indicesToCheck = std::get<1>(syms[k]);
-					for (int i=0; i<indicesToCheck.size(); i++) {
-						double diff = toProcess[0][indicesToCheck[i]].second-toProcess[0][indicesToCheck[i]].first;
+					for (int i=0; i<syms[k].varsToBranch.size(); i++) {
+						double diff = toProcess[0][syms[k].varsToBranch[i]].second-toProcess[0][syms[k].varsToBranch[i]].first;
 						if (diff > biggestDiff) {
 							biggestDiff = diff;
-							bestInd = indicesToCheck[i];
+							bestInd = syms[k].varsToBranch[i];
 						}
 					}
 
@@ -4477,58 +4534,70 @@ public:
 				} else {
 
 					// Check to see if it can be combined with any larger regions
-					int swapsDone = 1;
-					while (swapsDone > 0) {
-						swapsDone = 0;
-						for (int i=0; i<noGoRegions.size(); i++) {
+					//int swapsDone = 1;
+					//while (swapsDone > 0) {
+						//swapsDone = 0;
+						//for (int i=0; i<noGoRegions.size(); i++) {
 
-							// Get all the indices of dimensions which are non-equal
-							std::vector<int> sectionsNonEqual;
-							for (int j=0; j<noGoRegions[i].size(); j++) {
-								if (std::abs(noGoRegions[i][j].first-toProcess[0][j].first) > 1e-5 || std::abs(noGoRegions[i][j].second-toProcess[0][j].second) > 1e-5) {
-									sectionsNonEqual.push_back(j);
-								}
-							}
+							//// Get all the indices of dimensions which are non-equal
+							//std::vector<int> sectionsNonEqual;
+							//for (int j=0; j<noGoRegions[i].size(); j++) {
+								//if (std::abs(noGoRegions[i][j].first-toProcess[0][j].first) > 1e-5 || std::abs(noGoRegions[i][j].second-toProcess[0][j].second) > 1e-5) {
+									//sectionsNonEqual.push_back(j);
+								//}
+							//}
 
-							// If everything is equal apart from one side
-							if (sectionsNonEqual.size() == 1) {
+							//// If everything is equal apart from one side
+							//if (sectionsNonEqual.size() == 1) {
 
-								// If connecting at second->first
-								if (std::abs(noGoRegions[i][sectionsNonEqual[0]].first-toProcess[0][sectionsNonEqual[0]].second) < 1e-5) {
-									toProcess[0][sectionsNonEqual[0]].second = noGoRegions[i][sectionsNonEqual[0]].second;
-									swapsDone++;
-									totalCombinations++;
-									noGoRegions.erase(noGoRegions.begin()+i);
-									i--;
+								//// If connecting at second->first
+								//if (std::abs(noGoRegions[i][sectionsNonEqual[0]].first-toProcess[0][sectionsNonEqual[0]].second) < 1e-5) {
+									//toProcess[0][sectionsNonEqual[0]].second = noGoRegions[i][sectionsNonEqual[0]].second;
+									//swapsDone++;
+									//totalCombinations++;
+									//noGoRegions.erase(noGoRegions.begin()+i);
+									//i--;
 
-								// If connecting at first->second
-								} else if (std::abs(noGoRegions[i][sectionsNonEqual[0]].second-toProcess[0][sectionsNonEqual[0]].first) < 1e-5) {
-									toProcess[0][sectionsNonEqual[0]].first = noGoRegions[i][sectionsNonEqual[0]].first;
-									swapsDone++;
-									totalCombinations++;
-									noGoRegions.erase(noGoRegions.begin()+i);
-									i--;
+								//// If connecting at first->second
+								//} else if (std::abs(noGoRegions[i][sectionsNonEqual[0]].second-toProcess[0][sectionsNonEqual[0]].first) < 1e-5) {
+									//toProcess[0][sectionsNonEqual[0]].first = noGoRegions[i][sectionsNonEqual[0]].first;
+									//swapsDone++;
+									//totalCombinations++;
+									//noGoRegions.erase(noGoRegions.begin()+i);
+									//i--;
 
-								}
+								//}
 
-							}
+							//}
 
-						}
-					}
+						//}
+					//}
 
 					// Then add this larger region
 					noGoRegions.push_back(toProcess[0]);
 
-					// Duplicate this regions using symmetry TODO4 for the new format
-					for (int l=1; l<syms[k].size(); l++) {
+					// Duplicate this regions using symmetry TODO4 
+					for (int l=1; l<syms[k].variableChanges.size(); l++) {
+
+						// Create a copy of the state 
 						auto processCopy = toProcess[0];
-						for (int i=0; i<syms[k][l].size(); i++) {
-							auto temp = processCopy[syms[k][l][i]];
-							processCopy[syms[k][l][i]] = processCopy[syms[k][l][0]];
-							processCopy[syms[k][l][0]] = temp;
+						variableChange change = syms[k].variableChanges[l];
+
+						// For each element of the state, make the swap
+						for (int i=0; i<change.indices.size(); i++) {
+							auto temp = processCopy[syms[k].varsToBranch[i]];
+							processCopy[syms[k].varsToBranch[i]] = processCopy[change.indices[i]];
+							if (change.coeffs[i] < 0) {
+								processCopy[change.indices[i]] = {temp.second*change.coeffs[i], temp.first*change.coeffs[i]};
+							} else {
+								processCopy[change.indices[i]] = {temp.first*change.coeffs[i], temp.second*change.coeffs[i]};
+							}
 						}
+
+						// Add this to the list
 						noGoRegions.push_back(processCopy);
 						totalDuplications++;
+
 					}
 
 				}
@@ -4546,21 +4615,45 @@ public:
 
 		}
 
-		// Calculate the area of this
-		double areaExcluded = 0;
+		// Calculate the total area of this
+		double areaTotal = 0;
 		for (int i=0; i<noGoRegions.size(); i++) {
 			double areaOfThis = 1;
 			for (int j=0; j<noGoRegions[i].size(); j++) {
 				areaOfThis *= noGoRegions[i][j].second - noGoRegions[i][j].first;
 			}
-			areaExcluded += areaOfThis;
+			std::cout << "for " << i << ":  " << areaOfThis << std::endl;
+			areaTotal += areaOfThis;
+		}
+
+		// Remove overlapping space TODO4 not working correctly
+		for (int i=0; i<noGoRegions.size(); i++) {
+			for (int k=i+1; k<noGoRegions.size(); k++) {
+				double areaOverlap = 1;
+				std::cout << noGoRegions[i] << std::endl;
+				std::cout << noGoRegions[k] << std::endl;
+				for (int j=0; j<noGoRegions[i].size(); j++) {
+					areaOverlap *= std::max(0.0, std::min(noGoRegions[i][j].second, noGoRegions[k][j].second) - std::max(noGoRegions[i][j].first, noGoRegions[k][j].first));
+					std::cout << noGoRegions[i][j] << " vs " << noGoRegions[k][j] << " = " << std::max(0.0, std::min(noGoRegions[i][j].second, noGoRegions[k][j].second) - std::max(noGoRegions[i][j].first, noGoRegions[k][j].first)) << std::endl;
+				}
+				areaTotal -= areaOverlap;
+				std::cout << "for " << i << " with " << k << ":  " << areaOverlap << std::endl;
+			}
+		}
+
+		// Calculate the max possible area
+		double areaMax = 1;
+		for (int j=0; j<toProcessBackup[0].size(); j++) {
+			areaMax *= toProcessBackup[0][j].second - toProcessBackup[0][j].first;
 		}
 
 		// Output some stats
 		std::cout << "no go regions found: " << noGoRegions.size() << std::endl;
 		std::cout << "number combined: " << totalCombinations << std::endl;
-		std::cout << "number duplicated: " << totalCombinations << std::endl;
-		std::cout << "total area excluded: " << areaExcluded << std::endl;
+		std::cout << "number duplicated: " << totalDuplications << std::endl;
+		std::cout << "total area: " << areaTotal << std::endl;
+		std::cout << "max possible area: " << areaMax << std::endl;
+		std::cout << "percent covered: " << 100*(areaTotal/areaMax) << std::endl;
 
 		// Keep splitting until all fail
 		//toProcess = toProcessBackup;
