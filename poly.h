@@ -4626,7 +4626,7 @@ public:
 			areaTotal += areaOfThis;
 		}
 
-		// Remove overlapping space TODO4 not working correctly
+		// Remove overlapping space TODO4 much harder, best to use point-based
 		for (int i=0; i<noGoRegions.size(); i++) {
 			for (int k=i+1; k<noGoRegions.size(); k++) {
 				double areaOverlap = 1;
