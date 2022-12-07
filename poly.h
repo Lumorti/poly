@@ -4274,7 +4274,7 @@ public:
 
 	}
 
-	// Add evyer monom of a certain order (e.g. for order=2, {12}, {13}, {14}...)
+	// Add every monom of a certain order (e.g. for order=2, {12}, {13}, {14}...)
 	void addMonomsOfOrder(std::vector<std::string>& monoms, int order) {
 
 		// Get all combinations of this of size=order
@@ -4348,25 +4348,24 @@ public:
 		}
 		
 		// Add first order SDP cons (1, i, j)
-		//for (int i=0; i<monoms.size(); i++) {
-			//if (monoms[i].size() == 2*digitsPerInd) {
-				//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-				//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2})});
-			//}
-		//}
-
-		// Add everything less than second order
 		for (int i=0; i<monoms.size(); i++) {
-			if (monoms[i].size() <= 2*digitsPerInd) {
-				for (int j=0; j<monoms.size(); j++) {
-					if (monoms[j].size() <= 2*digitsPerInd) {
-						monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, monoms[i]), Polynomial<polyType>(maxVariables, 1, monoms[j])});
-					}
-				}
+			if (monoms[i].size() == 2*digitsPerInd) {
+				int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+				int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+				monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2})});
 			}
 		}
 
+		// Add everything less than second order
+		//for (int i=0; i<monoms.size(); i++) {
+			//if (monoms[i].size() <= 2*digitsPerInd) {
+				//for (int j=0; j<monoms.size(); j++) {
+					//if (monoms[j].size() <= 2*digitsPerInd) {
+						//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, monoms[i]), Polynomial<polyType>(maxVariables, 1, monoms[j])});
+					//}
+				//}
+			//}
+		//}
 
 		// Add first order SDP con (1, i, j, k, ...)
 		//std::vector<Polynomial<polyType>> toAdd;
@@ -4379,9 +4378,10 @@ public:
 		// Start with the most general area
 		std::vector<std::vector<std::pair<double,double>>> toProcess;
 		std::vector<std::pair<double,double>> varMinMax(obj.maxVariables);
+		double overRt2 = 1.0 / std::sqrt(2);
 		for (int i=0; i<obj.maxVariables; i++) {
-			varMinMax[i].first = -0.707106781;
-			varMinMax[i].second = 0.707106781;
+			varMinMax[i].first = -overRt2;
+			varMinMax[i].second = overRt2;
 		}
 		toProcess.push_back(varMinMax);
 
@@ -4400,18 +4400,11 @@ public:
 		std::vector<symmetry> syms;
 
 		// For -0.5*{} + 1*{ 9 9} + 1*{ 8 8}
-		symmetry symNorm;
-		symNorm.eqnList = {0};
-		symNorm.varsToBranch = {8,9};
-		symNorm.variableChanges = {
-			{{9,8}, {1,1}}, 
-			{{0,4}, {1,1}}, 
-			{{1,5}, {1,1}}, 
-			{{2,6}, {1,1}}, 
-			{{3,7}, {1,1}}, 
-			//{{9,8}, {-1,-1}}, 
-			//{{9,8}, {-1,1}}, 
-			//{{9,8}, {1,-1}}, 
+		//symmetry symNorm;
+		//symNorm.eqnList = {0};
+		//symNorm.varsToBranch = {8,9};
+		//symNorm.variableChanges = {
+			//{{9,8}, {1,1}}, {{9,8}, {-1,-1}}, {{9,8}, {-1,1}}, {{9,8}, {1,-1}}, 
 			//{{8,9}, {1,1}},	{{8,9}, {-1,-1}}, {{8,9}, {-1,1}}, {{8,9}, {1,-1}}, 
 			//{{4,0}, {1,1}}, {{4,0}, {-1,-1}}, {{4,0}, {-1,1}}, {{4,0}, {1,-1}}, 
 			//{{0,4}, {1,1}}, {{0,4}, {-1,-1}}, {{0,4}, {-1,1}}, {{0,4}, {1,-1}}, 
@@ -4425,32 +4418,42 @@ public:
 			//{{11,10}, {1,1}}, {{11,10}, {-1,-1}}, {{11,10}, {-1,1}}, {{11,10}, {1,-1}}, 
 			//{{12,13}, {1,1}}, {{12,13}, {-1,-1}}, {{12,13}, {-1,1}}, {{12,13}, {1,-1}}, 
 			//{{13,12}, {1,1}}, {{13,12}, {-1,-1}}, {{13,12}, {-1,1}}, {{13,12}, {1,-1}}, 
+		//};
+		//syms.push_back(symNorm);
+
+		// For 0.707107*{ 0} + 0.707107*{ 1} + -1*{ 8}
+		//symmetry symNorm2;
+		//symNorm2.eqnList = {1};
+		//symNorm2.varsToBranch = {0,1,8};
+		//symNorm2.variableChanges = {
+			//{{0,1,8}, {1,1,1}}, {{0,1,8}, {-1,-1,-1}}, {{1,0,8}, {1,1,1}}, {{1,0,8}, {-1,-1,-1}},
+			//{{4,5,9}, {1,1,1}}, {{4,5,9}, {-1,-1,-1}}, {{5,4,9}, {1,1,1}}, {{5,4,9}, {-1,-1,-1}},
+			//{{2,3,10}, {1,1,1}}, {{2,3,10}, {-1,-1,-1}}, {{3,2,10}, {1,1,1}}, {{3,2,10}, {-1,-1,-1}},
+			//{{6,7,11}, {1,1,1}}, {{6,7,11}, {-1,-1,-1}}, {{6,7,11}, {1,1,1}}, {{6,7,11}, {-1,-1,-1}},
+		//};
+		//syms.push_back(symNorm2);
+
+		// Full symmetries
+		symmetry symFull;
+		symFull.eqnList = {0,1,2,3,4,5,6,7,8,9,10,11,12};
+		symFull.varsToBranch = {0,1,2,3,4,5,6,7,8,9,10,11,12,13};
+		symFull.variableChanges = {
+			{{0,1,2,3,4,5,6,7,8,9,10,11,12,13}, {1,1,1,1,1,1,1,1,1,1,1,1,1,1}}, 
+			{{0,1,2,3,4,5,6,7,8,9,10,11,12,13}, {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1}}, 
+			{{4,5,6,7,0,1,2,3,9,8,11,10,13,12}, {1,1,1,1,1,1,1,1,1,1,1,1,1,1}},
 		};
-		syms.push_back(symNorm);
+		syms.push_back(symFull);
 
-			// For 0.707107*{ 0} + 0.707107*{ 1} + -1*{ 8}
-			//{
-				//{1}, 
-				//{0,1,8}, 
-				//{
-					//{{0,1,8}, {1,1,1}}, {{0,1,8}, {-1,-1,-1}}, {{1,0,8}, {1,1,1}}, {{1,0,8}, {-1,-1,-1}},
-					//{{4,5,9}, {1,1,1}}, {{4,5,9}, {-1,-1,-1}}, {{5,4,9}, {1,1,1}}, {{5,4,9}, {-1,-1,-1}},
-					//{{2,3,10}, {1,1,1}}, {{2,3,10}, {-1,-1,-1}}, {{3,2,10}, {1,1,1}}, {{3,2,10}, {-1,-1,-1}},
-					//{{6,7,11}, {1,1,1}}, {{6,7,11}, {-1,-1,-1}}, {{6,7,11}, {1,1,1}}, {{6,7,11}, {-1,-1,-1}},
-				//}
-			//},
-
-			// Full symmetries
-			//{
-				//{0,1,2,3,4,5,6,7,8,9,10,11,12}, 
-				//{0,1,2,3,4,5,6,7,8,9,10,11,12,13}, 
-				//{
-					//{{0,1,2,3,4,5,6,7,8,9,10,11,12,13}, {1,1,1,1,1,1,1,1,1,1,1,1,1,1}}, 
-					//{{0,1,2,3,4,5,6,7,8,9,10,11,12,13}, {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1}}, 
-					//{{4,5,6,7,0,1,2,3,9,8,11,10,13,12}, {1,1,1,1,1,1,1,1,1,1,1,1,1,1}},
-				//}
-			//},
-
+		// Generate a series of random points TODO4
+		std::vector<std::vector<double>> points;
+		int numPointsToGen = 100000;
+		for (int i=0; i<numPointsToGen; i++) {
+			std::vector<double> newPoint(maxVariables);
+			for (int j=0; j<maxVariables; j++) {
+				newPoint[j] = 2.0*overRt2*(double(rand())/(RAND_MAX))-overRt2;
+			}
+			points.push_back(newPoint);
+		}
 
 		// Get list of general bad regions TODO4
 		std::vector<std::vector<std::pair<double,double>>> noGoRegions;
@@ -4458,6 +4461,7 @@ public:
 		auto toProcessBackup = toProcess;
 		int totalCombinations = 0;
 		int totalDuplications = 0;
+		double areaPercEstimate = 0;
 		for (int k=0; k<syms.size(); k++) {
 			std::cout << "checking " << syms[k].eqnList << "  " << syms[k].varsToBranch << std::endl;
 
@@ -4469,8 +4473,6 @@ public:
 			for (int i=0; i<syms[k].eqnList.size(); i++) {
 				conZeroSubset.push_back(conZeroLinear[syms[k].eqnList[i]]);
 			}
-
-			std::cout << conZeroSubset << std::endl;
 
 			// Keep going till we run out
 			while (toProcess.size() > 0) {
@@ -4521,8 +4523,8 @@ public:
 					copyLeft[bestInd].second = midPoint;
 					copyRight[bestInd].first = midPoint;
 
-					// Here only allow region of at least a certain size
-					if (copyLeft[bestInd].second - copyLeft[bestInd].first > 0.1) {
+					// Here only allow region of at least a certain size (if not the main sym)
+					if (syms[k].eqnList.size() == conZeroLinear.size() || copyLeft[bestInd].second - copyLeft[bestInd].first > 0.3) {
 
 						// Add the new paths to the queue
 						toProcess.insert(toProcess.begin()+1, copyLeft);
@@ -4534,44 +4536,44 @@ public:
 				} else {
 
 					// Check to see if it can be combined with any larger regions
-					//int swapsDone = 1;
-					//while (swapsDone > 0) {
-						//swapsDone = 0;
-						//for (int i=0; i<noGoRegions.size(); i++) {
+					int swapsDone = 1;
+					while (swapsDone > 0) {
+						swapsDone = 0;
+						for (int i=0; i<noGoRegions.size(); i++) {
 
-							//// Get all the indices of dimensions which are non-equal
-							//std::vector<int> sectionsNonEqual;
-							//for (int j=0; j<noGoRegions[i].size(); j++) {
-								//if (std::abs(noGoRegions[i][j].first-toProcess[0][j].first) > 1e-5 || std::abs(noGoRegions[i][j].second-toProcess[0][j].second) > 1e-5) {
-									//sectionsNonEqual.push_back(j);
-								//}
-							//}
+							// Get all the indices of dimensions which are non-equal
+							std::vector<int> sectionsNonEqual;
+							for (int j=0; j<noGoRegions[i].size(); j++) {
+								if (std::abs(noGoRegions[i][j].first-toProcess[0][j].first) > 1e-5 || std::abs(noGoRegions[i][j].second-toProcess[0][j].second) > 1e-5) {
+									sectionsNonEqual.push_back(j);
+								}
+							}
 
-							//// If everything is equal apart from one side
-							//if (sectionsNonEqual.size() == 1) {
+							// If everything is equal apart from one side
+							if (sectionsNonEqual.size() == 1) {
 
-								//// If connecting at second->first
-								//if (std::abs(noGoRegions[i][sectionsNonEqual[0]].first-toProcess[0][sectionsNonEqual[0]].second) < 1e-5) {
-									//toProcess[0][sectionsNonEqual[0]].second = noGoRegions[i][sectionsNonEqual[0]].second;
-									//swapsDone++;
-									//totalCombinations++;
-									//noGoRegions.erase(noGoRegions.begin()+i);
-									//i--;
+								// If connecting at second->first
+								if (std::abs(noGoRegions[i][sectionsNonEqual[0]].first-toProcess[0][sectionsNonEqual[0]].second) < 1e-5) {
+									toProcess[0][sectionsNonEqual[0]].second = noGoRegions[i][sectionsNonEqual[0]].second;
+									swapsDone++;
+									totalCombinations++;
+									noGoRegions.erase(noGoRegions.begin()+i);
+									i--;
 
-								//// If connecting at first->second
-								//} else if (std::abs(noGoRegions[i][sectionsNonEqual[0]].second-toProcess[0][sectionsNonEqual[0]].first) < 1e-5) {
-									//toProcess[0][sectionsNonEqual[0]].first = noGoRegions[i][sectionsNonEqual[0]].first;
-									//swapsDone++;
-									//totalCombinations++;
-									//noGoRegions.erase(noGoRegions.begin()+i);
-									//i--;
+								// If connecting at first->second
+								} else if (std::abs(noGoRegions[i][sectionsNonEqual[0]].second-toProcess[0][sectionsNonEqual[0]].first) < 1e-5) {
+									toProcess[0][sectionsNonEqual[0]].first = noGoRegions[i][sectionsNonEqual[0]].first;
+									swapsDone++;
+									totalCombinations++;
+									noGoRegions.erase(noGoRegions.begin()+i);
+									i--;
 
-								//}
+								}
 
-							//}
+							}
 
-						//}
-					//}
+						}
+					}
 
 					// Then add this larger region
 					noGoRegions.push_back(toProcess[0]);
@@ -4605,6 +4607,34 @@ public:
 				// Remove the one we just processed
 				toProcess.erase(toProcess.begin());
 
+				// Estimate the area covered by the no-go regions
+				if (iter % 1000 == 0) {
+					int numIncluded = 0;
+					for (int i=0; i<numPointsToGen; i++) {
+						for (int j=0; j<noGoRegions.size(); j++) {
+							bool inRegion = true;
+							for (int k=0; k<noGoRegions[j].size(); k++) {
+								if (points[i][k] < noGoRegions[j][k].first || points[i][k] > noGoRegions[j][k].second) {
+									inRegion = false;
+								}
+							}
+							if (inRegion) {
+								numIncluded++;
+								break;
+							}
+						}
+					}
+					areaPercEstimate = 100*(double(numIncluded)/double(numPointsToGen));
+				}
+
+				// Per iteration output
+				std::cout << iter << "  " 
+					      << toProcess.size() << "  " 
+						  << noGoRegions.size() << "  " 
+						  << totalCombinations << "  " 
+						  << totalDuplications << "  " 
+						  << areaPercEstimate << "%       \r" << std::flush;
+
 				// Keep track of the iteration number
 				iter++;
 				if (iter > 100000000) {
@@ -4614,46 +4644,6 @@ public:
 			}
 
 		}
-
-		// Calculate the total area of this
-		double areaTotal = 0;
-		for (int i=0; i<noGoRegions.size(); i++) {
-			double areaOfThis = 1;
-			for (int j=0; j<noGoRegions[i].size(); j++) {
-				areaOfThis *= noGoRegions[i][j].second - noGoRegions[i][j].first;
-			}
-			std::cout << "for " << i << ":  " << areaOfThis << std::endl;
-			areaTotal += areaOfThis;
-		}
-
-		// Remove overlapping space TODO4 much harder, best to use point-based
-		for (int i=0; i<noGoRegions.size(); i++) {
-			for (int k=i+1; k<noGoRegions.size(); k++) {
-				double areaOverlap = 1;
-				std::cout << noGoRegions[i] << std::endl;
-				std::cout << noGoRegions[k] << std::endl;
-				for (int j=0; j<noGoRegions[i].size(); j++) {
-					areaOverlap *= std::max(0.0, std::min(noGoRegions[i][j].second, noGoRegions[k][j].second) - std::max(noGoRegions[i][j].first, noGoRegions[k][j].first));
-					std::cout << noGoRegions[i][j] << " vs " << noGoRegions[k][j] << " = " << std::max(0.0, std::min(noGoRegions[i][j].second, noGoRegions[k][j].second) - std::max(noGoRegions[i][j].first, noGoRegions[k][j].first)) << std::endl;
-				}
-				areaTotal -= areaOverlap;
-				std::cout << "for " << i << " with " << k << ":  " << areaOverlap << std::endl;
-			}
-		}
-
-		// Calculate the max possible area
-		double areaMax = 1;
-		for (int j=0; j<toProcessBackup[0].size(); j++) {
-			areaMax *= toProcessBackup[0][j].second - toProcessBackup[0][j].first;
-		}
-
-		// Output some stats
-		std::cout << "no go regions found: " << noGoRegions.size() << std::endl;
-		std::cout << "number combined: " << totalCombinations << std::endl;
-		std::cout << "number duplicated: " << totalDuplications << std::endl;
-		std::cout << "total area: " << areaTotal << std::endl;
-		std::cout << "max possible area: " << areaMax << std::endl;
-		std::cout << "percent covered: " << 100*(areaTotal/areaMax) << std::endl;
 
 		// Keep splitting until all fail
 		//toProcess = toProcessBackup;
