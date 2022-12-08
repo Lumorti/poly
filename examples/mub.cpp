@@ -15,24 +15,26 @@ int main(int argc, char ** argv) {
 
 	// Useful quantities
 	int numVarsNonConj = n*d*d;
-	int numVars = 2*numVarsNonConj+100;
+	int numVars = 2*numVarsNonConj+100000;
 	int conjDelta = numVarsNonConj;
 	double rt2 = 1.0/std::sqrt(2.0);
 
 	// Different "bases"
 	std::vector<std::vector<int>> dLimits;
-	if (d == 6 && n == 4) {
-		dLimits.push_back({6, 3, 3, 3});
-	} else if (d == 5 && n == 4) {
-		dLimits.push_back({5, 3, 3, 3});
-	} else if (d == 7 && n == 4) {
-		dLimits.push_back({7, 3, 3, 3});
-	} else if (d == 10 && n == 4) {
-		dLimits.push_back({10, 3, 3, 3});
-	} else if (d == 2 && n == 3) {
-		dLimits.push_back({2, 1, 1});
-	} else if (d == 2 && n == 4) {
+	if (d == 2) {
 		dLimits.push_back({2, 1, 1, 1});
+	} else if (d == 3) {
+		dLimits.push_back({3, 1, 1, 1, 1});
+	} else if (d == 4) {
+		dLimits.push_back({4, 2, 1, 1, 1, 1});
+	} else if (d == 5) {
+		dLimits.push_back({5, 2, 2, 1, 1, 1, 1});
+	} else if (d == 6) {
+		dLimits.push_back({6, 2, 2, 2, 1, 1, 1, 1});
+		//dLimits.push_back({6, 5, 3, 1});
+		//dLimits.push_back({6, 3, 3, 3});
+	} else if (d == 7) {
+		dLimits.push_back({7, 2, 2, 2, 2, 1, 1, 1, 1});
 	} else {
 		dLimits.push_back(std::vector<int>(n, d));
 	}
@@ -92,8 +94,8 @@ int main(int argc, char ** argv) {
 						}
 
 						// Split into real and imag parts (both should be 0)
-						Polynomial<double> eqnReal = eqn.real();
-						Polynomial<double> eqnImag = eqn.imag();
+						Polynomial<double> eqnReal = std::real<double>(eqn);
+						Polynomial<double> eqnImag = std::imag<double>(eqn);
 
 						// Add these equations if they're not empty
 						if (eqnReal.size() > 0) {
@@ -108,7 +110,7 @@ int main(int argc, char ** argv) {
 			}
 		}
 
-		// All should have mag 1
+		// All should have mag 1 (since we're setting first basis to the comp)
 		int ogEqns = eqns.size();
 		for (int i=d*d; i<numVarsNonConj; i++) {
 			for (int j=0; j<ogEqns; j++) {
@@ -123,12 +125,7 @@ int main(int argc, char ** argv) {
 			}
 		}
 
-		//std::cout << "before reductions:" << std::endl;
-		//for (int i=0; i<eqns.size(); i++) {
-			//std::cout << eqns[i] << std::endl;
-		//}
-
-		// Can assume the first basis is the computational TODO
+		// Can assume the first basis is the computational
 		std::vector<int> indsToReplace;
 		std::vector<double> valsToReplace;
 		for (int i=0; i<d; i++) {
@@ -144,7 +141,7 @@ int main(int argc, char ** argv) {
 			}
 		}
 
-		// Can assume first element of second basis is uniform
+		// Can assume first vector of second basis is uniform
 		for (int j=0; j<d; j++) {
 			indsToReplace.push_back(d*d+j);
 			indsToReplace.push_back(d*d+j+conjDelta);
@@ -153,80 +150,32 @@ int main(int argc, char ** argv) {
 		}
 
 		// Can assume first value of each vector is 1 / sqrt(d)
-		//for (int i=d; i<d+1; i++) {
-			//indsToReplace.push_back(i*d);
-			//indsToReplace.push_back(i*d+conjDelta);
-			//valsToReplace.push_back(1/std::sqrt(d));
-			//valsToReplace.push_back(0);
-		//}
+		for (int i=0; i<n; i++) {
+			for (int j=0; j<d; j++) {
+				indsToReplace.push_back(i*d*d+j*d);
+				indsToReplace.push_back(i*d*d+j*d+conjDelta);
+				valsToReplace.push_back(1/std::sqrt(d));
+				valsToReplace.push_back(0);
+			}
+		}
 
-		//for (int i=d; i<2*d; i++) {
-			//for (int j=0; j<d; j++) {
-				//indsToReplace.push_back(i*d+j);
-				//indsToReplace.push_back(i*d+j+conjDelta);
-				//if (i == 2*d-1 && j == 1) {
-					//valsToReplace.push_back(-1.0/std::sqrt(2));
-				//} else {
-					//valsToReplace.push_back(1.0/std::sqrt(2));
-				//}
-				//valsToReplace.push_back(0);
-			//}
-		//}
-		//double overRt2 = 1.0/std::sqrt(2);
-		//indsToReplace.push_back(33);
-		//valsToReplace.push_back(0);
-		//indsToReplace.push_back(32);
-		//valsToReplace.push_back(std::sqrt(2));
-		//indsToReplace = {0, 1,    2, 3,    4, 5,     6, 7,   8,  
-						 //16, 17,  18, 19,  20, 21,    22, 23,  24};
-		//valsToReplace = {1, 0,    0, 1,    overRt2, overRt2,     overRt2, -overRt2,    0,
-						 //0, 0,    0, 0,    0, 0,                 0, 0};
-		//std::cout << indsToReplace << std::endl;
-		//std::cout << valsToReplace << std::endl;
+		// Perform the replacement
 		for (int i=0; i<eqns.size(); i++) {
 			eqns[i] = eqns[i].replaceWithValue(indsToReplace, valsToReplace);
 		}
 
-		// Collapse to the minimum number of vars
-		std::unordered_map<int,int> indMap;
-		int nextInd = 0;
-		for (int i=0; i<numVars; i++) {
-			for (int j=0; j<eqns.size(); j++) {
-				if (eqns[j].contains(i)) {
-					indMap[i] = nextInd;
-					nextInd++;
-					break;
-				}
-			}
-		}
-		numVars = nextInd;
-		std::vector<Polynomial<double>> newEqns;
-		for (int i=0; i<eqns.size(); i++) {
-			eqns[i] = eqns[i].replaceWithVariable(indMap).changeMaxVariables(numVars);
-			if (eqns[i].size() > 0) {
-				newEqns.push_back(eqns[i]);
-			}
-		}
+		// Combine these equations into a single object
+		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, {});
+		prob = prob.removeLinear();
+		prob = prob.collapse();
+		std::cout << prob << std::endl;
+		std::cout << dLimits[i2] << " " << prob.maxVariables << std::endl;
 
-		// Combine these to create a single polynomial
-		Polynomial<double> poly(numVars);
-		for (int i=0; i<newEqns.size(); i++) {
-			std::cout << newEqns[i] << std::endl;
-			poly += newEqns[i]*newEqns[i];
-		}
-
-		// Minimize number of equations needed TODO
-		std::cout << dLimits[i2] << "    " << newEqns.size() << "   " << numVars << std::endl;
-
-		// Find a lower bound TODO
-		Polynomial<double> obj(numVars);
-		PolynomialProblem<double> prob(obj, newEqns, {});
+		// Find a lower bound TODO syms, remove linear eqns, 2nd ord cone cons
 		prob.proveInfeasible();
 
-		// Find a root of this using an auxilary variable
-		//std::vector<double> x = poly.findRoot(0, 0.5, 1e-10, 10000, 16, false);
-		//std::vector<double> x = poly.findRoot(numVars-1, 0.1, 1e-10, 10000, 16, false);
-		//std::cout << "   Testing this x = " << poly.eval(x) << std::endl;
+		// Find a upper bound
+		//prob.findFeasiblePoint(0, 0.5, 1e-13, 100000, 4, false);
 
 	}
 

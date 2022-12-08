@@ -40,24 +40,27 @@ std::ostream& operator<<(std::ostream& os, const std::vector<std::string>& v) {
     return os;
 }
 
-// Generic overload for outputting vector of pairs
-//template <class type1, class type2>
-//std::ostream& operator<<(std::ostream& os, const std::vector<std::pair<type1,type2>>& v) {
-    //os << "{";
-    //for (typename std::vector<std::pair<type1,type2>>::const_iterator ii = v.begin(); ii != v.end(); ++ii) {
-        //os << "{" << (*ii).first << "," << (*ii).second << "}";
-		//if (ii+1 != v.end()) {
-			//os << ", ";
-		//}
-    //}
-    //os << "}";
-    //return os;
-//}
-
 // Generic overload for outputting a pair
 template <class type1, class type2>
 std::ostream& operator<<(std::ostream& os, const std::pair<type1,type2>& v) {
 	os << "{" << v.first << "," << v.second << "}";
+    return os;
+}
+
+// Generic overload for outputting map
+template <class T, class T2>
+std::ostream& operator<<(std::ostream& os, const std::unordered_map<T,T2>& v) {
+    os << "{";
+	int vSize = v.size();
+	int i = 0;
+    for (typename std::unordered_map<T,T2>::const_iterator ii = v.begin(); ii != v.end(); ++ii) {
+        os << (*ii).first << ": " << (*ii).second;
+		if (i < vSize) {
+			os << ", ";
+		}
+		i++;
+    }
+    os << "}";
     return os;
 }
 
@@ -679,6 +682,37 @@ public:
 	}
 
 	// Substitute a variable for a polynomial
+	Polynomial replaceWithPoly(std::string indString, Polynomial<polyType> toReplace) {
+
+		// For each element in this polynomial
+		Polynomial newPoly(toReplace.maxVariables);
+		for (auto const &pair: coeffs) {
+
+			// Find any instance of this index
+			Polynomial toMultiply2(toReplace.maxVariables, 1, {});
+			std::string remainingIndex = "";
+			for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
+				if (pair.first.substr(i, digitsPerInd) == indString) {
+					toMultiply2 *= toReplace;
+				} else {
+					remainingIndex += pair.first.substr(i, digitsPerInd);
+				}
+			}
+
+			// Get this monomial as a seperate poly
+			Polynomial toMultiply1(toReplace.maxVariables);
+			toMultiply1.addTerm(pair.second, remainingIndex);
+
+			// Add to the main poly
+			newPoly += toMultiply1*toMultiply2;
+
+		}
+
+		return newPoly;
+
+	}
+
+	// Substitute a variable for a polynomial
 	Polynomial replaceWithPoly(int ind, Polynomial<polyType> toReplace) {
 
 		// Cache the ind to replace as a string
@@ -1156,37 +1190,6 @@ public:
 
 	}
 
-	// Get the conjugate of the polynomial
-	Polynomial conjugate() {
-		Polynomial con(maxVariables);
-		for (auto const &pair: coeffs) {
-			con.coeffs[pair.first] = std::conj(pair.second);
-		}
-		return con;
-	}
-
-	// Get the real part of the polynomial
-	Polynomial<double> real() {
-		Polynomial<double> con(maxVariables);
-		for (auto const &pair: coeffs) {
-			if (std::abs(std::real(pair.second)) > zeroTol) {
-				con.coeffs[pair.first] = std::real(pair.second);
-			}
-		}
-		return con;
-	}
-
-	// Get the imaginary part of the polynomial
-	Polynomial<double> imag() {
-		Polynomial<double> con(maxVariables);
-		for (auto const &pair: coeffs) {
-			if (std::abs(std::imag(pair.second)) > zeroTol) {
-				con.coeffs[pair.first] = std::imag(pair.second);
-			}
-		}
-		return con;
-	}
-
 	// Evaluate a polynomial with x values
 	polyType eval(std::vector<polyType> x) {
 
@@ -1569,9 +1572,12 @@ public:
 			}
 
 			// Determine the direction
-			//p = H.householderQr().solve(-g);
 			p = H.colPivHouseholderQr().solve(-g);
-			//p = (H.transpose() * H).ldlt().solve(H.transpose() * (-g));
+
+			// If this is zero, follow the gradient
+			if (p.norm() < 1e-10) {
+				p = 100*Eigen::VectorXd::Random(maxVariables);
+			}
 
 			// Perform the update
 			x += alpha*p;
@@ -1579,7 +1585,7 @@ public:
 			// Per-iteration output
 			norm = std::abs(g.norm());
 			minVal = std::min(norm, minVal);
-			std::cout << iter << " " << norm << " " << g(zeroInd) << " " << x(zeroInd) << "   " << minVal << "          \r" << std::flush;
+			std::cout << iter << " " << norm << " " << g(zeroInd) << " " << x(zeroInd) << "   " << minVal << "  "  << p.norm() << "          \r" << std::flush;
 
 			// Convergence criteria
 			if (norm < tolerance) {
@@ -1905,25 +1911,55 @@ PolynomialMatrix<polyType> operator*(const Polynomial<polyType>& poly, const Pol
 }
 
 // Switch the order
-template <class polyType, class otherType>
+template <typename polyType, typename otherType>
 Polynomial<polyType> operator*(const otherType& other, const Polynomial<polyType>& poly) {
 	return poly*other;
 }
 
 // Switch the order
-template <class polyType, class otherType>
+template <typename polyType, typename otherType>
 Polynomial<polyType> operator+(const otherType& other, const Polynomial<polyType>& poly) {
 	return poly+other;
 }
 
 // Switch the order
-template <class polyType, class otherType>
+template <typename polyType, typename otherType>
 Polynomial<polyType> operator-(const otherType& other, const Polynomial<polyType>& poly) {
 	return poly-other;
 }
 
+// Overload std::real
+template <typename polyType2, typename polyType>
+Polynomial<polyType2> std::real(const Polynomial<polyType>& poly) {
+	Polynomial<polyType2> newPoly(poly.maxVariables);
+	for (auto const &pair: poly.coeffs) {
+		newPoly.coeffs[pair.first] = std::real(pair.second);
+	}
+	return newPoly;
+}
+
+// Overload std::imag
+template <typename polyType2, typename polyType>
+Polynomial<polyType2> std::imag(const Polynomial<polyType>& poly) {
+	Polynomial<polyType2> newPoly(poly.maxVariables);
+	for (auto const &pair: poly.coeffs) {
+		newPoly.coeffs[pair.first] = std::imag(pair.second);
+	}
+	return newPoly;
+}
+
+// Overload the std::conj
+template <typename polyType>
+Polynomial<polyType> std::conj(const Polynomial<polyType>& poly) {
+	Polynomial<polyType> newPoly(poly.maxVariables);
+	for (auto const &pair: poly.coeffs) {
+		newPoly.coeffs[pair.first] = std::conj(pair.second);
+	}
+	return newPoly;
+}
+
 // For minimizing a polynomial of binary vars subject to constraints
-template <class polyType>
+template <typename polyType>
 class PolynomialBinaryProblem {
 public:
 
@@ -3459,7 +3495,7 @@ public:
 						monomNotFound = true;
 					}
 
-					// TODO3
+					// Don't add new monoms
 					if (monomNotFound) {
 						continue;
 					}
@@ -3499,7 +3535,7 @@ public:
 
 		}
 
-		// TODO3
+		// For mat level 3
 		if (matLevel >= 3) {
 
 			// Consider everything multiplied by everything
@@ -3540,7 +3576,7 @@ public:
 							}
 						}
 
-						// TODO3
+						// Don't add new monoms
 						if (monomNotFound) {
 							continue;
 						}
@@ -3691,7 +3727,7 @@ public:
 		}
 		monoms.insert(monoms.begin(), "");
 
-		// Try adding all second order moments TODO3
+		// Try adding all second order moments
 		for (int i=0; i<maxVariables; i++) {
 			std::string newMonom1 = std::to_string(i);
 			newMonom1.insert(0, digitsPerInd-newMonom1.size(), ' ');
@@ -3741,7 +3777,7 @@ public:
 			auto res = solveLinear(objLinear, conZeroLinear, conPositiveLinear, monoms, monomPairs);
 			prevRes = res;
 
-			// Find an upper bound TODO3
+			// Find an upper bound
 			//std::vector<double> roundedVals(monoms.size());
 			//for (int k=0; k<monoms.size(); k++) {
 				//roundedVals[k] = sign(res.second[k]);
@@ -3800,7 +3836,7 @@ public:
 			std::vector<Polynomial<polyType>> allCons = getAllCons(monoms, monomsAsPolys, prevRes);
 			for (int j=0; j<allCons.size(); j++) {
 
-				// Add any unknown terms to the mapping TODO3
+				// Add any unknown terms to the mapping
 				//std::vector<std::string> newMons = allCons[j].getMonomials();
 				//for (int k=0; k<newMons.size(); k++) {
 					//auto loc = std::find(monoms.begin(), monoms.end(), newMons[k]);
@@ -4295,6 +4331,139 @@ public:
 
 	}
 
+	// Find any linear equalities and simplify everything else
+	PolynomialProblem<polyType> removeLinear() {
+
+		// Copy this problem
+		PolynomialProblem<polyType> newProb = *this;
+
+		// For each equality
+		for (int i=0; i<newProb.conZero.size(); i++) {
+
+			// If it's first order (i.e. linear)
+			if (newProb.conZero[i].getDegree() == 1) {
+
+				// Make sure there are no zeros, these can cause problems
+				newProb.conZero[i] = newProb.conZero[i].prune();
+
+				// Pick a random variable
+				std::string varToRemove = "";
+				polyType scalingCoeff = 0;
+				for (auto const &pair: newProb.conZero[i].coeffs) {
+					if (pair.first != "") {
+						varToRemove = pair.first;
+						scalingCoeff = -pair.second;
+						break;
+					}
+				}
+
+				// The polynomial this var is equal to 
+				Polynomial<polyType> equalPoly(maxVariables);
+				for (auto const &pair: newProb.conZero[i].coeffs) {
+					if (pair.first != varToRemove) {
+						equalPoly.addTerm(pair.second/scalingCoeff, pair.first);
+					}
+				}
+
+				// Replace this
+				for (int i=0; i<newProb.conZero.size(); i++) {
+					newProb.conZero[i] = newProb.conZero[i].replaceWithPoly(varToRemove, equalPoly);
+				}
+
+			}
+
+		}
+
+		return newProb;
+
+	}
+
+	// Collapse to the minimum number of variables
+	PolynomialProblem<polyType> collapse() {
+
+		// The map from old indices to new (minified) indices
+		std::unordered_map<int,int> indMap;
+		int nextInd = 0;
+		for (int i=0; i<maxVariables; i++) {
+
+			// Check the objective
+			if (obj.contains(i)) {
+				indMap[i] = nextInd;
+				nextInd++;
+			}
+
+			// Check the equality cons if still not found
+			if (indMap.find(i) == indMap.end()) {
+				for (int j=0; j<conZero.size(); j++) {
+					if (conZero[j].contains(i)) {
+						indMap[i] = nextInd;
+						nextInd++;
+						break;
+					}
+				}
+			}
+
+			// Check the inequality cons if still not found
+			if (indMap.find(i) == indMap.end()) {
+				for (int j=0; j<conPositive.size(); j++) {
+					if (conPositive[j].contains(i)) {
+						indMap[i] = nextInd;
+						nextInd++;
+						break;
+					}
+				}
+			}
+
+		}
+
+		// Replace the objective
+		int newNumVars = nextInd;
+		Polynomial<polyType> newObj = obj.replaceWithVariable(indMap).changeMaxVariables(newNumVars);
+		std::vector<Polynomial<polyType>> newConZero;
+
+		// Replace the equality cons
+		for (int i=0; i<conZero.size(); i++) {
+			Polynomial<polyType> newPoly = conZero[i].replaceWithVariable(indMap).changeMaxVariables(newNumVars);
+			if (newPoly.size() > 0) { 
+				newConZero.push_back(newPoly);
+			}
+		}
+
+		// Replace the inequality cons
+		std::vector<Polynomial<polyType>> newConPositive;
+		for (int i=0; i<conPositive.size(); i++) {
+			Polynomial<polyType> newPoly = conPositive[i].replaceWithVariable(indMap).changeMaxVariables(newNumVars);
+			if (newPoly.size() > 0) { 
+				newConPositive.push_back(newPoly);
+			}
+		}
+
+		// Create the new poly problem and return
+		return PolynomialProblem<polyType>(newObj, newConZero, newConPositive);
+
+	}
+
+	// Attempt find a feasible point of this problem
+	std::vector<polyType> findFeasiblePoint(int zeroInd=-1, double alpha=0.1, double tolerance=1e-10, int maxIters=10000000, int threads=4, bool verbose=false) {
+
+		// Combine these to create a single polynomial
+		Polynomial<polyType> poly(maxVariables);
+		for (int i=0; i<conZero.size(); i++) {
+			poly += conZero[i]*conZero[i];
+		}
+
+		// If no index specified, add a var and use that
+		if (zeroInd == -1) {
+			poly = poly.changeMaxVariables(maxVariables+1);
+			zeroInd = poly.maxVariables-1;
+		}
+
+		// Find a root of this polynomial
+		std::vector<polyType> x = poly.findRoot(zeroInd, alpha, tolerance, maxIters, threads, verbose);
+		return x;
+		
+	}
+
 	// Attempt to find a series of constraints that show this is infeasible
 	void proveInfeasible(int maxIters=100000000, int matLevel=2, bool verbose=false) {
 
@@ -4356,24 +4525,7 @@ public:
 			}
 		}
 
-		// Add everything less than second order
-		//for (int i=0; i<monoms.size(); i++) {
-			//if (monoms[i].size() <= 2*digitsPerInd) {
-				//for (int j=0; j<monoms.size(); j++) {
-					//if (monoms[j].size() <= 2*digitsPerInd) {
-						//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, monoms[i]), Polynomial<polyType>(maxVariables, 1, monoms[j])});
-					//}
-				//}
-			//}
-		//}
-
-		// Add first order SDP con (1, i, j, k, ...)
-		//std::vector<Polynomial<polyType>> toAdd;
-		//toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
-		//for (int i=0; i<maxVariables; i++) {
-			//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {i}));
-		//}
-		//monomProducts.push_back(toAdd);
+		// Add secord order cone for x^2+y^2=0.5 TODO
 
 		// Start with the most general area
 		std::vector<std::vector<std::pair<double,double>>> toProcess;
@@ -4385,68 +4537,9 @@ public:
 		}
 		toProcess.push_back(varMinMax);
 
-		struct variableChange {
-			std::vector<int> indices;
-			std::vector<double> coeffs;
-		};
-
-		struct symmetry {
-			std::vector<int> eqnList;
-			std::vector<int> varsToBranch;
-			std::vector<variableChange> variableChanges;
-		};
-
-		// Symmetry lists, e.g. if going from x->-y and y->-x results in the same equation
-		std::vector<symmetry> syms;
-
-		// For -0.5*{} + 1*{ 9 9} + 1*{ 8 8}
-		//symmetry symNorm;
-		//symNorm.eqnList = {0};
-		//symNorm.varsToBranch = {8,9};
-		//symNorm.variableChanges = {
-			//{{9,8}, {1,1}}, {{9,8}, {-1,-1}}, {{9,8}, {-1,1}}, {{9,8}, {1,-1}}, 
-			//{{8,9}, {1,1}},	{{8,9}, {-1,-1}}, {{8,9}, {-1,1}}, {{8,9}, {1,-1}}, 
-			//{{4,0}, {1,1}}, {{4,0}, {-1,-1}}, {{4,0}, {-1,1}}, {{4,0}, {1,-1}}, 
-			//{{0,4}, {1,1}}, {{0,4}, {-1,-1}}, {{0,4}, {-1,1}}, {{0,4}, {1,-1}}, 
-			//{{5,1}, {1,1}}, {{5,1}, {-1,-1}}, {{5,1}, {-1,1}}, {{5,1}, {1,-1}}, 
-			//{{1,5}, {1,1}}, {{1,5}, {-1,-1}}, {{1,5}, {-1,1}}, {{1,5}, {1,-1}}, 
-			//{{6,2}, {1,1}}, {{6,2}, {-1,-1}}, {{6,2}, {-1,1}}, {{6,2}, {1,-1}}, 
-			//{{2,6}, {1,1}}, {{2,6}, {-1,-1}}, {{2,6}, {-1,1}}, {{2,6}, {1,-1}}, 
-			//{{7,3}, {1,1}}, {{7,3}, {-1,-1}}, {{7,3}, {-1,1}}, {{7,3}, {1,-1}}, 
-			//{{3,7}, {1,1}}, {{3,7}, {-1,-1}}, {{3,7}, {-1,1}}, {{3,7}, {1,-1}}, 
-			//{{10,11}, {1,1}}, {{10,11}, {-1,-1}}, {{10,11}, {-1,1}}, {{10,11}, {1,-1}}, 
-			//{{11,10}, {1,1}}, {{11,10}, {-1,-1}}, {{11,10}, {-1,1}}, {{11,10}, {1,-1}}, 
-			//{{12,13}, {1,1}}, {{12,13}, {-1,-1}}, {{12,13}, {-1,1}}, {{12,13}, {1,-1}}, 
-			//{{13,12}, {1,1}}, {{13,12}, {-1,-1}}, {{13,12}, {-1,1}}, {{13,12}, {1,-1}}, 
-		//};
-		//syms.push_back(symNorm);
-
-		// For 0.707107*{ 0} + 0.707107*{ 1} + -1*{ 8}
-		//symmetry symNorm2;
-		//symNorm2.eqnList = {1};
-		//symNorm2.varsToBranch = {0,1,8};
-		//symNorm2.variableChanges = {
-			//{{0,1,8}, {1,1,1}}, {{0,1,8}, {-1,-1,-1}}, {{1,0,8}, {1,1,1}}, {{1,0,8}, {-1,-1,-1}},
-			//{{4,5,9}, {1,1,1}}, {{4,5,9}, {-1,-1,-1}}, {{5,4,9}, {1,1,1}}, {{5,4,9}, {-1,-1,-1}},
-			//{{2,3,10}, {1,1,1}}, {{2,3,10}, {-1,-1,-1}}, {{3,2,10}, {1,1,1}}, {{3,2,10}, {-1,-1,-1}},
-			//{{6,7,11}, {1,1,1}}, {{6,7,11}, {-1,-1,-1}}, {{6,7,11}, {1,1,1}}, {{6,7,11}, {-1,-1,-1}},
-		//};
-		//syms.push_back(symNorm2);
-
-		// Full symmetries
-		symmetry symFull;
-		symFull.eqnList = {0,1,2,3,4,5,6,7,8,9,10,11,12};
-		symFull.varsToBranch = {0,1,2,3,4,5,6,7,8,9,10,11,12,13};
-		symFull.variableChanges = {
-			{{0,1,2,3,4,5,6,7,8,9,10,11,12,13}, {1,1,1,1,1,1,1,1,1,1,1,1,1,1}}, 
-			{{0,1,2,3,4,5,6,7,8,9,10,11,12,13}, {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1}}, 
-			{{4,5,6,7,0,1,2,3,9,8,11,10,13,12}, {1,1,1,1,1,1,1,1,1,1,1,1,1,1}},
-		};
-		syms.push_back(symFull);
-
-		// Generate a series of random points TODO4
+		// Generate a series of random points
 		std::vector<std::vector<double>> points;
-		int numPointsToGen = 100000;
+		int numPointsToGen = 10000;
 		for (int i=0; i<numPointsToGen; i++) {
 			std::vector<double> newPoint(maxVariables);
 			for (int j=0; j<maxVariables; j++) {
@@ -4455,278 +4548,79 @@ public:
 			points.push_back(newPoint);
 		}
 
-		// Get list of general bad regions TODO4
-		std::vector<std::vector<std::pair<double,double>>> noGoRegions;
+		// Keep splitting until all fail
 		int iter = 0;
 		auto toProcessBackup = toProcess;
-		int totalCombinations = 0;
-		int totalDuplications = 0;
-		double areaPercEstimate = 0;
-		for (int k=0; k<syms.size(); k++) {
-			std::cout << "checking " << syms[k].eqnList << "  " << syms[k].varsToBranch << std::endl;
+		toProcess = toProcessBackup;
+		iter = 0;
+		while (toProcess.size() > 0) {
 
-			// Start with the most general search space
-			toProcess = toProcessBackup;
+			// Test this subregion
+			auto cutRes = solveSDPWithCuts(toProcess[0], conZeroLinear, conPositiveLinear, monoms, monomProducts);
 
-			// Restrict the equations to a subset
-			std::vector<Polynomial<polyType>> conZeroSubset;
-			for (int i=0; i<syms[k].eqnList.size(); i++) {
-				conZeroSubset.push_back(conZeroLinear[syms[k].eqnList[i]]);
+			// If feasbile, split the region
+			if (cutRes.first) {
+
+				// Find the biggest section
+				double biggestDiff = -10000;
+				int bestInd = -1;
+				for (int i=0; i<obj.maxVariables; i++) {
+					double diff = toProcess[0][i].second-toProcess[0][i].first;
+					if (diff > biggestDiff) {
+						biggestDiff = diff;
+						bestInd = i;
+					}
+				}
+
+				// Split it
+				double midPoint = (toProcess[0][bestInd].first + toProcess[0][bestInd].second) / 2.0;
+				auto copyLeft = toProcess[0];
+				auto copyRight = toProcess[0];
+				copyLeft[bestInd].second = midPoint;
+				copyRight[bestInd].first = midPoint;
+
+				// Add the new paths to the queue
+				toProcess.insert(toProcess.begin()+1, copyLeft);
+				toProcess.insert(toProcess.begin()+1, copyRight);
+
+			} else {
+
+				// See how many points we can remove
+				for (int i=0; i<points.size(); i++) {
+					bool inRegion = true;
+					for (int k=0; k<toProcess[0].size(); k++) {
+						if (points[i][k] < toProcess[0][k].first || points[i][k] > toProcess[0][k].second) {
+							inRegion = false;
+						}
+					}
+					if (inRegion) {
+						points.erase(points.begin()+i);
+						i--;
+					}
+				}
+
 			}
 
-			// Keep going till we run out
-			while (toProcess.size() > 0) {
+			// Per-iteration output
+			//std::cout << toProcess[0] << std::endl;
+			//std::cout << iter << " " << cutRes.first << " " << toProcess.size() << " " << 1.0 - (double(points.size()) / numPointsToGen) << std::endl;
+			std::cout << iter << " " << cutRes.first << " " << toProcess.size() << " " << 1.0 - (double(points.size()) / numPointsToGen) << "            \r" << std::flush;
 
-				// Check if this subregion is contained within one of the no-go regions
-				bool valid = true;
-				for (int i=0; i<noGoRegions.size(); i++) {
-					bool regionWithin = true;
-					for (int j=0; j<noGoRegions[i].size(); j++) {
-						if (toProcess[0][j].first < noGoRegions[i][j].first || toProcess[0][j].second > noGoRegions[i][j].second) {
-							regionWithin = false;
-							break;
-						}
-					}
-					if (regionWithin) {
-						valid = false;
-						break;
-					}
-				}
+			// Remove the one we just processed
+			toProcess.erase(toProcess.begin());
 
-				// If it is, skip it
-				if (!valid) {
-					toProcess.erase(toProcess.begin());
-					continue;
-				}
-				
-				// Test this subregion
-				auto cutRes = solveSDPWithCuts(toProcess[0], conZeroSubset, conPositiveLinear, monoms, monomProducts);
-
-				// If feasbile, split the region
-				if (cutRes.first) {
-
-					// Find the biggest section
-					double biggestDiff = -10000;
-					int bestInd = -1;
-					for (int i=0; i<syms[k].varsToBranch.size(); i++) {
-						double diff = toProcess[0][syms[k].varsToBranch[i]].second-toProcess[0][syms[k].varsToBranch[i]].first;
-						if (diff > biggestDiff) {
-							biggestDiff = diff;
-							bestInd = syms[k].varsToBranch[i];
-						}
-					}
-
-					// Split it
-					double midPoint = (toProcess[0][bestInd].first + toProcess[0][bestInd].second) / 2.0;
-					auto copyLeft = toProcess[0];
-					auto copyRight = toProcess[0];
-					copyLeft[bestInd].second = midPoint;
-					copyRight[bestInd].first = midPoint;
-
-					// Here only allow region of at least a certain size (if not the main sym)
-					if (syms[k].eqnList.size() == conZeroLinear.size() || copyLeft[bestInd].second - copyLeft[bestInd].first > 0.3) {
-
-						// Add the new paths to the queue
-						toProcess.insert(toProcess.begin()+1, copyLeft);
-						toProcess.insert(toProcess.begin()+1, copyRight);
-
-					}
-
-				// Otherwise add it to the list of invalid regions
-				} else {
-
-					// Check to see if it can be combined with any larger regions
-					int swapsDone = 1;
-					while (swapsDone > 0) {
-						swapsDone = 0;
-						for (int i=0; i<noGoRegions.size(); i++) {
-
-							// Get all the indices of dimensions which are non-equal
-							std::vector<int> sectionsNonEqual;
-							for (int j=0; j<noGoRegions[i].size(); j++) {
-								if (std::abs(noGoRegions[i][j].first-toProcess[0][j].first) > 1e-5 || std::abs(noGoRegions[i][j].second-toProcess[0][j].second) > 1e-5) {
-									sectionsNonEqual.push_back(j);
-								}
-							}
-
-							// If everything is equal apart from one side
-							if (sectionsNonEqual.size() == 1) {
-
-								// If connecting at second->first
-								if (std::abs(noGoRegions[i][sectionsNonEqual[0]].first-toProcess[0][sectionsNonEqual[0]].second) < 1e-5) {
-									toProcess[0][sectionsNonEqual[0]].second = noGoRegions[i][sectionsNonEqual[0]].second;
-									swapsDone++;
-									totalCombinations++;
-									noGoRegions.erase(noGoRegions.begin()+i);
-									i--;
-
-								// If connecting at first->second
-								} else if (std::abs(noGoRegions[i][sectionsNonEqual[0]].second-toProcess[0][sectionsNonEqual[0]].first) < 1e-5) {
-									toProcess[0][sectionsNonEqual[0]].first = noGoRegions[i][sectionsNonEqual[0]].first;
-									swapsDone++;
-									totalCombinations++;
-									noGoRegions.erase(noGoRegions.begin()+i);
-									i--;
-
-								}
-
-							}
-
-						}
-					}
-
-					// Then add this larger region
-					noGoRegions.push_back(toProcess[0]);
-
-					// Duplicate this regions using symmetry TODO4 
-					for (int l=1; l<syms[k].variableChanges.size(); l++) {
-
-						// Create a copy of the state 
-						auto processCopy = toProcess[0];
-						variableChange change = syms[k].variableChanges[l];
-
-						// For each element of the state, make the swap
-						for (int i=0; i<change.indices.size(); i++) {
-							auto temp = processCopy[syms[k].varsToBranch[i]];
-							processCopy[syms[k].varsToBranch[i]] = processCopy[change.indices[i]];
-							if (change.coeffs[i] < 0) {
-								processCopy[change.indices[i]] = {temp.second*change.coeffs[i], temp.first*change.coeffs[i]};
-							} else {
-								processCopy[change.indices[i]] = {temp.first*change.coeffs[i], temp.second*change.coeffs[i]};
-							}
-						}
-
-						// Add this to the list
-						noGoRegions.push_back(processCopy);
-						totalDuplications++;
-
-					}
-
-				}
-
-				// Remove the one we just processed
-				toProcess.erase(toProcess.begin());
-
-				// Estimate the area covered by the no-go regions
-				if (iter % 1000 == 0) {
-					int numIncluded = 0;
-					for (int i=0; i<numPointsToGen; i++) {
-						for (int j=0; j<noGoRegions.size(); j++) {
-							bool inRegion = true;
-							for (int k=0; k<noGoRegions[j].size(); k++) {
-								if (points[i][k] < noGoRegions[j][k].first || points[i][k] > noGoRegions[j][k].second) {
-									inRegion = false;
-								}
-							}
-							if (inRegion) {
-								numIncluded++;
-								break;
-							}
-						}
-					}
-					areaPercEstimate = 100*(double(numIncluded)/double(numPointsToGen));
-				}
-
-				// Per iteration output
-				std::cout << iter << "  " 
-					      << toProcess.size() << "  " 
-						  << noGoRegions.size() << "  " 
-						  << totalCombinations << "  " 
-						  << totalDuplications << "  " 
-						  << areaPercEstimate << "%       \r" << std::flush;
-
-				// Keep track of the iteration number
-				iter++;
-				if (iter > 100000000) {
-					break;
-				}
-
+			// Keep track of the iteration number
+			iter++;
+			if (iter > 100000000) {
+				break;
 			}
 
 		}
+		std::cout << std::endl;
 
-		// Keep splitting until all fail
-		//toProcess = toProcessBackup;
-		//iter = 0;
-		//while (toProcess.size() > 0) {
-
-			//// Check if this subregion is contained within one of the no-go regions
-			//bool valid = true;
-			//for (int i=0; i<noGoRegions.size(); i++) {
-				//bool regionWithin = true;
-				//for (int j=0; j<noGoRegions[i].size(); j++) {
-					//if (toProcess[0][j].first < noGoRegions[i][j].first || toProcess[0][j].second > noGoRegions[i][j].second) {
-						//regionWithin = false;
-						//break;
-					//}
-				//}
-				//if (regionWithin) {
-					//valid = false;
-					//break;
-				//}
-			//}
-
-			//// If it is, skip it
-			//if (!valid) {
-				//toProcess.erase(toProcess.begin());
-				//continue;
-			//}
-
-			//// Test this subregion
-			//auto cutRes = solveSDPWithCuts(toProcess[0], conZeroLinear, conPositiveLinear, monoms, monomProducts);
-			//std::cout << toProcess[0] << std::endl;
-			//std::cout << iter << " " << cutRes.first << " " << toProcess.size() << std::endl;
-
-			//// If feasbile, split the region
-			//if (cutRes.first) {
-
-				//// Find the biggest section
-				//double biggestDiff = -10000;
-				//int bestInd = -1;
-				//for (int i=0; i<obj.maxVariables; i++) {
-					//double diff = toProcess[0][i].second-toProcess[0][i].first;
-					//if (diff > biggestDiff) {
-						//biggestDiff = diff;
-						//bestInd = i;
-					//}
-				//}
-
-				//// Split it
-				//double midPoint = (toProcess[0][bestInd].first + toProcess[0][bestInd].second) / 2.0;
-				//auto copyLeft = toProcess[0];
-				//auto copyRight = toProcess[0];
-				//copyLeft[bestInd].second = midPoint;
-				//copyRight[bestInd].first = midPoint;
-
-				//// Add the new paths to the queue
-				//toProcess.insert(toProcess.begin()+1, copyLeft);
-				//toProcess.insert(toProcess.begin()+1, copyRight);
-
-			//}
-
-			//// Remove the one we just processed
-			//toProcess.erase(toProcess.begin());
-
-			//// Keep track of the iteration number
-			//iter++;
-			//if (iter > 100000000) {
-				//break;
-			//}
-
-		//}
-
-		// Benchmarks TODO4
-		// d2n4 43422 iterations 18m44s
-		// d2n4 43422 iterations 14m25s
-		// d2n4 41286 iterations 14m47s
-		// d2n4 36050 iterations 12m40s (partial first order + sym at 0.1)
-		// d2n4 30442 iterations 13m26s (full first order + sym at 0.1)
-
-		// Output the result for debugging
-		//for (int k=0; k<angleRes.second.size(); k++) {
-			//std::cout << k << "  " << monoms[k] << "   " << angleRes.second[k] << std::endl;
-		//}
-		//std::cout << std::endl;
+		// Benchmarks TODO
+		// d2n4 94 iterations 0.6s
+		// d3n5 
 
 	}
 
