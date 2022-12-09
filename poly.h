@@ -4465,7 +4465,7 @@ public:
 	}
 
 	// Attempt to find a series of constraints that show this is infeasible
-	void proveInfeasible(int maxIters=100000000, int matLevel=2, bool verbose=false) {
+	void proveInfeasible(std::vector<std::vector<std::pair<int,double>>> syms={}, int maxIters=100000000, int matLevel=2, bool verbose=false) {
 
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
@@ -4486,8 +4486,8 @@ public:
 		
 		// Output the monoms we start with
 		int numOGMonoms = monoms.size();
-		std::cout << "og monoms: " << monoms << std::endl;
-		std::cout << "num og monoms: " << numOGMonoms << std::endl;
+		//std::cout << "og monoms: " << monoms << std::endl;
+		//std::cout << "num og monoms: " << numOGMonoms << std::endl;
 
 		// Also get the monomials as polynomials and prepare for fast eval
 		std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
@@ -4570,6 +4570,12 @@ public:
 						biggestDiff = diff;
 						bestInd = i;
 					}
+				}
+
+				// If we've converged
+				if (biggestDiff < 1e-5) {
+					std::cout << "converged in " << iter << " iters to " << toProcess[0] << std::endl;
+					break;
 				}
 
 				// Split it

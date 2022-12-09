@@ -171,8 +171,12 @@ int main(int argc, char ** argv) {
 		std::cout << prob << std::endl;
 		std::cout << dLimits[i2] << " " << prob.maxVariables << std::endl;
 
+		std::vector<std::vector<std::pair<>>> syms = {
+			{},
+		}
+
 		// Find a lower bound TODO syms, remove linear eqns, 2nd ord cone cons
-		prob.proveInfeasible();
+		prob.proveInfeasible(syms);
 
 		// Find a upper bound
 		//prob.findFeasiblePoint(0, 0.5, 1e-13, 100000, 4, false);
