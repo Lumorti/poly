@@ -43,7 +43,14 @@ std::ostream& operator<<(std::ostream& os, const std::vector<std::string>& v) {
 // Generic overload for outputting a pair
 template <class type1, class type2>
 std::ostream& operator<<(std::ostream& os, const std::pair<type1,type2>& v) {
-	os << "{" << v.first << "," << v.second << "}";
+	os << "{" << v.first << ", " << v.second << "}";
+    return os;
+}
+
+// Generic overload for outputting a tuple
+template <class type1, class type2, class type3>
+std::ostream& operator<<(std::ostream& os, const std::tuple<type1,type2,type3>& v) {
+	os << "{" << std::get<0>(v) << ", " << std::get<1>(v) << ", " << std::get<2>(v) << "}";
     return os;
 }
 
@@ -3450,7 +3457,7 @@ public:
 				//// Add the relevant values 
 				//for (int k=0; k<finalConInds.size(); k++) {
 					//if (finalConInds[k] >= 0) {
-						//tripletsA.push_back(Eigen::Triplet<double>(m-1, finalConInds[k], finalConVals[k]));
+						//tuple.push_back(Eigen::Triplet<double>(m-1, finalConInds[k], finalConVals[k]));
 					//} else if (finalConInds[k] == -1) {
 						//b[m-1] = -finalConVals[k];
 					//} else {
@@ -3920,12 +3927,23 @@ public:
 	Polynomial<polyType> obj;
 	std::vector<Polynomial<polyType>> conZero;
 	std::vector<Polynomial<polyType>> conPositive;
+	std::vector<std::vector<std::pair<int,polyType>>> syms;
 
-	// Constructor with everything
+	// Constructor with everything but syms
 	PolynomialProblem(Polynomial<polyType> obj_, std::vector<Polynomial<polyType>> conZero_, std::vector<Polynomial<polyType>> conPositive_) {
 		obj = obj_;
 		conZero = conZero_;
 		conPositive = conPositive_;
+		maxVariables = obj.maxVariables;
+		digitsPerInd = obj.digitsPerInd;
+	}
+
+	// Constructor with everything 
+	PolynomialProblem(Polynomial<polyType> obj_, std::vector<Polynomial<polyType>> conZero_, std::vector<Polynomial<polyType>> conPositive_, std::vector<std::vector<std::pair<int,polyType>>> syms_) {
+		obj = obj_;
+		conZero = conZero_;
+		conPositive = conPositive_;
+		syms = syms_;
 		maxVariables = obj.maxVariables;
 		digitsPerInd = obj.digitsPerInd;
 	}
@@ -3985,19 +4003,47 @@ public:
 	// When doing std::cout << PolynomialProblem
 	friend std::ostream &operator<<(std::ostream &output, const PolynomialProblem &other) {
 
-		// Output the objective
-		output << "Minimize: " << std::endl << std::endl;
-		output << other.obj << std::endl << std::endl;
+		// If it's optimisation
+		if (other.obj.size() > 0) {
+			
+			// Output the objective
+			output << "Minimize: " << std::endl << std::endl;
+			output << other.obj << std::endl << std::endl;
 
-		// Output each constraint
-		int numSoFar = 0;
-		if (other.conZero.size() + other.conPositive.size() > 0) {
-			output << "Subject to: " << std::endl;
-			for (int i=0; i<other.conZero.size(); i++) {
-				output << std::endl << other.conZero[i] << " = 0 " << std::endl;;
+			// Output each constraint
+			int numSoFar = 0;
+			if (other.conZero.size() + other.conPositive.size() > 0) {
+				output << "Subject to: " << std::endl;
+				for (int i=0; i<other.conZero.size(); i++) {
+					output << std::endl << other.conZero[i] << " = 0 " << std::endl;;
+				}
+				for (int i=0; i<other.conPositive.size(); i++) {
+					output << std::endl << other.conPositive[i] << " > 0 " << std::endl;
+				}
 			}
-			for (int i=0; i<other.conPositive.size(); i++) {
-				output << std::endl << other.conPositive[i] << " > 0 " << std::endl;
+
+		// If it's constraint satisfaction
+		} else {
+
+			// Output each constraint
+			int numSoFar = 0;
+			if (other.conZero.size() + other.conPositive.size() > 0) {
+				output << "Find a point satisfying:" << std::endl;
+				for (int i=0; i<other.conZero.size(); i++) {
+					output << std::endl << other.conZero[i] << " = 0 " << std::endl;;
+				}
+				for (int i=0; i<other.conPositive.size(); i++) {
+					output << std::endl << other.conPositive[i] << " > 0 " << std::endl;
+				}
+			}
+
+		}
+
+		// Output symmetries
+		if (other.syms.size() > 0) {
+			output << "With symmetries:" << std::endl;
+			for (int i=0; i<other.syms.size(); i++) {
+				output << std::endl << other.syms[i] << std::endl;;
 			}
 		}
 
@@ -4006,7 +4052,7 @@ public:
 	}
 
 	// Solve a SDP program given an objective and zero/positive constraints
-	std::pair<bool,std::vector<polyType>> solveSDPWithCuts(std::vector<std::pair<double,double>>& varMinMax, std::vector<Polynomial<polyType>>& conZeroLinear, std::vector<Polynomial<polyType>> conPositiveLinear, std::vector<std::string>& monoms, std::vector<std::vector<Polynomial<polyType>>>& monomProducts) {
+	std::pair<bool,std::vector<polyType>> solveSDPWithCuts(std::vector<std::pair<double,double>>& varMinMax, std::vector<Polynomial<polyType>>& conZeroLinear, std::vector<Polynomial<polyType>> conPositiveLinear, std::vector<std::string>& monoms, std::vector<std::vector<Polynomial<polyType>>>& monomProducts, std::vector<std::tuple<double,int,int>> qCones={}) {
 
 		// Create the PSD matrices from this list
 		std::vector<std::shared_ptr<monty::ndarray<int,1>>> shouldBePSD;
@@ -4105,6 +4151,16 @@ public:
 		}
 		auto BM = mosek::fusion::Matrix::sparse(conPositiveLinear.size(), varsTotal, monty::new_array_ptr<int>(BRows), monty::new_array_ptr<int>(BCols), monty::new_array_ptr<polyType>(BVals));
 
+		// The box constraints, given our box
+		std::vector<double> mins(monoms.size(), -1);
+		std::vector<double> maxs(monoms.size(), 1);
+		for (int i=0; i<varMinMax.size(); i++) {
+			mins[firstMonomInds[i]] = varMinMax[i].first;
+			mins[squaredMonomInds[i]] = 0;
+			maxs[firstMonomInds[i]] = varMinMax[i].second;
+			maxs[squaredMonomInds[i]] = std::max(varMinMax[i].first*varMinMax[i].first, varMinMax[i].second*varMinMax[i].second);
+		}
+
 		// Create a model
 		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
 
@@ -4112,7 +4168,7 @@ public:
 		//M->setLogHandler([=](const std::string & msg){std::cout << msg << std::flush;});
 
 		// Create the variable
-		mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(-1, 1));
+		mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(monty::new_array_ptr<double>(mins), monty::new_array_ptr<double>(maxs)));
 
 		// The first element of the vector should be one
 		M->constraint(xM->index(oneIndex), mosek::fusion::Domain::equalsTo(1.0));
@@ -4129,8 +4185,10 @@ public:
 			M->constraint(xM->pick(shouldBePSD[i])->reshape(matDim, matDim), mosek::fusion::Domain::inPSDCone(matDim));
 		}
 
-		// Objective is to maximize this angular distance
-		//M->objective(mosek::fusion::ObjectiveSense::Maximize, mosek::fusion::Expr::dot(cM, xM));
+		// Quadratic cones
+		for (int i=0; i<qCones.size(); i++) {
+			M->constraint(mosek::fusion::Expr::vstack(std::sqrt(std::get<0>(qCones[i])), xM->index(firstMonomInds[std::get<1>(qCones[i])]), xM->index(firstMonomInds[std::get<2>(qCones[i])])), mosek::fusion::Domain::inQCone(3));
+		}
 
 		// Solve the problem
 		M->solve();
@@ -4465,7 +4523,7 @@ public:
 	}
 
 	// Attempt to find a series of constraints that show this is infeasible
-	void proveInfeasible(std::vector<std::vector<std::pair<int,double>>> syms={}, int maxIters=100000000, int matLevel=2, bool verbose=false) {
+	void proveInfeasible(int maxIters=100000000, bool verbose=false) {
 
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
@@ -4477,18 +4535,17 @@ public:
 		// Random seed
 		std::srand(time(0));
 
+		// Make sure we have all first and second order moments
+		addMonomsOfOrder(monoms, 1);
+
 		// First monom should always be 1
 		auto loc = std::find(monoms.begin(), monoms.end(), "");
 		if (loc != monoms.end()) {
 			monoms.erase(loc);
 		}
 		monoms.insert(monoms.begin(), "");
-		
-		// Output the monoms we start with
 		int numOGMonoms = monoms.size();
-		//std::cout << "og monoms: " << monoms << std::endl;
-		//std::cout << "num og monoms: " << numOGMonoms << std::endl;
-
+		
 		// Also get the monomials as polynomials and prepare for fast eval
 		std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
 		for (int i=0; i<monoms.size(); i++) {
@@ -4525,27 +4582,72 @@ public:
 			}
 		}
 
-		// Add secord order cone for x^2+y^2=0.5 TODO
+		// Add second order cone for x^2+y^2=1/d
+		int d = 0;
+		std::vector<std::tuple<double,int,int>> qCones;
+		for (int i=0; i<conZero.size(); i++) {
+
+			// First make sure we have a constant and 3 terms total
+			if (conZero[i][""] < 0 && conZero[i].size() == 3) {
+
+				// Get vars and monoms from this
+				auto varsInThisPoly = conZero[i].getVariables();
+				auto monomsInThisPoly = conZero[i].getMonomials();
+
+				// Check to make sure all vars are squares
+				bool allSquares = true;
+				for (int j=0; j<monomsInThisPoly.size(); j++) {
+					if (monomsInThisPoly[j].size() >= 2*digitsPerInd) {
+						if (monomsInThisPoly[j].substr(0,digitsPerInd) != monomsInThisPoly[j].substr(digitsPerInd,digitsPerInd)) { 
+							allSquares = false;
+						}
+					}
+				}
+
+				// If all valid, add to the quadratic cones list
+				if (allSquares) {
+					qCones.push_back({-conZero[i][""], varsInThisPoly[0], varsInThisPoly[1]});
+					d = std::round(-1.0 / conZero[i][""]);
+					conZero.erase(conZero.begin()+i);
+					i--;
+				}
+
+			}
+		}
 
 		// Start with the most general area
 		std::vector<std::vector<std::pair<double,double>>> toProcess;
 		std::vector<std::pair<double,double>> varMinMax(obj.maxVariables);
-		double overRt2 = 1.0 / std::sqrt(2);
+		double overRtD = 1.0 / std::sqrt(d);
 		for (int i=0; i<obj.maxVariables; i++) {
-			varMinMax[i].first = -overRt2;
-			varMinMax[i].second = overRt2;
+			varMinMax[i].first = -overRtD;
+			varMinMax[i].second = overRtD;
 		}
 		toProcess.push_back(varMinMax);
 
 		// Generate a series of random points
 		std::vector<std::vector<double>> points;
-		int numPointsToGen = 10000;
+		int numPointsToGen = 100;
+		if (d >= 3) {
+			numPointsToGen = 100000;
+		}
 		for (int i=0; i<numPointsToGen; i++) {
 			std::vector<double> newPoint(maxVariables);
 			for (int j=0; j<maxVariables; j++) {
-				newPoint[j] = 2.0*overRt2*(double(rand())/(RAND_MAX))-overRt2;
+				newPoint[j] = 2.0*overRtD*(double(rand())/(RAND_MAX))-overRtD;
 			}
 			points.push_back(newPoint);
+		}
+
+		// Get the inds of the first order monomials and their squares
+		std::vector<int> firstMonomInds(maxVariables, -1);
+		std::vector<int> squaredMonomInds(maxVariables, -1);
+		for (int i=0; i<monoms.size(); i++) {
+			if (monoms[i].size() == digitsPerInd) {
+				firstMonomInds[std::stoi(monoms[i])] = i;
+			} else if (monoms[i].size() == 2*digitsPerInd && monoms[i].substr(0,digitsPerInd) == monoms[i].substr(digitsPerInd,digitsPerInd)) {
+				squaredMonomInds[std::stoi(monoms[i].substr(0,digitsPerInd))] = i;
+			}
 		}
 
 		// Keep splitting until all fail
@@ -4556,25 +4658,40 @@ public:
 		while (toProcess.size() > 0) {
 
 			// Test this subregion
-			auto cutRes = solveSDPWithCuts(toProcess[0], conZeroLinear, conPositiveLinear, monoms, monomProducts);
+			auto cutRes = solveSDPWithCuts(toProcess[0], conZeroLinear, conPositiveLinear, monoms, monomProducts, qCones);
 
 			// If feasbile, split the region
 			if (cutRes.first) {
 
-				// Find the biggest section
-				double biggestDiff = -10000;
+				// Check the resulting vector for a good place to split TODO
+				std::vector<double> errors(maxVariables);
+				for (int i=0; i<maxVariables; i++) {
+					errors[i] = std::abs(cutRes.second[squaredMonomInds[i]] - cutRes.second[firstMonomInds[i]]*cutRes.second[firstMonomInds[i]]);
+				}
+
+				// Find the biggest error TODO could try boltz probabilties
+				double biggestError = -10000;
 				int bestInd = -1;
-				for (int i=0; i<obj.maxVariables; i++) {
-					double diff = toProcess[0][i].second-toProcess[0][i].first;
-					if (diff > biggestDiff) {
-						biggestDiff = diff;
+				for (int i=0; i<maxVariables; i++) {
+					if (errors[i] > biggestError) {
+						biggestError = errors[i];
 						bestInd = i;
 					}
 				}
 
+				// Find the biggest section
+				//double biggestDiff = -10000;
+				//for (int i=0; i<maxVariables; i++) {
+					//double diff = toProcess[0][i].second-toProcess[0][i].first;
+					//if (diff > biggestDiff) {
+						//biggestDiff = diff;
+					//}
+				//}
+
 				// If we've converged
-				if (biggestDiff < 1e-5) {
-					std::cout << "converged in " << iter << " iters to " << toProcess[0] << std::endl;
+				if (biggestError < 1e-5) {
+					std::cout << "converged in " << iter << " iters to region " << toProcess[0] << std::endl;
+					std::cout << "with solution " << cutRes.second << std::endl;
 					break;
 				}
 
@@ -4597,6 +4714,7 @@ public:
 					for (int k=0; k<toProcess[0].size(); k++) {
 						if (points[i][k] < toProcess[0][k].first || points[i][k] > toProcess[0][k].second) {
 							inRegion = false;
+							break;
 						}
 					}
 					if (inRegion) {
@@ -4608,9 +4726,8 @@ public:
 			}
 
 			// Per-iteration output
-			//std::cout << toProcess[0] << std::endl;
-			//std::cout << iter << " " << cutRes.first << " " << toProcess.size() << " " << 1.0 - (double(points.size()) / numPointsToGen) << std::endl;
 			std::cout << iter << " " << cutRes.first << " " << toProcess.size() << " " << 1.0 - (double(points.size()) / numPointsToGen) << "            \r" << std::flush;
+			//std::cout << iter << " " << cutRes.first << " " << toProcess.size() << " " << 1.0 - (double(points.size()) / numPointsToGen) << std::endl;
 
 			// Remove the one we just processed
 			toProcess.erase(toProcess.begin());
@@ -4624,9 +4741,9 @@ public:
 		}
 		std::cout << std::endl;
 
-		// Benchmarks TODO
-		// d2n4 94 iterations 0.6s
-		// d3n5 
+		// Benchmarks
+		// d2n4 58 iterations 0.4s
+		// d3n5 estimated ~1400000 iterations in ~10 hours
 
 	}
 

@@ -30,8 +30,8 @@ int main(int argc, char ** argv) {
 	} else if (d == 5) {
 		dLimits.push_back({5, 2, 2, 1, 1, 1, 1});
 	} else if (d == 6) {
-		dLimits.push_back({6, 2, 2, 2, 1, 1, 1, 1});
-		//dLimits.push_back({6, 5, 3, 1});
+		//dLimits.push_back({6, 2, 2, 2, 1, 1, 1, 1});
+		dLimits.push_back({6, 5, 3, 1});
 		//dLimits.push_back({6, 3, 3, 3});
 	} else if (d == 7) {
 		dLimits.push_back({7, 2, 2, 2, 2, 1, 1, 1, 1});
@@ -164,19 +164,18 @@ int main(int argc, char ** argv) {
 			eqns[i] = eqns[i].replaceWithValue(indsToReplace, valsToReplace);
 		}
 
+		// The symmetries of the problem
+		std::vector<std::vector<std::pair<int,double>>> syms;
+
 		// Combine these equations into a single object
-		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, {});
+		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, {}, syms);
 		prob = prob.removeLinear();
 		prob = prob.collapse();
 		std::cout << prob << std::endl;
 		std::cout << dLimits[i2] << " " << prob.maxVariables << std::endl;
 
-		std::vector<std::vector<std::pair<>>> syms = {
-			{},
-		}
-
 		// Find a lower bound TODO syms, remove linear eqns, 2nd ord cone cons
-		prob.proveInfeasible(syms);
+		prob.proveInfeasible();
 
 		// Find a upper bound
 		//prob.findFeasiblePoint(0, 0.5, 1e-13, 100000, 4, false);
