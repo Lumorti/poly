@@ -4663,11 +4663,32 @@ public:
 			// If feasbile, split the region
 			if (cutRes.first) {
 
-				// Check the resulting vector for a good place to split TODO
+				// Check the resulting vector for a good place to split 
 				std::vector<double> errors(maxVariables);
+				//std::vector<double> probs(maxVariables);
+				//double probSum = 0;
 				for (int i=0; i<maxVariables; i++) {
 					errors[i] = std::abs(cutRes.second[squaredMonomInds[i]] - cutRes.second[firstMonomInds[i]]*cutRes.second[firstMonomInds[i]]);
+					//probs[i] = std::exp(60*errors[i]);
+					//probSum += probs[i];
 				}
+
+				// Normalize the prob distribution
+				//for (int i=0; i<maxVariables; i++) {
+					//probs[i] /= probSum;
+				//}
+
+				// Pick a random number and then add probs until we reach that number
+				//double probToReach = (double(rand())/(RAND_MAX));
+				//int bestInd = -1;
+				//double probSoFar = 0;
+				//for (int i=0; i<maxVariables; i++) {
+					//probSoFar += probs[i];
+					//if (probSoFar > probToReach) {
+						//bestInd = i;
+						//break;
+					//}
+				//}
 
 				// Find the biggest error TODO could try boltz probabilties
 				double biggestError = -10000;

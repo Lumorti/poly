@@ -164,8 +164,12 @@ int main(int argc, char ** argv) {
 			eqns[i] = eqns[i].replaceWithValue(indsToReplace, valsToReplace);
 		}
 
-		// The symmetries of the problem
+		// The symmetries of the problem TODO
 		std::vector<std::vector<std::pair<int,double>>> syms;
+		syms.push_back();
+
+		std::cout << syms << std::endl;
+		return 0;
 
 		// Combine these equations into a single object
 		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, {}, syms);
@@ -174,7 +178,7 @@ int main(int argc, char ** argv) {
 		std::cout << prob << std::endl;
 		std::cout << dLimits[i2] << " " << prob.maxVariables << std::endl;
 
-		// Find a lower bound TODO syms, remove linear eqns, 2nd ord cone cons
+		// Find a lower bound
 		prob.proveInfeasible();
 
 		// Find a upper bound
