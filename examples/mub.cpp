@@ -13,6 +13,9 @@ int main(int argc, char ** argv) {
 		n = std::stoi(argv[2]);
 	}
 
+	// Whether to finish with a quadratic or quartic set of equations
+	bool useQuadratic = true;
+
 	// Useful quantities
 	int numVarsNonConj = n*d*d;
 	int numVars = 2*numVarsNonConj+100000;
@@ -79,17 +82,30 @@ int main(int argc, char ** argv) {
 						// For the MUB-ness equations
 						if (i != j) {
 
-							// Constrain that this should equal a new complex number
-							eqn.addTerm(-1, {newVarInd});
-							eqn.addTerm(-1i, {newVarInd+1});
+							// If we want the final equations to be quadratic 
+							if (useQuadratic) {
 
-							// Constrain that this new complex should have mag 1/d
-							Polynomial<double> extraEqn(numVars);
-							extraEqn.addTerm(1, {newVarInd,newVarInd});
-							extraEqn.addTerm(1, {newVarInd+1,newVarInd+1});
-							extraEqn.addTerm(-1.0/d, {});
-							eqns.push_back(extraEqn);
-							newVarInd += 2;
+								// Constrain that this should equal a new complex number
+								eqn.addTerm(-1, {newVarInd});
+								eqn.addTerm(-1i, {newVarInd+1});
+
+								// Constrain that this new complex should have mag 1/d
+								Polynomial<double> extraEqn(numVars);
+								extraEqn.addTerm(1, {newVarInd,newVarInd});
+								extraEqn.addTerm(1, {newVarInd+1,newVarInd+1});
+								extraEqn.addTerm(-1.0/d, {});
+								eqns.push_back(extraEqn);
+								newVarInd += 2;
+
+							} else {
+
+								// Get the magnitude of this
+								eqn = std::conj(eqn)*eqn;
+
+								// Which should be equal to 1/d
+								eqn.addTerm(-1.0/d, {});
+
+							}
 
 						}
 
@@ -165,9 +181,12 @@ int main(int argc, char ** argv) {
 		}
 
 		// The symmetries of the problem TODO
-		std::vector<std::vector<std::pair<int,double>>> syms;
-		syms.push_back();
+		std::vector<std::vector<int>> syms;
 
+		for (int i=0; i<d; i++) {
+			syms.push_back({0,1,2, 3,4,5});
+			syms.push_back({1,0,2, 4,3,5});
+		}
 		std::cout << syms << std::endl;
 		return 0;
 
@@ -179,10 +198,10 @@ int main(int argc, char ** argv) {
 		std::cout << dLimits[i2] << " " << prob.maxVariables << std::endl;
 
 		// Find a lower bound
-		prob.proveInfeasible();
+		prob.proveInfeasible(1000);
 
 		// Find a upper bound
-		//prob.findFeasiblePoint(0, 0.5, 1e-13, 100000, 4, false);
+		//prob.findFeasiblePoint(1, 0.5, 1e-13, 100000, 4, false);
 
 	}
 

@@ -1373,25 +1373,22 @@ public:
 		}
 
 		// For each term
-		std::string toReturn = "";
+		std::stringstream toReturn;
 		int numSoFar = 0;
 		for (auto const &pair: coeffs) {
 
-			// First the coeff
-			toReturn += std::to_string(pair.second) + "*{";
-
-			// Then the indices
-			toReturn += pair.first + "}";
+			// The coeff and the indices
+			toReturn << pair.second << "*{" << pair.first << "}";
 
 			// Output an addition on everything but the last
 			numSoFar += 1;
 			if (numSoFar < coeffs.size()) {
-				toReturn += " + ";
+				toReturn << " + ";
 			}
 
 		}
 
-		return toReturn;
+		return toReturn.str();
 
 	}
 
@@ -3927,7 +3924,7 @@ public:
 	Polynomial<polyType> obj;
 	std::vector<Polynomial<polyType>> conZero;
 	std::vector<Polynomial<polyType>> conPositive;
-	std::vector<std::vector<std::pair<int,polyType>>> syms;
+	std::vector<std::vector<int>> syms;
 
 	// Constructor with everything but syms
 	PolynomialProblem(Polynomial<polyType> obj_, std::vector<Polynomial<polyType>> conZero_, std::vector<Polynomial<polyType>> conPositive_) {
@@ -3939,7 +3936,7 @@ public:
 	}
 
 	// Constructor with everything 
-	PolynomialProblem(Polynomial<polyType> obj_, std::vector<Polynomial<polyType>> conZero_, std::vector<Polynomial<polyType>> conPositive_, std::vector<std::vector<std::pair<int,polyType>>> syms_) {
+	PolynomialProblem(Polynomial<polyType> obj_, std::vector<Polynomial<polyType>> conZero_, std::vector<Polynomial<polyType>> conPositive_, std::vector<std::vector<int>> syms_) {
 		obj = obj_;
 		conZero = conZero_;
 		conPositive = conPositive_;
@@ -4616,28 +4613,16 @@ public:
 		}
 
 		// Start with the most general area
+		double maxArea = 1;
 		std::vector<std::vector<std::pair<double,double>>> toProcess;
 		std::vector<std::pair<double,double>> varMinMax(obj.maxVariables);
 		double overRtD = 1.0 / std::sqrt(d);
 		for (int i=0; i<obj.maxVariables; i++) {
 			varMinMax[i].first = -overRtD;
 			varMinMax[i].second = overRtD;
+			maxArea *= 2*overRtD;
 		}
 		toProcess.push_back(varMinMax);
-
-		// Generate a series of random points
-		std::vector<std::vector<double>> points;
-		int numPointsToGen = 100;
-		if (d >= 3) {
-			numPointsToGen = 100000;
-		}
-		for (int i=0; i<numPointsToGen; i++) {
-			std::vector<double> newPoint(maxVariables);
-			for (int j=0; j<maxVariables; j++) {
-				newPoint[j] = 2.0*overRtD*(double(rand())/(RAND_MAX))-overRtD;
-			}
-			points.push_back(newPoint);
-		}
 
 		// Get the inds of the first order monomials and their squares
 		std::vector<int> firstMonomInds(maxVariables, -1);
@@ -4650,11 +4635,25 @@ public:
 			}
 		}
 
-		// Keep splitting until all fail
+		// The order in which to branch
+		std::vector<int> splitOrder(maxVariables);
+		for (int i=0; i<maxVariables; i++) {
+			splitOrder[i] = i;
+		}
+		//std::random_device rd;
+		//auto rng = std::default_random_engine {rd()};
+		//std::shuffle(std::begin(splitOrder), std::end(splitOrder), rng);
+		//std::cout << splitOrder << std::endl;
+
+		// For d3n5 1000 iterations
+		// normal order, biggest error 6e-5
+
+		// Keep splitting until all fail TODO
 		int iter = 0;
 		auto toProcessBackup = toProcess;
 		toProcess = toProcessBackup;
 		iter = 0;
+		double totalArea = 0;
 		while (toProcess.size() > 0) {
 
 			// Test this subregion
@@ -4665,49 +4664,29 @@ public:
 
 				// Check the resulting vector for a good place to split 
 				std::vector<double> errors(maxVariables);
-				//std::vector<double> probs(maxVariables);
-				//double probSum = 0;
 				for (int i=0; i<maxVariables; i++) {
 					errors[i] = std::abs(cutRes.second[squaredMonomInds[i]] - cutRes.second[firstMonomInds[i]]*cutRes.second[firstMonomInds[i]]);
-					//probs[i] = std::exp(60*errors[i]);
-					//probSum += probs[i];
 				}
 
-				// Normalize the prob distribution
-				//for (int i=0; i<maxVariables; i++) {
-					//probs[i] /= probSum;
-				//}
-
-				// Pick a random number and then add probs until we reach that number
-				//double probToReach = (double(rand())/(RAND_MAX));
-				//int bestInd = -1;
-				//double probSoFar = 0;
-				//for (int i=0; i<maxVariables; i++) {
-					//probSoFar += probs[i];
-					//if (probSoFar > probToReach) {
-						//bestInd = i;
-						//break;
-					//}
-				//}
-
-				// Find the biggest error TODO could try boltz probabilties
+				// Find the biggest error
 				double biggestError = -10000;
 				int bestInd = -1;
 				for (int i=0; i<maxVariables; i++) {
-					if (errors[i] > biggestError) {
-						biggestError = errors[i];
-						bestInd = i;
+					if (errors[splitOrder[i]] > biggestError) {
+						biggestError = errors[splitOrder[i]];
+						bestInd = splitOrder[i];
 					}
 				}
 
 				// Find the biggest section
-				//double biggestDiff = -10000;
-				//for (int i=0; i<maxVariables; i++) {
-					//double diff = toProcess[0][i].second-toProcess[0][i].first;
-					//if (diff > biggestDiff) {
-						//biggestDiff = diff;
-					//}
-				//}
+				double biggestDiff = -10000;
+				for (int i=0; i<maxVariables; i++) {
+					double diff = toProcess[0][splitOrder[i]].second-toProcess[0][splitOrder[i]].first;
+					if (diff > biggestDiff) {
+						biggestDiff = diff;
+						//bestInd = splitOrder[i];
+					}
+				}
 
 				// If we've converged
 				if (biggestError < 1e-5) {
@@ -4729,33 +4708,24 @@ public:
 
 			} else {
 
-				// See how many points we can remove
-				for (int i=0; i<points.size(); i++) {
-					bool inRegion = true;
-					for (int k=0; k<toProcess[0].size(); k++) {
-						if (points[i][k] < toProcess[0][k].first || points[i][k] > toProcess[0][k].second) {
-							inRegion = false;
-							break;
-						}
-					}
-					if (inRegion) {
-						points.erase(points.begin()+i);
-						i--;
-					}
+				// The area taken up by this section
+				double areaCovered = 1;
+				for (int k=0; k<toProcess[0].size(); k++) {
+					areaCovered *= toProcess[0][k].second - toProcess[0][k].first;
 				}
+				totalArea += areaCovered;
 
 			}
 
 			// Per-iteration output
-			std::cout << iter << " " << cutRes.first << " " << toProcess.size() << " " << 1.0 - (double(points.size()) / numPointsToGen) << "            \r" << std::flush;
-			//std::cout << iter << " " << cutRes.first << " " << toProcess.size() << " " << 1.0 - (double(points.size()) / numPointsToGen) << std::endl;
+			std::cout << iter << " " << cutRes.first << " " << toProcess.size() << " " << totalArea / maxArea << "            \r" << std::flush;
 
 			// Remove the one we just processed
 			toProcess.erase(toProcess.begin());
 
 			// Keep track of the iteration number
 			iter++;
-			if (iter > 100000000) {
+			if (iter > maxIters) {
 				break;
 			}
 
