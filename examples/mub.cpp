@@ -185,35 +185,68 @@ int main(int argc, char ** argv) {
 		std::vector<std::unordered_map<int,int>> syms;
 
 		// For any order of bases
+		std::vector<std::vector<int>> basisOrders;
 		std::vector<int> v1(n);
 		for (int i=0; i<v1.size(); i++) {
 			v1[i] = i;
 		}
 		do {
-
-			// For any order of vectors within a basis
-			std::vector<int> v2(d);
-			for (int i=0; i<v2.size(); i++) {
-				v2[i] = i;
-			}
-			do {
-
-				// For any order of elements within a vector
-				std::vector<int> v3(d);
-				for (int i=0; i<v3.size(); i++) {
-					v3[i] = i;
-				}
-				do {
-
-					std::cout << v1 << v2 << v3 << std::endl;
-
-				} while (std::next_permutation(v3.begin(), v3.end()));
-
-			} while (std::next_permutation(v2.begin(), v2.end()));
-
+			basisOrders.push_back(v1);
+			std::cout << "possible basis order: " << v1 << std::endl;
 		} while (std::next_permutation(v1.begin()+1, v1.end()));
 
+		// For any order of elements within a vector
+		std::vector<std::vector<int>> intravectorOrder;
+		std::vector<int> v3(d);
+		for (int i=0; i<v3.size(); i++) {
+			v3[i] = i;
+		}
+		do {
+			intravectorOrder.push_back(v3);
+			std::cout << "possible intravector order: " << v3 << std::endl;
+		} while (std::next_permutation(v3.begin(), v3.end()));
+
+		// For any order of vectors within each basis
+		std::vector<std::vector<int>> vectorOrder;
+		std::vector<int> v2(d);
+		for (int i=0; i<v2.size(); i++) {
+			v2[i] = i;
+		}
+		do {
+			vectorOrder.push_back(v2);
+			std::cout << "possible vector order: " << v2 << std::endl;
+		} while (std::next_permutation(v2.begin(), v2.end()));
+
+		// Loop over the basis orders
+		for (int i=0; i<basisOrders.size(); i++) {
+			std::cout << "basis order: " << i << std::endl;
+
+			// Loop over the orders within all vectors
+			for (int j=0; j<intravectorOrder.size(); j++) {
+				std::cout << "   intravector order: " << j << std::endl;
+
+				// The different orders for each vector set
+				for (int k=0; k<std::pow(vectorOrder.size(), n-1); k++) {
+					std::vector<int> decomp(n-1);
+					int toConvert = k;
+					int base = vectorOrder.size();
+					int ind = 0;
+					while (toConvert) {
+						decomp[ind] = toConvert % base;
+						toConvert /= base;
+						ind++;
+					}
+
+					std::cout << "       vector order: " << decomp << std::endl;
+
+				}
+
+			}
+
+		}
+
 		std::cout << syms << std::endl;
+		return 0;
 
 		// Combine these equations into a single object
 		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, {}, syms);
