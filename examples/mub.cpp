@@ -178,17 +178,42 @@ int main(int argc, char ** argv) {
 		// Perform the replacement
 		for (int i=0; i<eqns.size(); i++) {
 			eqns[i] = eqns[i].replaceWithValue(indsToReplace, valsToReplace);
+			std::cout << eqns[i] << std::endl;
 		}
 
 		// The symmetries of the problem TODO
-		std::vector<std::vector<int>> syms;
+		std::vector<std::unordered_map<int,int>> syms;
 
-		for (int i=0; i<d; i++) {
-			syms.push_back({0,1,2, 3,4,5});
-			syms.push_back({1,0,2, 4,3,5});
+		// For any order of bases
+		std::vector<int> v1(n);
+		for (int i=0; i<v1.size(); i++) {
+			v1[i] = i;
 		}
+		do {
+
+			// For any order of vectors within a basis
+			std::vector<int> v2(d);
+			for (int i=0; i<v2.size(); i++) {
+				v2[i] = i;
+			}
+			do {
+
+				// For any order of elements within a vector
+				std::vector<int> v3(d);
+				for (int i=0; i<v3.size(); i++) {
+					v3[i] = i;
+				}
+				do {
+
+					std::cout << v1 << v2 << v3 << std::endl;
+
+				} while (std::next_permutation(v3.begin(), v3.end()));
+
+			} while (std::next_permutation(v2.begin(), v2.end()));
+
+		} while (std::next_permutation(v1.begin()+1, v1.end()));
+
 		std::cout << syms << std::endl;
-		return 0;
 
 		// Combine these equations into a single object
 		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, {}, syms);
@@ -196,6 +221,8 @@ int main(int argc, char ** argv) {
 		prob = prob.collapse();
 		std::cout << prob << std::endl;
 		std::cout << dLimits[i2] << " " << prob.maxVariables << std::endl;
+
+		return 0;
 
 		// Find a lower bound
 		prob.proveInfeasible(1000);

@@ -62,7 +62,7 @@ std::ostream& operator<<(std::ostream& os, const std::unordered_map<T,T2>& v) {
 	int i = 0;
     for (typename std::unordered_map<T,T2>::const_iterator ii = v.begin(); ii != v.end(); ++ii) {
         os << (*ii).first << ": " << (*ii).second;
-		if (i < vSize) {
+		if (i < vSize-1) {
 			os << ", ";
 		}
 		i++;
@@ -3924,7 +3924,7 @@ public:
 	Polynomial<polyType> obj;
 	std::vector<Polynomial<polyType>> conZero;
 	std::vector<Polynomial<polyType>> conPositive;
-	std::vector<std::vector<int>> syms;
+	std::vector<std::unordered_map<int,int>> syms;
 
 	// Constructor with everything but syms
 	PolynomialProblem(Polynomial<polyType> obj_, std::vector<Polynomial<polyType>> conZero_, std::vector<Polynomial<polyType>> conPositive_) {
@@ -3936,7 +3936,7 @@ public:
 	}
 
 	// Constructor with everything 
-	PolynomialProblem(Polynomial<polyType> obj_, std::vector<Polynomial<polyType>> conZero_, std::vector<Polynomial<polyType>> conPositive_, std::vector<std::vector<int>> syms_) {
+	PolynomialProblem(Polynomial<polyType> obj_, std::vector<Polynomial<polyType>> conZero_, std::vector<Polynomial<polyType>> conPositive_, std::vector<std::unordered_map<int,int>> syms_) {
 		obj = obj_;
 		conZero = conZero_;
 		conPositive = conPositive_;
@@ -4493,8 +4493,22 @@ public:
 			}
 		}
 
+		// Replace the syms
+		std::vector<std::unordered_map<int,int>> newSyms;
+		for (int i=0; i<syms.size(); i++) {
+			std::unordered_map<int,int> newSym;
+			for (int j=0; j<syms[i].size(); j++) {
+				if (indMap.find(syms[i][j]) == indMap.end()) { 
+					newSym[j] = -1;
+				} else {
+					newSym[j] = indMap[syms[i][j]];
+				}
+			}
+			newSyms.push_back(newSym);
+		}
+
 		// Create the new poly problem and return
-		return PolynomialProblem<polyType>(newObj, newConZero, newConPositive);
+		return PolynomialProblem<polyType>(newObj, newConZero, newConPositive, newSyms);
 
 	}
 
