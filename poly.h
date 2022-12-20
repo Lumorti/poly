@@ -1510,12 +1510,12 @@ public:
 	}
 
 	// Try to find a root, with one variable being optimized towards zero
-	std::vector<polyType> findRoot(int zeroInd=0, double alpha=0.1, double tolerance=1e-10, int maxIters=10000000, int threads=4, bool verbose=false) {
-		return integrate(zeroInd).findLocalMinimum(zeroInd, alpha, tolerance, maxIters, threads, verbose);
+	std::vector<polyType> findRoot(int zeroInd=0, double alpha=0.1, double tolerance=1e-10, int maxIters=10000000, int threads=4, bool verbose=false, double maxMag=1) {
+		return integrate(zeroInd).findLocalMinimum(zeroInd, alpha, tolerance, maxIters, threads, verbose, maxMag);
 	}
 
 	// Use the Newton method to find a local minimum
-	std::vector<polyType> findLocalMinimum(int zeroInd=0, double alpha=0.1, double tolerance=1e-10, int maxIters=10000000, int threads=4, bool verbose=false) {
+	std::vector<polyType> findLocalMinimum(int zeroInd=0, double alpha=0.1, double tolerance=1e-10, int maxIters=10000000, int threads=4, bool verbose=false, double maxMag=1) {
 
 		// Prepare everything for parallel computation
 		omp_set_num_threads(threads);
@@ -1547,7 +1547,7 @@ public:
 		}
 
 		// Random starting x
-		Eigen::VectorXd x = Eigen::VectorXd::Random(maxVariables);
+		Eigen::VectorXd x = maxMag*Eigen::VectorXd::Random(maxVariables);
 
 		// Perform gradient descent using this info
 		Eigen::MatrixXd inv(maxVariables, maxVariables);
@@ -1579,8 +1579,8 @@ public:
 			p = H.colPivHouseholderQr().solve(-g);
 
 			// If this is zero, follow the gradient
-			if (p.norm() < 1e-10) {
-				p = 100*Eigen::VectorXd::Random(maxVariables);
+			if (p.norm() < zeroTol) {
+				x = maxMag*Eigen::VectorXd::Random(maxVariables);
 			}
 
 			// Perform the update
@@ -1589,7 +1589,7 @@ public:
 			// Per-iteration output
 			norm = std::abs(g.norm());
 			minVal = std::min(norm, minVal);
-			std::cout << iter << " " << norm << " " << g(zeroInd) << " " << x(zeroInd) << "   " << minVal << "  "  << p.norm() << "          \r" << std::flush;
+			std::cout << iter << " " << norm << " " << x(zeroInd) << "   " << minVal << "  "  << p.norm() << "          \r" << std::flush;
 
 			// Convergence criteria
 			if (norm < tolerance) {
@@ -2039,7 +2039,7 @@ public:
 	friend std::ostream &operator<<(std::ostream &output, const PolynomialBinaryProblem &other) {
 
 		// Output the objective
-		output << "Minimize: " << std::endl << std::endl;;
+		output << "Minimize: " << std::endl << std::endl;
 		output << other.obj << std::endl << std::endl;
 
 		// Output each constraint
@@ -2047,7 +2047,7 @@ public:
 		if (other.conZero.size() + other.conPositive.size() > 0) {
 			output << "Subject to: " << std::endl;
 			for (int i=0; i<other.conZero.size(); i++) {
-				output << std::endl << other.conZero[i] << " = 0 " << std::endl;;
+				output << std::endl << other.conZero[i] << " = 0 " << std::endl;
 			}
 			for (int i=0; i<other.conPositive.size(); i++) {
 				output << std::endl << other.conPositive[i] << " > 0 " << std::endl;
@@ -3924,23 +3924,12 @@ public:
 	Polynomial<polyType> obj;
 	std::vector<Polynomial<polyType>> conZero;
 	std::vector<Polynomial<polyType>> conPositive;
-	std::vector<std::unordered_map<int,int>> syms;
 
-	// Constructor with everything but syms
+	// Constructor with everything 
 	PolynomialProblem(Polynomial<polyType> obj_, std::vector<Polynomial<polyType>> conZero_, std::vector<Polynomial<polyType>> conPositive_) {
 		obj = obj_;
 		conZero = conZero_;
 		conPositive = conPositive_;
-		maxVariables = obj.maxVariables;
-		digitsPerInd = obj.digitsPerInd;
-	}
-
-	// Constructor with everything 
-	PolynomialProblem(Polynomial<polyType> obj_, std::vector<Polynomial<polyType>> conZero_, std::vector<Polynomial<polyType>> conPositive_, std::vector<std::unordered_map<int,int>> syms_) {
-		obj = obj_;
-		conZero = conZero_;
-		conPositive = conPositive_;
-		syms = syms_;
 		maxVariables = obj.maxVariables;
 		digitsPerInd = obj.digitsPerInd;
 	}
@@ -4012,7 +4001,7 @@ public:
 			if (other.conZero.size() + other.conPositive.size() > 0) {
 				output << "Subject to: " << std::endl;
 				for (int i=0; i<other.conZero.size(); i++) {
-					output << std::endl << other.conZero[i] << " = 0 " << std::endl;;
+					output << std::endl << other.conZero[i] << " = 0 " << std::endl;
 				}
 				for (int i=0; i<other.conPositive.size(); i++) {
 					output << std::endl << other.conPositive[i] << " > 0 " << std::endl;
@@ -4027,21 +4016,13 @@ public:
 			if (other.conZero.size() + other.conPositive.size() > 0) {
 				output << "Find a point satisfying:" << std::endl;
 				for (int i=0; i<other.conZero.size(); i++) {
-					output << std::endl << other.conZero[i] << " = 0 " << std::endl;;
+					output << std::endl << other.conZero[i] << " = 0 " << std::endl;
 				}
 				for (int i=0; i<other.conPositive.size(); i++) {
 					output << std::endl << other.conPositive[i] << " > 0 " << std::endl;
 				}
 			}
 
-		}
-
-		// Output symmetries
-		if (other.syms.size() > 0) {
-			output << "With symmetries:" << std::endl;
-			for (int i=0; i<other.syms.size(); i++) {
-				output << std::endl << other.syms[i] << std::endl;;
-			}
 		}
 
 		return output;
@@ -4386,7 +4367,7 @@ public:
 
 	}
 
-	// Find any linear equalities and simplify everything else
+	// Find any linear equalities and simplify everything else TODO problems
 	PolynomialProblem<polyType> removeLinear() {
 
 		// Copy this problem
@@ -4424,6 +4405,9 @@ public:
 				for (int i=0; i<newProb.conZero.size(); i++) {
 					newProb.conZero[i] = newProb.conZero[i].replaceWithPoly(varToRemove, equalPoly);
 				}
+				for (int i=0; i<newProb.conPositive.size(); i++) {
+					newProb.conPositive[i] = newProb.conPositive[i].replaceWithPoly(varToRemove, equalPoly);
+				}
 
 			}
 
@@ -4433,8 +4417,8 @@ public:
 
 	}
 
-	// Collapse to the minimum number of variables
-	PolynomialProblem<polyType> collapse() {
+	// Get a map going to the minimum amount of variables
+	std::unordered_map<int,int> getMinimalMap() {
 
 		// The map from old indices to new (minified) indices
 		std::unordered_map<int,int> indMap;
@@ -4471,8 +4455,15 @@ public:
 
 		}
 
+		return indMap;
+		
+	}
+
+	// Collapse to the minimum number of variables
+	PolynomialProblem<polyType> replaceWithVariable(std::unordered_map<int,int> indMap) {
+
 		// Replace the objective
-		int newNumVars = nextInd;
+		int newNumVars = indMap.size();
 		Polynomial<polyType> newObj = obj.replaceWithVariable(indMap).changeMaxVariables(newNumVars);
 		std::vector<Polynomial<polyType>> newConZero;
 
@@ -4493,27 +4484,78 @@ public:
 			}
 		}
 
-		// Replace the syms
-		std::vector<std::unordered_map<int,int>> newSyms;
-		for (int i=0; i<syms.size(); i++) {
-			std::unordered_map<int,int> newSym;
-			for (int j=0; j<syms[i].size(); j++) {
-				if (indMap.find(syms[i][j]) == indMap.end()) { 
-					newSym[j] = -1;
-				} else {
-					newSym[j] = indMap[syms[i][j]];
-				}
-			}
-			newSyms.push_back(newSym);
-		}
-
 		// Create the new poly problem and return
-		return PolynomialProblem<polyType>(newObj, newConZero, newConPositive, newSyms);
+		return PolynomialProblem<polyType>(newObj, newConZero, newConPositive);
 
 	}
 
+	// Collapse to the minimum number of variables
+	//PolynomialProblem<polyType> collapse() {
+
+		//// The map from old indices to new (minified) indices
+		//std::unordered_map<int,int> indMap;
+		//int nextInd = 0;
+		//for (int i=0; i<maxVariables; i++) {
+
+			//// Check the objective
+			//if (obj.contains(i)) {
+				//indMap[i] = nextInd;
+				//nextInd++;
+			//}
+
+			//// Check the equality cons if still not found
+			//if (indMap.find(i) == indMap.end()) {
+				//for (int j=0; j<conZero.size(); j++) {
+					//if (conZero[j].contains(i)) {
+						//indMap[i] = nextInd;
+						//nextInd++;
+						//break;
+					//}
+				//}
+			//}
+
+			//// Check the inequality cons if still not found
+			//if (indMap.find(i) == indMap.end()) {
+				//for (int j=0; j<conPositive.size(); j++) {
+					//if (conPositive[j].contains(i)) {
+						//indMap[i] = nextInd;
+						//nextInd++;
+						//break;
+					//}
+				//}
+			//}
+
+		//}
+
+		//// Replace the objective
+		//int newNumVars = nextInd;
+		//Polynomial<polyType> newObj = obj.replaceWithVariable(indMap).changeMaxVariables(newNumVars);
+		//std::vector<Polynomial<polyType>> newConZero;
+
+		//// Replace the equality cons
+		//for (int i=0; i<conZero.size(); i++) {
+			//Polynomial<polyType> newPoly = conZero[i].replaceWithVariable(indMap).changeMaxVariables(newNumVars);
+			//if (newPoly.size() > 0) { 
+				//newConZero.push_back(newPoly);
+			//}
+		//}
+
+		//// Replace the inequality cons
+		//std::vector<Polynomial<polyType>> newConPositive;
+		//for (int i=0; i<conPositive.size(); i++) {
+			//Polynomial<polyType> newPoly = conPositive[i].replaceWithVariable(indMap).changeMaxVariables(newNumVars);
+			//if (newPoly.size() > 0) { 
+				//newConPositive.push_back(newPoly);
+			//}
+		//}
+
+		//// Create the new poly problem and return
+		//return PolynomialProblem<polyType>(newObj, newConZero, newConPositive);
+
+	//}
+
 	// Attempt find a feasible point of this problem
-	std::vector<polyType> findFeasiblePoint(int zeroInd=-1, double alpha=0.1, double tolerance=1e-10, int maxIters=10000000, int threads=4, bool verbose=false) {
+	std::vector<polyType> findFeasiblePoint(int zeroInd=-1, double alpha=0.1, double tolerance=1e-10, int maxIters=10000000, int threads=4, bool verbose=false, double maxMag=1) {
 
 		// Combine these to create a single polynomial
 		Polynomial<polyType> poly(maxVariables);
@@ -4528,7 +4570,7 @@ public:
 		}
 
 		// Find a root of this polynomial
-		std::vector<polyType> x = poly.findRoot(zeroInd, alpha, tolerance, maxIters, threads, verbose);
+		std::vector<polyType> x = poly.findRoot(zeroInd, alpha, tolerance, maxIters, threads, verbose, maxMag);
 		return x;
 		
 	}
