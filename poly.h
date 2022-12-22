@@ -1558,6 +1558,7 @@ public:
 		int iter = 0;
 		double minVal = 1e10;
 		double norm = 1;
+		double alphaOG = alpha;
 		for (iter=0; iter<maxIters; iter++) {
 
 			// Calculate the gradient
@@ -1565,6 +1566,7 @@ public:
 			for (int i=0; i<maxVariables; i++) {
 				g(i) = gradient[i].evalFast(x);
 			}
+			norm = std::abs(g.norm());
 
 			// Calculate the Hessian
 			#pragma omp parallel for
@@ -1578,16 +1580,22 @@ public:
 			// Determine the direction
 			p = H.colPivHouseholderQr().solve(-g);
 
-			// If this is zero, follow the gradient
-			if (p.norm() < zeroTol*100) {
+			// If this is zero, jump
+			if (p.norm() < 1e-10 || x(zeroInd) < 1e-50) {
 				x = maxMag*Eigen::VectorXd::Random(maxVariables);
+			}
+
+			// Adjust the step size
+			if (norm > 1) {
+				alpha = alphaOG;
+			} else {
+				alpha = alphaOG / 2.0;
 			}
 
 			// Perform the update
 			x += alpha*p;
 
 			// Per-iteration output
-			norm = std::abs(g.norm());
 			minVal = std::min(norm, minVal);
 			std::cout << iter << " " << norm << " " << x(zeroInd) << "   " << minVal << "  "  << p.norm() << "          \r" << std::flush;
 
@@ -4116,7 +4124,7 @@ public:
 
 		} 
 		
-		// Calculate the linear constraints on the quartics TODO
+		// Calculate the linear constraints on the quartics 
 		if (highestOrder >= 4) {
 			for (int i=0; i<varMinMax.size(); i++) {
 
@@ -4135,7 +4143,6 @@ public:
 				conPositiveLinear.push_back(newCon1);
 
 			}
-
 		}
 
 		// Convert the linear equality constraints to MOSEK form
@@ -4448,11 +4455,11 @@ public:
 				}
 
 				// Replace this
-				for (int i=0; i<newProb.conZero.size(); i++) {
-					newProb.conZero[i] = newProb.conZero[i].replaceWithPoly(varToRemove, equalPoly);
+				for (int j=0; j<newProb.conZero.size(); j++) {
+					newProb.conZero[j] = newProb.conZero[j].replaceWithPoly(varToRemove, equalPoly);
 				}
-				for (int i=0; i<newProb.conPositive.size(); i++) {
-					newProb.conPositive[i] = newProb.conPositive[i].replaceWithPoly(varToRemove, equalPoly);
+				for (int j=0; j<newProb.conPositive.size(); j++) {
+					newProb.conPositive[j] = newProb.conPositive[j].replaceWithPoly(varToRemove, equalPoly);
 				}
 
 			}
@@ -4845,7 +4852,7 @@ public:
 		//std::shuffle(std::begin(splitOrder), std::end(splitOrder), rng);
 		//std::cout << splitOrder << std::endl;
 
-		// Keep splitting until all fail TODO
+		// Keep splitting until all fail
 		int iter = 0;
 		auto toProcessBackup = toProcess;
 		toProcess = toProcessBackup;
@@ -4855,20 +4862,18 @@ public:
 		std::cout << std::scientific;
 		while (toProcess.size() > 0) {
 
-			// Test this subregion
+			// Test this subregion TODO move everything here and optimize
 			auto cutRes = solveSDPWithCuts(toProcess[0], conZeroLinear, conPositiveLinear, monoms, monomProducts, qCones);
 
 			// If feasbile, split the region
 			if (cutRes.first) {
 
-				// Check the resulting vector for a good place to split  TODO
+				// Check the resulting vector for a good place to split 
 				std::vector<double> errors(maxVariables);
 				for (int i=0; i<maxVariables; i++) {
 					errors[i] = std::abs(cutRes.second[squaredMonomInds[i]] - std::pow(cutRes.second[firstMonomInds[i]],2));
-					//std::cout << i << " " << errors[i] << std::endl;
 					if (degree >= 4) {
 						errors[i] += std::abs(cutRes.second[fourthMonomInds[i]] - std::pow(cutRes.second[firstMonomInds[i]],4));
-						//std::cout << " -> " << errors[i] << std::endl;
 					}
 				}
 

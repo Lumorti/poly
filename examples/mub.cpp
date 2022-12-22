@@ -6,50 +6,82 @@ int main(int argc, char ** argv) {
 	// Get the problem from the args
 	int d = 2;
 	int n = 4;
-	std::string param = "";
-	if (argc > 1) {
-		d = std::stoi(argv[1]);
-	}
-	if (argc > 2) {
-		n = std::stoi(argv[2]);
-	}
-	if (argc > 3) {
-		param = argv[3];
-	}
-
-	// Whether to finish with a quadratic or quartic set of equations
+	std::string task = "infeasible";
+	bool useFull = false;
 	bool useQuadratic = true;
+	bool removeLinear = false;
+	for (int i=0; i<argc; i++) {
+		std::string arg = argv[i];
+		if (arg == "-h") {
+			std::cout << " -d [int]    set the dimension" << std::endl;
+			std::cout << " -n [int]    set the number of bases" << std::endl;
+			std::cout << " -2          use quadratic equations" << std::endl;
+			std::cout << " -4          use quartic equations" << std::endl;
+			std::cout << " -w          use whole bases, not partial" << std::endl;
+			std::cout << " -f          try to find a feasible point" << std::endl;
+			std::cout << " -i          try to prove infeasibility" << std::endl;
+			std::cout << " -r          remove as many variables as possible" << std::endl;
+		} else if (arg == "-d" && i+1 < argc) {
+			d = std::stoi(argv[i+1]);
+			i++;
+		} else if (arg == "-n" && i+1 < argc) {
+			n = std::stoi(argv[i+1]);
+			i++;
+		} else if (arg == "-4") {
+			useQuadratic = false;
+		} else if (arg == "-2") {
+			useQuadratic = true;
+		} else if (arg == "-w") {
+			useFull = true;
+		} else if (arg == "-f") {
+			task = "feasible";
+		} else if (arg == "-i") {
+			task = "infeasible";
+		} else if (arg == "-r") {
+			removeLinear = true;
+		}
+	}
 
 	// Useful quantities
 	int numVarsNonConj = n*d*d;
-	int numVars = 2*numVarsNonConj+100000;
+	int numVars = 2*numVarsNonConj+1000;
 	int conjDelta = numVarsNonConj;
 	double rt2 = 1.0/std::sqrt(2.0);
 
 	// Different "bases"
 	std::vector<std::vector<int>> dLimits;
-	//dLimits.push_back(std::vector<int>(n, d));
-	if (d == 2) {
-		dLimits.push_back({2, 1, 1, 1, 1, 1, 1, 1});
-	} else if (d == 3) {
-		dLimits.push_back({3, 1, 1, 1, 1, 1, 1, 1});
-	} else if (d == 4) {
-		//dLimits.push_back({4, 4, 3, 3, 3, 3});
-		//dLimits.push_back({4, 4, 4, 3, 3, 3});
-		//dLimits.push_back({4, 4, 4, 4, 3, 3});
-		//dLimits.push_back({4, 4, 4, 4, 4, 3});
-		dLimits.push_back({4, 2, 1, 1, 1, 1});
-	} else if (d == 5) {
-		dLimits.push_back({5, 2, 2, 1, 1, 1, 1});
-	} else if (d == 6) {
-		//dLimits.push_back({6, 2, 2, 2, 2, 1, 1, 1});
-		dLimits.push_back({6, 5, 3, 1}); 
-		//dLimits.push_back({6, 3, 3, 3}); 
-		//dLimits.push_back({6, 6, 6, 6}); 
-	} else if (d == 7) {
-		dLimits.push_back({7, 2, 2, 2, 2, 2, 1, 1, 1});
-	} else {
+	if (useFull) {
 		dLimits.push_back(std::vector<int>(n, d));
+	} else {
+		if (d == 2) {
+			dLimits.push_back({2, 1, 1, 1, 1, 1, 1, 1});
+		} else if (d == 3) {
+			dLimits.push_back({3, 1, 1, 1, 1, 1, 1, 1});
+		} else if (d == 4) {
+			//dLimits.push_back({4, 4, 3, 3, 3, 3});
+			//dLimits.push_back({4, 4, 4, 3, 3, 3});
+			//dLimits.push_back({4, 4, 4, 4, 3, 3});
+			//dLimits.push_back({4, 4, 4, 4, 4, 3});
+			dLimits.push_back({4, 2, 1, 1, 1, 1});
+		} else if (d == 5) {
+			dLimits.push_back({5, 2, 2, 1, 1, 1, 1});
+		} else if (d == 6) {
+			//dLimits.push_back({6, 2, 2, 2, 2, 1, 1, 1});
+			dLimits.push_back({6, 5, 3, 1}); 
+			//dLimits.push_back({6, 3, 3, 3}); 
+		} else if (d == 7) {
+			dLimits.push_back({7, 2, 2, 2, 2, 2, 1, 1, 1});
+		} else if (d == 8) {
+			dLimits.push_back({8, 2, 2, 2, 2, 2, 2, 1, 1});
+		} else if (d == 9) {
+			dLimits.push_back({9, 2, 2, 2, 2, 2, 2, 2, 1});
+		} else if (d == 10) {
+			dLimits.push_back({10, 7, 3, 1});
+			dLimits.push_back({10, 8, 3, 1});
+			dLimits.push_back({10, 9, 3, 1});
+		} else {
+			dLimits.push_back(std::vector<int>(n, d));
+		}
 	}
 
 	// For each different restriction
@@ -285,7 +317,9 @@ int main(int argc, char ** argv) {
 
 		// Combine these equations into a single object
 		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, orderingCons);
-		prob = prob.removeLinear();
+		if (removeLinear) {
+			prob = prob.removeLinear();
+		}
 		std::unordered_map<int,int> reducedMap = prob.getMinimalMap();
 		prob = prob.replaceWithVariable(reducedMap);
 		std::cout << std::endl;
@@ -293,16 +327,16 @@ int main(int argc, char ** argv) {
 		std::cout << dLimits[i2] << " " << prob.maxVariables << std::endl;
 
 		// If told to find a feasible point
-		if (param == "f") {
+		if (task == "feasible") {
 
 			// Find a upper bound
-			std::vector<double> x = prob.findFeasiblePoint(-1, 0.1, 1e-15, 10000, 4, false, 1.0/std::sqrt(d));
+			std::cout << std::scientific;
+			std::vector<double> x = prob.findFeasiblePoint(-1, 0.1, 1e-12, 1000000, 16, false, 1.0/std::sqrt(d));
 			double maxVal = -1000;
 			for (int i=0; i<prob.conZero.size(); i++) {
 				maxVal = std::max(maxVal, std::abs(prob.conZero[i].eval(x)));
 			}
 			std::cout << "max viol = " << maxVal << std::endl;
-			//std::cout << "resulting x = " << x << std::endl;
 
 			//// Reverse the map
 			std::vector<double> origX(numVars, 0);
@@ -314,7 +348,6 @@ int main(int argc, char ** argv) {
 				maxVal2 = std::max(maxVal2, std::abs(eqns[i].eval(origX)));
 			}
 			std::cout << "max viol of orig = " << maxVal2 << std::endl;
-			//std::cout << "orig x = " << origX << std::endl;
 
 			// Put the bases in a nicer form
 			std::vector<std::vector<std::vector<std::complex<double>>>> bases(n, std::vector<std::vector<std::complex<double>>>(d, std::vector<std::complex<double>>(d, 0)));
@@ -338,30 +371,31 @@ int main(int argc, char ** argv) {
 
 			// List the bases 
 			std::cout << "In a nicer form:" << std::endl;
-			std::cout << std::fixed << std::setprecision(15);
 			for (int i=0; i<n; i++) {
 				std::cout << bases[i] << std::endl;
 			}
 
 			// Calculate overlaps
-			for (int i=0; i<n; i++) {
-				for (int j=0; j<n; j++) {
-					std::vector<std::vector<double>> overlap(d, std::vector<double>(d, -1));
-					for (int k=0; k<dLimits[i2][i]; k++) {
-						for (int l=0; l<dLimits[i2][j]; l++) {
-							std::complex<double> beforeSquare = 0;
-							for (int m=0; m<d; m++) {
-								beforeSquare += std::conj(bases[i][k][m]) * bases[j][l][m];
+			if (!removeLinear) {
+				for (int i=0; i<n; i++) {
+					for (int j=0; j<n; j++) {
+						std::vector<std::vector<double>> overlap(d, std::vector<double>(d, -1));
+						for (int k=0; k<dLimits[i2][i]; k++) {
+							for (int l=0; l<dLimits[i2][j]; l++) {
+								std::complex<double> beforeSquare = 0;
+								for (int m=0; m<d; m++) {
+									beforeSquare += std::conj(bases[i][k][m]) * bases[j][l][m];
+								}
+								overlap[k][l] = std::real(std::conj(beforeSquare) * beforeSquare);
 							}
-							overlap[k][l] = std::real(std::conj(beforeSquare) * beforeSquare);
 						}
+						std::cout << "overlap between " << i << " and " << j << ":" << std::endl;
+						std::cout << overlap << std::endl;
 					}
-					std::cout << "overlap between " << i << " and " << j << ":" << std::endl;
-					std::cout << overlap << std::endl;
 				}
 			}
 
-		} else {
+		} else if (task == "infeasible") {
 
 			// Find a lower bound
 			std::cout << std::scientific;
