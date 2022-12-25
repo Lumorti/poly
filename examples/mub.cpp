@@ -331,7 +331,7 @@ int main(int argc, char ** argv) {
 
 			// Find a upper bound
 			std::cout << std::scientific;
-			std::vector<double> x = prob.findFeasiblePoint(-1, 0.1, 1e-12, 1000000, 16, false, 1.0/std::sqrt(d));
+			std::vector<double> x = prob.findFeasiblePoint(-1, 0.1, 1e-12, 1000000, 4, false, 1.0/std::sqrt(d));
 			double maxVal = -1000;
 			for (int i=0; i<prob.conZero.size(); i++) {
 				maxVal = std::max(maxVal, std::abs(prob.conZero[i].eval(x)));

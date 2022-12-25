@@ -4707,42 +4707,45 @@ public:
 		
 		// Add first order SDP cons (1, i, j)
 		std::vector<Polynomial<double>> toAdd;
-		for (int i=0; i<monoms.size(); i++) {
-			if (monoms[i].size() == 2*digitsPerInd) {
-				int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-				if (ind1 == ind2) {
-					monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1})});
-				} else {
-					monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2})});
-				}
-			}
-		}
+		//for (int i=0; i<monoms.size(); i++) {
+			//if (monoms[i].size() == 2*digitsPerInd) {
+				//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+				//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+				//if (ind1 == ind2) {
+					//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1})});
+					////Polynomial<double> newCon(maxVariables);
+					////newCon.addTerm(-1, {ind1,ind1});
+					////newCon.addTerm(1, {ind1});
+					////conPositive.push_back(newCon);
+				//} else {
+					//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2})});
+				//}
+			//}
+		//}
 
 		// Add second order SDP cons (1, ij, kl)
-		if (degree >= 4) {
-			for (int i=0; i<monoms.size(); i++) {
-				if (monoms[i].size() == 4*digitsPerInd) {
-					int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-					int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-					int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
-					int ind4 = std::stoi(monoms[i].substr(3*digitsPerInd,digitsPerInd));
-					monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1,ind2}), Polynomial<polyType>(maxVariables, 1, {ind3,ind4})});
-					std::cout << ind1 << " " << ind2 << " " << ind3 << " " << ind4 << std::endl;
-					if (ind2 != ind3) {
-						monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1,ind3}), Polynomial<polyType>(maxVariables, 1, {ind2,ind4})});
-					}
-					if (ind2 != ind3 && ind3 != ind4) {
-						monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1,ind4}), Polynomial<polyType>(maxVariables, 1, {ind2,ind3})});
-					}
-				}
-			}
-		}
-
-		std::cout << monomProducts << std::endl;
+		//if (degree >= 4) {
+			//for (int i=0; i<monoms.size(); i++) {
+				//if (monoms[i].size() == 4*digitsPerInd) {
+					//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+					//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+					//int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
+					//int ind4 = std::stoi(monoms[i].substr(3*digitsPerInd,digitsPerInd));
+					//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1,ind2}), Polynomial<polyType>(maxVariables, 1, {ind3,ind4})});
+					//std::cout << ind1 << " " << ind2 << " " << ind3 << " " << ind4 << std::endl;
+					//if (ind2 != ind3) {
+						//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1,ind3}), Polynomial<polyType>(maxVariables, 1, {ind2,ind4})});
+					//}
+					//if (ind2 != ind3 && ind3 != ind4) {
+						//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1,ind4}), Polynomial<polyType>(maxVariables, 1, {ind2,ind3})});
+					//}
+				//}
+			//}
+		//}
 
 		// Add big first order SDP con (1, i, j, k, ...)
 		//toAdd = {};
+		//toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
 		//for (int i=0; i<monoms.size(); i++) {
 			//if (monoms[i].size() == 1*digitsPerInd) {
 				//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
@@ -4762,26 +4765,26 @@ public:
 		//}
 
 		// Add big first+second order SDP con (1, i, j, k, ij, kl, ...)
-		//toAdd = {};
-		//toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
-		//for (int i=0; i<monoms.size(); i++) {
-			//if (monoms[i].size() == 1*digitsPerInd) {
-				//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1}));
-			//}
-			//if (monoms[i].size() == 2*digitsPerInd) {
+		toAdd = {};
+		toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
+		for (int i=0; i<monoms.size(); i++) {
+			if (monoms[i].size() == 1*digitsPerInd) {
+				int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+				toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1}));
+			}
+			if (monoms[i].size() == 2*digitsPerInd) {
+				int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+				int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+				toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1,ind2}));
+			}
+			//if (monoms[i].size() == 3*digitsPerInd) {
 				//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
 				//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-				//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1,ind2}));
+				//int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
+				//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1,ind2,ind3}));
 			//}
-			////if (monoms[i].size() == 3*digitsPerInd) {
-				////int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				////int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-				////int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
-				////toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1,ind2,ind3}));
-			////}
-		//}
-		//monomProducts.push_back(toAdd);
+		}
+		monomProducts.push_back(toAdd);
 
 		// Add second order cone for x^2+y^2=1/d
 		int d = 0;
@@ -4816,6 +4819,8 @@ public:
 			}
 		}
 
+		std::cout << monomProducts << std::endl;
+
 		// Start with the most general area
 		double maxArea = 1;
 		std::vector<std::vector<std::pair<double,double>>> toProcess;
@@ -4843,10 +4848,11 @@ public:
 		}
 
 		// The order in which to branch
-		std::vector<int> splitOrder(maxVariables);
+		std::vector<int> splitOrder;
 		for (int i=0; i<maxVariables; i++) {
-			splitOrder[i] = i;
+			splitOrder.push_back(i);
 		}
+		//splitOrder = {0,1,2,3,4,5,6,7,9,10,11};
 		//std::random_device rd;
 		//auto rng = std::default_random_engine {rd()};
 		//std::shuffle(std::begin(splitOrder), std::end(splitOrder), rng);
@@ -4859,6 +4865,7 @@ public:
 		iter = 0;
 		double totalArea = 0;
 		double areaCovered = 1;
+		int numFound = 0;
 		std::cout << std::scientific;
 		while (toProcess.size() > 0) {
 
@@ -4880,7 +4887,7 @@ public:
 				// Find the biggest error
 				double biggestError = -10000;
 				int bestInd = -1;
-				for (int i=0; i<maxVariables; i++) {
+				for (int i=0; i<splitOrder.size(); i++) {
 					if (errors[splitOrder[i]] > biggestError) {
 						biggestError = errors[splitOrder[i]];
 						bestInd = splitOrder[i];
@@ -4889,7 +4896,7 @@ public:
 
 				// Find the biggest section
 				double biggestDiff = -10000;
-				for (int i=0; i<maxVariables; i++) {
+				for (int i=0; i<splitOrder.size(); i++) {
 					double diff = toProcess[0][splitOrder[i]].second-toProcess[0][splitOrder[i]].first;
 					if (diff > biggestDiff) {
 						biggestDiff = diff;
@@ -4905,19 +4912,24 @@ public:
 						std::cout << monoms[k] << "    " << cutRes.second[k] << std::endl;
 					}
 					break;
+					numFound++;
+
+				// If there's still space to split
+				} else {
+
+					// Split it
+					double delta = (toProcess[0][bestInd].second - toProcess[0][bestInd].first) / 2.0;
+					double midPoint = toProcess[0][bestInd].first + delta;
+					auto copyLeft = toProcess[0];
+					auto copyRight = toProcess[0];
+					copyLeft[bestInd].second = midPoint;
+					copyRight[bestInd].first = midPoint;
+
+					// Add the new paths to the queue
+					toProcess.insert(toProcess.begin()+1, copyLeft);
+					toProcess.insert(toProcess.begin()+1, copyRight);
+
 				}
-
-				// Split it
-				double delta = (toProcess[0][bestInd].second - toProcess[0][bestInd].first) / 2.0;
-				double midPoint = toProcess[0][bestInd].first + delta;
-				auto copyLeft = toProcess[0];
-				auto copyRight = toProcess[0];
-				copyLeft[bestInd].second = midPoint;
-				copyRight[bestInd].first = midPoint;
-
-				// Add the new paths to the queue
-				toProcess.insert(toProcess.begin()+1, copyLeft);
-				toProcess.insert(toProcess.begin()+1, copyRight);
 
 			} else {
 
@@ -4931,7 +4943,7 @@ public:
 			}
 
 			// Per-iteration output
-			std::cout << iter << "  " << cutRes.first << "  " << toProcess.size() << "  " << totalArea / maxArea << "  " << totalArea / (maxArea*iter) << "  " << areaCovered / maxArea << "            \r" << std::flush;
+			std::cout << iter << "  " << cutRes.first << "  " << toProcess.size() << "  " << totalArea / maxArea << "  " << totalArea / (maxArea*iter) << "  " << areaCovered / maxArea << "  " << numFound << "            \r" << std::flush;
 
 			// Remove the one we just processed
 			toProcess.erase(toProcess.begin());
@@ -4947,8 +4959,7 @@ public:
 
 		// Benchmarks TODO
 		// d2n4 58 iterations 0.4s (6 vars)
-		// d3n5 119934 iterations 30m (18 vars)
-		// d3n5 83376 iterations 1h (12 vars, 4th order)
+		// d3n5 41590 iterations 14m (18 vars)
 
 	}
 
