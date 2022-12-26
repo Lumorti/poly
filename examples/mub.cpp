@@ -21,6 +21,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -f          try to find a feasible point" << std::endl;
 			std::cout << " -i          try to prove infeasibility" << std::endl;
 			std::cout << " -r          remove as many variables as possible" << std::endl;
+			return 0;
 		} else if (arg == "-d" && i+1 < argc) {
 			d = std::stoi(argv[i+1]);
 			i++;
@@ -46,7 +47,6 @@ int main(int argc, char ** argv) {
 	int numVarsNonConj = n*d*d;
 	int numVars = 2*numVarsNonConj+1000;
 	int conjDelta = numVarsNonConj;
-	double rt2 = 1.0/std::sqrt(2.0);
 
 	// Different "bases"
 	std::vector<std::vector<int>> dLimits;
@@ -315,11 +315,89 @@ int main(int argc, char ** argv) {
 			orderingCons.push_back(leftSide - rightSide);
 		}
 
+		// Try combinations of constraints TODO
+		//int ogSize = orderingCons.size();
+		//for (int i=0; i<ogSize; i++) {
+			//for (int j=0; j<ogSize; j++) {
+				//for (int k=0; k<ogSize; k++) {
+					//orderingCons.push_back(orderingCons[i]-orderingCons[j]-orderingCons[k]);
+					//orderingCons.push_back(orderingCons[i]+orderingCons[j]-orderingCons[k]);
+				//}
+			//}
+		//}
+		//for (int i=0; i<ogSize; i++) {
+			//eqns.push_back(orderingCons[i]);
+		//}
+		//orderingCons = {};
+		//int ogSize = orderingCons.size();
+		//for (int i=0; i<ogSize; i++) {
+			//orderingCons.push_back(Polynomial<double>(numVars, 1, {0})*orderingCons[i]);
+			//for (int j=0; j<12; j++) {
+				//orderingCons.push_back(Polynomial<double>(numVars, 1, {j})*orderingCons[i]);
+			//}
+		//}
+
+		// Try combinations of constraints TODO
+		//int ogSize2 = eqns.size();
+		//for (int i=0; i<ogSize2; i++) {
+			//for (int j=i+1; j<ogSize2; j++) {
+				//if (eqns[i].size() > 3 && eqns[j].size() > 3) {
+					//eqns.push_back(eqns[i]+eqns[j]);
+					//eqns.push_back(eqns[i]-eqns[j]);
+					//eqns.push_back(-eqns[i]+eqns[j]);
+					//eqns.push_back(-eqns[i]-eqns[j]);
+				//}
+			//}
+		//}
+
 		// Combine these equations into a single object
 		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, orderingCons);
+
+		// Remove variables using linear equalities if possible
 		if (removeLinear) {
 			prob = prob.removeLinear();
 		}
+		
+		// Try to simplify the equations a bit
+		for (int i=0; i<prob.conZero.size(); i++) {
+
+			// Only consider non-normalization equations
+			if (prob.conZero[i].size() > 3) {
+
+				// Loop over the monoms of this
+				std::vector<std::string> mons = prob.conZero[i].getMonomials();
+				int digitsPerInd = prob.conZero[i].digitsPerInd;
+				for (int m=0; m<mons.size(); m++) {
+
+					// Find a squared term
+					if (mons[m].size() == 2*digitsPerInd && mons[m].substr(0,digitsPerInd) == mons[m].substr(digitsPerInd,digitsPerInd)) {
+						int ogInd = std::stoi(mons[m].substr(0,digitsPerInd));
+						double ogCoeff = prob.conZero[i][mons[m]];
+
+						// Now find the imag of this 
+						for (int m2=0; m2<mons.size(); m2++) {
+							if (mons[m2].size() == 2*digitsPerInd && mons[m2].substr(0,digitsPerInd) == mons[m2].substr(digitsPerInd,digitsPerInd) && std::stoi(mons[m2].substr(0,digitsPerInd)) == ogInd+conjDelta) {
+
+								// Add a scaled version of the corresponding normal equation to simplify
+								Polynomial<double> adjustment(numVars);
+								adjustment.addTerm(1.0/std::pow(d, 2), {});
+								adjustment.addTerm(-1.0/d, {ogInd, ogInd});
+								adjustment.addTerm(-1.0/d, {ogInd+conjDelta, ogInd+conjDelta});
+								prob.conZero[i] += adjustment;
+								break;
+
+							}
+						}
+
+					}
+
+				}
+
+			}
+
+		}
+
+		// Use as few indices as possible
 		std::unordered_map<int,int> reducedMap = prob.getMinimalMap();
 		prob = prob.replaceWithVariable(reducedMap);
 		std::cout << std::endl;
@@ -338,7 +416,7 @@ int main(int argc, char ** argv) {
 			}
 			std::cout << "max viol = " << maxVal << std::endl;
 
-			//// Reverse the map
+			// Reverse the map
 			std::vector<double> origX(numVars, 0);
 			for (auto const &pair: reducedMap) {
 				origX[pair.first] = x[pair.second];
@@ -399,7 +477,7 @@ int main(int argc, char ** argv) {
 
 			// Find a lower bound
 			std::cout << std::scientific;
-			prob.proveInfeasible(100000000);
+			prob.proveInfeasible();
 
 		}
 
