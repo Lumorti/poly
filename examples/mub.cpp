@@ -4,29 +4,34 @@
 int main(int argc, char ** argv) {
 
 	// Get the problem from the args
+	std::srand(time(0));
 	int d = 2;
 	int n = 4;
 	std::string task = "infeasible";
 	bool useFull = false;
 	bool useQuadratic = true;
-	bool removeLinear = false;
+	bool removeLinear = true;
+	std::string level = "1f";
 	for (int i=0; i<argc; i++) {
 		std::string arg = argv[i];
 		if (arg == "-h") {
 			std::cout << " -d [int]    set the dimension" << std::endl;
 			std::cout << " -n [int]    set the number of bases" << std::endl;
+			std::cout << " -l [str]    set the level for the relaxation e.g. " << std::endl;
 			std::cout << " -2          use quadratic equations" << std::endl;
 			std::cout << " -4          use quartic equations" << std::endl;
 			std::cout << " -w          use whole bases, not partial" << std::endl;
 			std::cout << " -f          try to find a feasible point" << std::endl;
-			std::cout << " -i          try to prove infeasibility" << std::endl;
-			std::cout << " -r          remove as many variables as possible" << std::endl;
+			std::cout << " -r          don't use linear reductions" << std::endl;
 			return 0;
 		} else if (arg == "-d" && i+1 < argc) {
 			d = std::stoi(argv[i+1]);
 			i++;
 		} else if (arg == "-n" && i+1 < argc) {
 			n = std::stoi(argv[i+1]);
+			i++;
+		} else if (arg == "-l" && i+1 < argc) {
+			level = argv[i+1];
 			i++;
 		} else if (arg == "-4") {
 			useQuadratic = false;
@@ -39,7 +44,7 @@ int main(int argc, char ** argv) {
 		} else if (arg == "-i") {
 			task = "infeasible";
 		} else if (arg == "-r") {
-			removeLinear = true;
+			removeLinear = false;
 		}
 	}
 
@@ -247,7 +252,8 @@ int main(int argc, char ** argv) {
 		// Add an ordering to all bases
 		std::vector<Polynomial<double>> orderingCons;
 
-		// Ordering within each basis
+		// Ordering within each basis TODO this doesn't fully constrain
+		int base = 2;
 		for (int i=1; i<n; i++) {
 			for (int j=0; j<dLimits[i2][i]-1; j++) {
 				if (i == 1 && j == 0) {
@@ -258,11 +264,17 @@ int main(int argc, char ** argv) {
 				int leftPow = 0;
 				int rightPow = 0;
 				for (int k=1; k<d; k++) {
-					leftSide.addTerm(std::pow(2,leftPow), {i*d*d+j*d+k});
-					leftSide.addTerm(std::pow(2,leftPow+1), {i*d*d+j*d+k+conjDelta});
+					int indLeft = i*d*d+j*d+k; 
+					leftSide.addTerm(std::pow(base,leftPow), {indLeft});
+					leftSide.addTerm(std::pow(base,leftPow+1), {indLeft+conjDelta});
+					//leftSide.addTerm(std::pow(base, leftPow), {indLeft, indLeft});
+					//leftSide.addTerm(std::pow(base, leftPow+1), {indLeft+conjDelta, indLeft+conjDelta});
 					leftPow += 2;
-					rightSide.addTerm(std::pow(2,rightPow), {i*d*d+(j+1)*d+k});
-					rightSide.addTerm(std::pow(2,rightPow+1), {i*d*d+(j+1)*d+k+conjDelta});
+					int indRight = i*d*d+(j+1)*d+k; 
+					rightSide.addTerm(std::pow(base,rightPow), {indRight});
+					rightSide.addTerm(std::pow(base,rightPow+1), {indRight+conjDelta});
+					//rightSide.addTerm(std::pow(base, rightPow), {indRight, indRight});
+					//rightSide.addTerm(std::pow(base, rightPow+1), {indRight+conjDelta, indRight+conjDelta});
 					rightPow += 2;
 				}
 				orderingCons.push_back(leftSide - rightSide);
@@ -283,11 +295,17 @@ int main(int argc, char ** argv) {
 			int leftPow = 0;
 			int rightPow = 0;
 			for (int k=1; k<d; k++) {
-				leftSide.addTerm(std::pow(2,leftPow), {i*d*d+ind1*d+k});
-				leftSide.addTerm(std::pow(2,leftPow+1), {i*d*d+ind1*d+k+conjDelta});
+				int indLeft = i*d*d+ind1*d+k;
+				leftSide.addTerm(std::pow(base,leftPow), {indLeft});
+				leftSide.addTerm(std::pow(base,leftPow+1), {indLeft+conjDelta});
+				//leftSide.addTerm(std::pow(base, leftPow), {indLeft, indLeft});
+				//leftSide.addTerm(std::pow(base, leftPow+1), {indLeft+conjDelta, indLeft+conjDelta});
 				leftPow += 2;
-				rightSide.addTerm(std::pow(2,rightPow), {(i+1)*d*d+0*d+k});
-				rightSide.addTerm(std::pow(2,rightPow+1), {(i+1)*d*d+0*d+k+conjDelta});
+				int indRight = (i+1)*d*d+0*d+k;
+				rightSide.addTerm(std::pow(base,rightPow), {indRight});
+				rightSide.addTerm(std::pow(base,rightPow+1), {indRight+conjDelta});
+				//rightSide.addTerm(std::pow(base, rightPow), {indRight, indRight});
+				//rightSide.addTerm(std::pow(base, rightPow+1), {indRight+conjDelta, indRight+conjDelta});
 				rightPow += 2;
 			}
 			orderingCons.push_back(leftSide - rightSide);
@@ -304,51 +322,22 @@ int main(int argc, char ** argv) {
 					if (i == 1 && j == 0) {
 						continue;
 					}
-					leftSide.addTerm(std::pow(2,leftPow), {i*d*d+j*d+k});
-					leftSide.addTerm(std::pow(2,leftPow+1), {i*d*d+j*d+k+conjDelta});
+					int indLeft = i*d*d+j*d+k;
+					leftSide.addTerm(std::pow(base,leftPow), {indLeft});
+					leftSide.addTerm(std::pow(base,leftPow+1), {indLeft+conjDelta});
+					//leftSide.addTerm(std::pow(base, leftPow), {indLeft, indLeft});
+					//leftSide.addTerm(std::pow(base, leftPow+1), {indLeft+conjDelta, indLeft+conjDelta});
 					leftPow += 2;
-					rightSide.addTerm(std::pow(2,rightPow), {i*d*d+j*d+k+1});
-					rightSide.addTerm(std::pow(2,rightPow+1), {i*d*d+j*d+k+1+conjDelta});
+					int indRight = i*d*d+j*d+k+1;
+					rightSide.addTerm(std::pow(base,rightPow), {indRight});
+					rightSide.addTerm(std::pow(base,rightPow+1), {indRight+conjDelta});
+					//rightSide.addTerm(std::pow(base, rightPow), {indRight, indRight});
+					//rightSide.addTerm(std::pow(base, rightPow+1), {indRight+conjDelta, indRight+conjDelta});
 					rightPow += 2;
 				}
 			}
 			orderingCons.push_back(leftSide - rightSide);
 		}
-
-		// Try combinations of constraints TODO
-		//int ogSize = orderingCons.size();
-		//for (int i=0; i<ogSize; i++) {
-			//for (int j=0; j<ogSize; j++) {
-				//for (int k=0; k<ogSize; k++) {
-					//orderingCons.push_back(orderingCons[i]-orderingCons[j]-orderingCons[k]);
-					//orderingCons.push_back(orderingCons[i]+orderingCons[j]-orderingCons[k]);
-				//}
-			//}
-		//}
-		//for (int i=0; i<ogSize; i++) {
-			//eqns.push_back(orderingCons[i]);
-		//}
-		//orderingCons = {};
-		//int ogSize = orderingCons.size();
-		//for (int i=0; i<ogSize; i++) {
-			//orderingCons.push_back(Polynomial<double>(numVars, 1, {0})*orderingCons[i]);
-			//for (int j=0; j<12; j++) {
-				//orderingCons.push_back(Polynomial<double>(numVars, 1, {j})*orderingCons[i]);
-			//}
-		//}
-
-		// Try combinations of constraints TODO
-		//int ogSize2 = eqns.size();
-		//for (int i=0; i<ogSize2; i++) {
-			//for (int j=i+1; j<ogSize2; j++) {
-				//if (eqns[i].size() > 3 && eqns[j].size() > 3) {
-					//eqns.push_back(eqns[i]+eqns[j]);
-					//eqns.push_back(eqns[i]-eqns[j]);
-					//eqns.push_back(-eqns[i]+eqns[j]);
-					//eqns.push_back(-eqns[i]-eqns[j]);
-				//}
-			//}
-		//}
 
 		// Combine these equations into a single object
 		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, orderingCons);
@@ -358,8 +347,9 @@ int main(int argc, char ** argv) {
 			prob = prob.removeLinear();
 		}
 		
-		// Try to simplify the equations a bit
+		// Try to simplify the equations a bit TODO
 		for (int i=0; i<prob.conZero.size(); i++) {
+			//break;
 
 			// Only consider non-normalization equations
 			if (prob.conZero[i].size() > 3) {
@@ -477,7 +467,7 @@ int main(int argc, char ** argv) {
 
 			// Find a lower bound
 			std::cout << std::scientific;
-			prob.proveInfeasible();
+			prob.proveInfeasible(-1, level);
 
 		}
 

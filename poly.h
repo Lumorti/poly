@@ -4629,12 +4629,12 @@ public:
 		
 	}
 
-	// Make a number of a seconds look nicer for output TODO
+	// Make a number of a seconds look nicer for output
 	std::string representTime(double numSeconds) {
 		if (numSeconds < 0) {
 			return "?s";
 		} else if (numSeconds < 1) {
-			return std::to_string(int(numSeconds / 1.0e3)) + "ms";
+			return std::to_string(int(numSeconds * 1.0e3)) + "ms";
 		} else if (numSeconds < 60) {
 			return std::to_string(int(numSeconds)) + "s";
 		} else if (numSeconds < 3600) {
@@ -4653,7 +4653,7 @@ public:
 	}
 
 	// Attempt to find a series of constraints that show this is infeasible
-	void proveInfeasible(int maxIters=-1) {
+	void proveInfeasible(int maxIters=-1, std::string level="1f") {
 
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
@@ -4670,9 +4670,6 @@ public:
 
 		// Make sure we have all first order moments
 		addMonomsOfOrder(monoms, 1);
-		if (degree >= 4) {
-			addMonomsOfOrder(monoms, 2);
-		}
 
 		// First monom should always be 1
 		auto loc = std::find(monoms.begin(), monoms.end(), "");
@@ -4682,11 +4679,13 @@ public:
 		monoms.insert(monoms.begin(), "");
 
 		// Add all square monoms
-		for (int i=0; i<maxVariables; i++) {
-			std::string newInd = std::to_string(i);
-			newInd.insert(0, digitsPerInd-newInd.size(), ' ');
-			if (std::find(monoms.begin(), monoms.end(), newInd+newInd) == monoms.end()) {
-				monoms.push_back(newInd+newInd);
+		if (degree >= 2) {
+			for (int i=0; i<maxVariables; i++) {
+				std::string newInd = std::to_string(i);
+				newInd.insert(0, digitsPerInd-newInd.size(), ' ');
+				if (std::find(monoms.begin(), monoms.end(), newInd+newInd) == monoms.end()) {
+					monoms.push_back(newInd+newInd);
+				}
 			}
 		}
 
@@ -4702,14 +4701,14 @@ public:
 		}
 		
 		// Also get the monomials as polynomials and prepare for fast eval
-		int numOGMonoms = monoms.size();
-		std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
-		for (int i=0; i<monoms.size(); i++) {
-			monomsAsPolys[i] = Polynomial<polyType>(maxVariables, 1, monoms[i]);
-			monomsAsPolys[i].prepareEvalMixed();
-		}
+		//std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
+		//for (int i=0; i<monoms.size(); i++) {
+			//monomsAsPolys[i] = Polynomial<polyType>(maxVariables, 1, monoms[i]);
+			//monomsAsPolys[i].prepareEvalMixed();
+		//}
 
 		// Create the mapping from monomials to indices (to linearize)
+		int numOGMonoms = monoms.size();
 		std::unordered_map<std::string,std::string> mapping;
 		int digitsPerIndAfterLinear = std::ceil(std::log10(monoms.size()+1));
 		for (int i=1; i<monoms.size(); i++) {
@@ -4728,73 +4727,72 @@ public:
 		for (int i=0; i<conPositive.size(); i++) {
 			conPositiveLinear[i] = conPositive[i].replaceWithVariable(mapping);
 		}
-		
-		// Add partial SDP cons (1, i, j)
-		std::vector<Polynomial<double>> toAdd;
-		for (int i=0; i<monoms.size(); i++) {
-		
-			// Add first order SDP cons (1, i, j)
-			//if (monoms[i].size() == 2*digitsPerInd) {
-				//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-				//if (ind1 == ind2) {
-					//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1})});
-				//} else {
-					//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1}), Polynomial<polyType>(maxVariables, 1, {ind2})});
-				//}
-			//}
 
-			// Add second order SDP cons (1, ij, kl)
-			//if (degree >= 4) {
-				//for (int i=0; i<monoms.size(); i++) {
-					//if (monoms[i].size() == 4*digitsPerInd) {
-						//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-						//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-						//int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
-						//int ind4 = std::stoi(monoms[i].substr(3*digitsPerInd,digitsPerInd));
-						//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1,ind2}), Polynomial<polyType>(maxVariables, 1, {ind3,ind4})});
-						//std::cout << ind1 << " " << ind2 << " " << ind3 << " " << ind4 << std::endl;
-						//if (ind2 != ind3) {
-							//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1,ind3}), Polynomial<polyType>(maxVariables, 1, {ind2,ind4})});
-						//}
-						//if (ind2 != ind3 && ind3 != ind4) {
-							//monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, {ind1,ind4}), Polynomial<polyType>(maxVariables, 1, {ind2,ind3})});
-						//}
-					//}
-				//}
-			//}
+		// Process the level string
+		// 1+2f 3p
+		std::vector<int> levelsToInclude = {};
+		std::string currentThing = "";
+		for (int i=0; i<level.size(); i++) {
 
-		}
+			// For multiple levels e.g. 1+2
+			if (level[i] == '+') {
+				levelsToInclude.push_back(std::stoi(currentThing));
+				currentThing = "";
 
-		// Add full SDP cons (1, i, j, k, ij, kl, ...)
-		toAdd = {};
-		toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
-		for (int i=0; i<monoms.size(); i++) {
+			// p for a partial level
+			} else if (level[i] == 'p') {
 
-			// Big first order SDP
-			if (monoms[i].size() == 1*digitsPerInd) {
-				int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1}));
+				// Add whatever numbers are left
+				levelsToInclude.push_back(std::stoi(currentThing));
+
+				// Get the list monomials that can appear on the top row
+				std::vector<std::string> possibleMonoms;
+				for (int j=0; j<levelsToInclude.size(); j++) {
+					addMonomsOfOrder(possibleMonoms, levelsToInclude[j]);
+				}
+
+				// Get all combinations of 3x3 moment matrices
+				for (int j=0; j<possibleMonoms.size(); j++) {
+					for (int k=j+1; k<possibleMonoms.size(); k++) {
+						monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, possibleMonoms[j]), Polynomial<polyType>(maxVariables, 1, possibleMonoms[k])});
+					}
+				}
+
+				// Reset stuff
+				currentThing = "";
+				levelsToInclude = {};
+
+			// f for a full level
+			} else if (level[i] == 'f') {
+
+				// Add whatever numbers are left
+				levelsToInclude.push_back(std::stoi(currentThing));
+
+				// Get the list monomials that can appear on the top row
+				std::vector<std::string> possibleMonoms;
+				for (int j=0; j<levelsToInclude.size(); j++) {
+					addMonomsOfOrder(possibleMonoms, levelsToInclude[j]);
+				}
+
+				// Add these all to the top row of a moment matrix
+				std::vector<Polynomial<double>> toAdd;
+				toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
+				for (int j=0; j<possibleMonoms.size(); j++) {
+					toAdd.push_back(Polynomial<polyType>(maxVariables, 1, possibleMonoms[j]));
+				}
+				monomProducts.push_back(toAdd);
+
+				// Reset stuff
+				currentThing = "";
+				levelsToInclude = {};
+
+			// Otherwise add this (probably digit) to the string to process
+			} else if (level[i] != ',' && level[i] != ' ') {
+				currentThing += level[i];
 			}
 
-			// Big second order SDP
-			//if (monoms[i].size() == 2*digitsPerInd) {
-				//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-				//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1,ind2}));
-			//}
-
-			// Big third order SDP
-			//if (monoms[i].size() == 3*digitsPerInd) {
-				//int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				//int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-				//int ind3 = std::stoi(monoms[i].substr(2*digitsPerInd,digitsPerInd));
-				//toAdd.push_back(Polynomial<polyType>(maxVariables, 1, {ind1,ind2,ind3}));
-			//}
-
 		}
-		monomProducts.push_back(toAdd);
-
+		
 		// Add second order cone for x^2+y^2=1/d
 		int d = 0;
 		std::vector<std::tuple<double,int,int>> qCones;
@@ -4819,16 +4817,14 @@ public:
 
 				// If all valid, add to the quadratic cones list TODO 
 				if (allSquares) {
-					qCones.push_back({-conZero[i][""], varsInThisPoly[0], varsInThisPoly[1]});
 					d = std::round(-1.0 / conZero[i][""]);
-					conZero.erase(conZero.begin()+i);
-					i--;
+					//qCones.push_back({-conZero[i][""], varsInThisPoly[0], varsInThisPoly[1]});
+					//conZero.erase(conZero.begin()+i);
+					//i--;
 				}
 
 			}
 		}
-
-		std::cout << monomProducts << std::endl;
 
 		// Start with the most general area
 		double maxArea = 1;
@@ -4844,12 +4840,14 @@ public:
 
 		// Create the PSD matrices from this list
 		std::vector<std::shared_ptr<monty::ndarray<int,1>>> shouldBePSD;
+		std::vector<std::shared_ptr<monty::ndarray<double,1>>> shouldBePSDCoeffs;
 		for (int j=0; j<monomProducts.size(); j++) {
 
 			// Get the list of all monomial locations for the PSD matrix
 			std::vector<int> monLocs;
+			std::vector<double> monCoeffs;
 			for (int i=0; i<monomProducts[j].size(); i++) {
-				for (int k=0; k<monomProducts[j].size(); k++) {
+				for (int k=i; k<monomProducts[j].size(); k++) {
 
 					// Calculate the product
 					std::string monString = (monomProducts[j][i]*monomProducts[j][k]).getMonomials()[0];
@@ -4863,11 +4861,23 @@ public:
 						monoms.push_back(monString);
 					}
 
+					// The coeff for mosek's svec TODO don't need new for each
+					if (i != k) {
+						monCoeffs.push_back(std::sqrt(2.0));
+					} else {
+						monCoeffs.push_back(1.0);
+					}
+
 				}
 			}
 
 			// This (when reformatted) should be positive-semidefinite
 			shouldBePSD.push_back(monty::new_array_ptr<int>(monLocs));
+			shouldBePSDCoeffs.push_back(monty::new_array_ptr<double>(monCoeffs));
+
+			// Clear some memory
+			monomProducts.erase(monomProducts.begin());
+			j--;
 
 		}
 
@@ -4958,8 +4968,31 @@ public:
 		// Create a model
 		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
 
+		// DEBUG
+		//M->setLogHandler([=](const std::string & msg){std::cout << msg << std::flush;});
+
 		// Create the variable
 		mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(monty::new_array_ptr<double>(mins), monty::new_array_ptr<double>(maxs)));
+
+		// Parameterized linear positivity constraints TODO
+		int numParamCons = maxVariables;
+		//numParamCons += 2*maxVariables;
+		//numParamCons += maxVariables;
+		std::vector<long> sparsity;
+		for (int i=0; i<toProcess[0].size(); i++) {
+			sparsity.push_back((i)*varsTotal + firstMonomInds[i]);
+			sparsity.push_back((i)*varsTotal + squaredMonomInds[i]);
+			sparsity.push_back((i)*varsTotal + oneIndex);
+			//sparsity.push_back((i+maxVariables)*varsTotal + firstMonomInds[i]);
+			//sparsity.push_back((i+maxVariables)*varsTotal + oneIndex);
+			//sparsity.push_back((i+2*maxVariables)*varsTotal + firstMonomInds[i]);
+			//sparsity.push_back((i+2*maxVariables)*varsTotal + oneIndex);
+			//sparsity.push_back((i+3*maxVariables)*varsTotal + squaredMonomInds[i]);
+			//sparsity.push_back((i+3*maxVariables)*varsTotal + oneIndex);
+		}
+		std::sort(sparsity.begin(), sparsity.end());
+		mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
+		M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::greaterThan(0));
 
 		// The first element of the vector should be one
 		M->constraint(xM->index(oneIndex), mosek::fusion::Domain::equalsTo(1.0));
@@ -4970,32 +5003,26 @@ public:
 		// Linear positivity constraints
 		M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(0));
 
-		// Parameterized linear positivity constraints
-		int numParamCons = maxVariables + 2*maxVariables;
-		numParamCons += maxVariables;
-		if (degree >= 4) {
-			numParamCons += maxVariables;
-		}
-		mosek::fusion::Parameter::t DM = M->parameter(numParamCons, varsTotal);
-		M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::greaterThan(0));
+		// TODO mosek settings
+		M->setSolverParam("presolveUse", "off");
+		//M->setSolverParam("intpntCoTolInfeas", 1.0e-6);
+		//M->setSolverParam("intpntCoTolPfeas", 1.0e-12);
 
 		// SDP constraints
 		for (int i=0; i<shouldBePSD.size(); i++) {
-			int matDim = std::sqrt(shouldBePSD[i]->size());
-			M->constraint(xM->pick(shouldBePSD[i])->reshape(matDim, matDim), mosek::fusion::Domain::inPSDCone(matDim));
+			M->constraint(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Domain::inSVecPSDCone());
 		}
 
 		// Quadratic cones
-		for (int i=0; i<qCones.size(); i++) {
-			M->constraint(mosek::fusion::Expr::vstack(std::sqrt(std::get<0>(qCones[i])), xM->index(firstMonomInds[std::get<1>(qCones[i])]), xM->index(firstMonomInds[std::get<2>(qCones[i])])), mosek::fusion::Domain::inQCone(3));
-		}
+		//for (int i=0; i<qCones.size(); i++) {
+			//M->constraint(mosek::fusion::Expr::vstack(std::sqrt(std::get<0>(qCones[i])), xM->index(firstMonomInds[std::get<1>(qCones[i])]), xM->index(firstMonomInds[std::get<2>(qCones[i])])), mosek::fusion::Domain::inQCone(3));
+		//}
 
 		// The order in which to branch
 		std::vector<int> splitOrder;
 		for (int i=0; i<maxVariables; i++) {
 			splitOrder.push_back(i);
 		}
-		//splitOrder = {0,1,2,3,4,5,6,7,9,10,11};
 		//std::random_device rd;
 		//auto rng = std::default_random_engine {rd()};
 		//std::shuffle(std::begin(splitOrder), std::end(splitOrder), rng);
@@ -5013,27 +5040,28 @@ public:
 		auto begin = std::chrono::steady_clock::now();
 		auto end = std::chrono::steady_clock::now();
 		double secondsPerIter = 0;
+		int numIllPosed = 0;
 		while (toProcess.size() > 0) {
 
 			// The new parameterized constraint vector
 			std::vector<std::vector<double>> newD(numParamCons, std::vector<double>(varsTotal, 0));
 
 			// x[i] - min > 0
-			for (int i=0; i<toProcess[0].size(); i++) {
-				newD[i+maxVariables][firstMonomInds[i]] = 1;
-				newD[i+maxVariables][oneIndex] = -toProcess[0][i].first;
-			}
+			//for (int i=0; i<toProcess[0].size(); i++) {
+				//newD[i+maxVariables][firstMonomInds[i]] = 1;
+				//newD[i+maxVariables][oneIndex] = -toProcess[0][i].first;
+			//}
 
-			// max - x[i] > 0
-			for (int i=0; i<toProcess[0].size(); i++) {
-				newD[i+2*maxVariables][firstMonomInds[i]] = -1;
-				newD[i+2*maxVariables][oneIndex] = toProcess[0][i].second;
-			}
+			// max - x[i] > 0 TODO seem to be able to remove without probs
+			//for (int i=0; i<toProcess[0].size(); i++) {
+				//newD[i+2*maxVariables][firstMonomInds[i]] = -1;
+				//newD[i+2*maxVariables][oneIndex] = toProcess[0][i].second;
+			//}
 
 			// If we have secord order monomials
 			if (degree >= 2) {
 
-				// Update the linear constraints on the quadratics TODO
+				// Update the linear constraints on the quadratics
 				for (int i=0; i<toProcess[0].size(); i++) {
 
 					// Given two points, find ax+by+c=0
@@ -5051,34 +5079,12 @@ public:
 				}
 
 				// max(max^2,min^2) - x[i]^2 > 0
-				for (int i=0; i<toProcess[0].size(); i++) {
-					newD[i+3*maxVariables][squaredMonomInds[i]] = -1;
-					newD[i+3*maxVariables][oneIndex] = std::max(std::pow(toProcess[0][i].second, 2), std::pow(toProcess[0][i].first, 2));
-				}
+				//for (int i=0; i<toProcess[0].size(); i++) {
+					//newD[i+3*maxVariables][squaredMonomInds[i]] = -1;
+					//newD[i+3*maxVariables][oneIndex] = std::max(std::pow(toProcess[0][i].second, 2), std::pow(toProcess[0][i].first, 2));
+				//}
 
 			} 
-
-			// If we have fourth order monomials
-			if (degree >= 4) {
-
-				// Update the linear constraints on the quartics TODO
-				for (int i=0; i<toProcess[0].size(); i++) {
-
-					// Given two points, find ax+by+c=0
-					std::vector<double> point1 = {toProcess[0][i].first, std::pow(toProcess[0][i].first, 4)};
-					std::vector<double> point2 = {toProcess[0][i].second, std::pow(toProcess[0][i].second, 4)};
-					double a = point2[1]-point1[1];
-					double b = point1[0]-point2[0];
-					double c = -a*point1[0]-b*point1[1];
-
-					// Add this as a linear pos con
-					newD[i+4*maxVariables][firstMonomInds[i]] = a;
-					newD[i+4*maxVariables][fourthMonomInds[i]] = b;
-					newD[i+4*maxVariables][oneIndex] = c;
-
-				}
-
-			}
 
 			// Solve the problem
 			DM->setValue(monty::new_array_ptr<double>(newD));
@@ -5086,8 +5092,13 @@ public:
 			auto statProb = M->getProblemStatus();
 			auto statSol = M->getPrimalSolutionStatus();
 
-			// If valid, return this fact
-			if (statProb == mosek::fusion::ProblemStatus::PrimalInfeasible || statSol == mosek::fusion::SolutionStatus::Unknown) {
+			// If infeasible, good
+			if (statProb == mosek::fusion::ProblemStatus::PrimalInfeasible || statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown) {
+
+				// Keep track of how many were ill-posed
+				if (statProb != mosek::fusion::ProblemStatus::PrimalInfeasible) {
+					numIllPosed++;
+				}
 
 				// The area taken up by this section
 				areaCovered = 1;
@@ -5096,14 +5107,14 @@ public:
 				}
 				totalArea += areaCovered;
 
-			// Otherwise, extract the result
+			// Otherwise, extract the result and figure out where to split
 			} else {
 
 				// Get the solution values
 				auto sol = *(xM->level());
 				polyType outer = M->primalObjValue();
 
-				// Output the relevent moments
+				// Output the relevant moments
 				std::vector<polyType> solVec(xM->getSize());
 				for (int i=0; i<solVec.size(); i++) {
 					solVec[i] = sol[i];
@@ -5111,10 +5122,12 @@ public:
 
 				// Check the resulting vector for a good place to split 
 				std::vector<double> errors(maxVariables);
-				for (int i=0; i<maxVariables; i++) {
-					errors[i] = std::abs(solVec[squaredMonomInds[i]] - std::pow(solVec[firstMonomInds[i]],2));
-					if (degree >= 4) {
-						errors[i] += std::abs(solVec[fourthMonomInds[i]] - std::pow(solVec[firstMonomInds[i]],4));
+				for (int i=0; i<monoms.size(); i++) {
+					if (monoms[i].size() == 2*digitsPerInd) {
+						int ind1 = std::stoi(monoms[i].substr(0, digitsPerInd));
+						int ind2 = std::stoi(monoms[i].substr(digitsPerInd, digitsPerInd));
+						errors[ind1] += std::pow(solVec[i] - solVec[firstMonomInds[ind1]]*solVec[firstMonomInds[ind2]], 2);
+						errors[ind2] += std::pow(solVec[i] - solVec[firstMonomInds[ind1]]*solVec[firstMonomInds[ind2]], 2);
 					}
 				}
 
@@ -5140,8 +5153,9 @@ public:
 
 				// If we've converged
 				if (biggestError < 1e-5) {
+					std::cout << std::endl;
 					std::cout << "converged in " << iter << " iters to region " << toProcess[0] << std::endl;
-					std::cout << "with solution " << solVec << std::endl;
+					std::cout << "with solution:" << std::endl;
 					for (int k=0; k<solVec.size(); k++) {
 						std::cout << monoms[k] << "    " << solVec[k] << std::endl;
 					}
@@ -5169,14 +5183,14 @@ public:
 
 			// Time estimation
 			end = std::chrono::steady_clock::now();
-			secondsPerIter = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / (iter * double(1e6));
+			secondsPerIter = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / (iter * 1.0e6);
 			double areaPerIter = totalArea / iter;
 			double itersRemaining = (maxArea - totalArea) / areaPerIter;
 			double secondsRemaining = itersRemaining * secondsPerIter;
 
 			// Per-iteration output
 			std::cout << std::defaultfloat;
-			std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << representTime(secondsRemaining) << "            \r" << std::flush;
+			std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "            \r" << std::flush;
 
 			// Remove the one we just processed
 			toProcess.erase(toProcess.begin());
@@ -5189,10 +5203,11 @@ public:
 
 		}
 		std::cout << std::endl;
+		std::cout << representTime(iter * secondsPerIter) << std::endl;
 
 		// Benchmarks TODO
-		// d2n4 58 iterations 0.4s (6 vars)
-		// d3n5 41590 iterations 14m (18 vars)
+		// d2n4 42 iterations 0.1s (6 vars)
+		// d3n5 42338 iterations 9m (18 vars)
 
 	}
 
