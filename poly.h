@@ -4653,7 +4653,7 @@ public:
 	}
 
 	// Attempt to find a series of constraints that show this is infeasible
-	void proveInfeasible(int maxIters=-1, std::string level="1f") {
+	void proveInfeasible(int maxIters=-1, std::string level="1f", double bound=1) {
 
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
@@ -4794,47 +4794,46 @@ public:
 		}
 		
 		// Add second order cone for x^2+y^2=1/d
-		int d = 0;
-		std::vector<std::tuple<double,int,int>> qCones;
-		for (int i=0; i<conZero.size(); i++) {
+		//int d = 0;
+		//std::vector<std::tuple<double,int,int>> qCones;
+		//for (int i=0; i<conZero.size(); i++) {
 
-			// First make sure we have a constant and 3 terms total
-			if (conZero[i][""] < 0 && conZero[i].size() == 3) {
+			//// First make sure we have a constant and 3 terms total
+			//if (conZero[i][""] < 0 && conZero[i].size() == 3) {
 
-				// Get vars and monoms from this
-				auto varsInThisPoly = conZero[i].getVariables();
-				auto monomsInThisPoly = conZero[i].getMonomials();
+				//// Get vars and monoms from this
+				//auto varsInThisPoly = conZero[i].getVariables();
+				//auto monomsInThisPoly = conZero[i].getMonomials();
 
-				// Check to make sure all vars are squares
-				bool allSquares = true;
-				for (int j=0; j<monomsInThisPoly.size(); j++) {
-					if (monomsInThisPoly[j].size() >= 2*digitsPerInd) {
-						if (monomsInThisPoly[j].substr(0,digitsPerInd) != monomsInThisPoly[j].substr(digitsPerInd,digitsPerInd)) { 
-							allSquares = false;
-						}
-					}
-				}
+				//// Check to make sure all vars are squares
+				//bool allSquares = true;
+				//for (int j=0; j<monomsInThisPoly.size(); j++) {
+					//if (monomsInThisPoly[j].size() >= 2*digitsPerInd) {
+						//if (monomsInThisPoly[j].substr(0,digitsPerInd) != monomsInThisPoly[j].substr(digitsPerInd,digitsPerInd)) { 
+							//allSquares = false;
+						//}
+					//}
+				//}
 
-				// If all valid, add to the quadratic cones list TODO 
-				if (allSquares) {
-					d = std::round(-1.0 / conZero[i][""]);
-					//qCones.push_back({-conZero[i][""], varsInThisPoly[0], varsInThisPoly[1]});
-					//conZero.erase(conZero.begin()+i);
-					//i--;
-				}
+				//// If all valid, add to the quadratic cones list
+				//if (allSquares) {
+					//d = std::round(-1.0 / conZero[i][""]);
+					////qCones.push_back({-conZero[i][""], varsInThisPoly[0], varsInThisPoly[1]});
+					////conZero.erase(conZero.begin()+i);
+					////i--;
+				//}
 
-			}
-		}
+			//}
+		//}
 
 		// Start with the most general area
 		double maxArea = 1;
 		std::vector<std::vector<std::pair<double,double>>> toProcess;
 		std::vector<std::pair<double,double>> varMinMax(obj.maxVariables);
-		double overRtD = 1.0 / std::sqrt(d);
 		for (int i=0; i<obj.maxVariables; i++) {
-			varMinMax[i].first = -overRtD;
-			varMinMax[i].second = overRtD;
-			maxArea *= 2*overRtD;
+			varMinMax[i].first = -bound;
+			varMinMax[i].second = bound;
+			maxArea *= 2*bound;
 		}
 		toProcess.push_back(varMinMax);
 
@@ -4861,7 +4860,7 @@ public:
 						monoms.push_back(monString);
 					}
 
-					// The coeff for mosek's svec TODO don't need new for each
+					// The coeff for mosek's svec
 					if (i != k) {
 						monCoeffs.push_back(std::sqrt(2.0));
 					} else {
@@ -4940,28 +4939,28 @@ public:
 		std::vector<double> maxs(monoms.size(), 1);
 		for (int i=0; i<monoms.size(); i++) {
 			if (monoms[i].size() == 1*digitsPerInd) {
-				mins[i] = -overRtD;
-				maxs[i] = overRtD;
+				mins[i] = -bound;
+				maxs[i] = bound;
 			}
 			if (monoms[i].size() == 2*digitsPerInd) {
 				if (monoms[i].substr(0, digitsPerInd) == monoms[i].substr(digitsPerInd, digitsPerInd)) {
 					mins[i] = 0;
 				} else {
-					mins[i] = -overRtD*overRtD;
+					mins[i] = -std::pow(bound, 2);
 				}
-				maxs[i] = overRtD*overRtD;
+				maxs[i] = std::pow(bound, 2);
 			}
 			if (monoms[i].size() == 3*digitsPerInd) {
-				mins[i] = -std::pow(overRtD, 3);
-				maxs[i] = std::pow(overRtD, 3);
+				mins[i] = -std::pow(bound, 3);
+				maxs[i] = std::pow(bound, 3);
 			}
 			if (monoms[i].size() == 4*digitsPerInd) {
 				if (monoms[i].substr(0, digitsPerInd) == monoms[i].substr(digitsPerInd, digitsPerInd) && monoms[i].substr(2*digitsPerInd, digitsPerInd) == monoms[i].substr(3*digitsPerInd, digitsPerInd)) {
 					mins[i] = 0;
 				} else {
-					mins[i] = -std::pow(overRtD, 4);
+					mins[i] = -std::pow(bound, 4);
 				}
-				maxs[i] = std::pow(overRtD, 4);
+				maxs[i] = std::pow(bound, 4);
 			}
 		}
 
@@ -5003,10 +5002,9 @@ public:
 		// Linear positivity constraints
 		M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(0));
 
-		// TODO mosek settings
-		M->setSolverParam("presolveUse", "off");
-		//M->setSolverParam("intpntCoTolInfeas", 1.0e-6);
-		//M->setSolverParam("intpntCoTolPfeas", 1.0e-12);
+		// Try an objective function
+		mosek::fusion::Parameter::t cM = M->parameter(varsTotal);
+		M->objective(mosek::fusion::ObjectiveSense::Minimize, mosek::fusion::Expr::dot(cM, xM));
 
 		// SDP constraints
 		for (int i=0; i<shouldBePSD.size(); i++) {
@@ -5043,8 +5041,15 @@ public:
 		int numIllPosed = 0;
 		while (toProcess.size() > 0) {
 
-			// The new parameterized constraint vector
+			// The area taken up by this section
+			areaCovered = 1;
+			for (int k=0; k<toProcess[0].size(); k++) {
+				areaCovered *= toProcess[0][k].second - toProcess[0][k].first;
+			}
+
+			// The new parameterized constraint vector and objective
 			std::vector<std::vector<double>> newD(numParamCons, std::vector<double>(varsTotal, 0));
+			std::vector<double> newC(varsTotal, 0.0);
 
 			// x[i] - min > 0
 			//for (int i=0; i<toProcess[0].size(); i++) {
@@ -5076,6 +5081,16 @@ public:
 					newD[i][squaredMonomInds[i]] = b;
 					newD[i][oneIndex] = c;
 
+					// Point the objective function to maximize errors TODO
+					// TODO maximize if big area, minimize if small
+					if (areaCovered > 1e-5) {
+						newC[firstMonomInds[i]] = b;
+						newC[squaredMonomInds[i]] = a;
+					} else {
+						newC[firstMonomInds[i]] = -b;
+						newC[squaredMonomInds[i]] = -a;
+					}
+
 				}
 
 				// max(max^2,min^2) - x[i]^2 > 0
@@ -5088,6 +5103,7 @@ public:
 
 			// Solve the problem
 			DM->setValue(monty::new_array_ptr<double>(newD));
+			cM->setValue(monty::new_array_ptr<double>(newC));
 			M->solve();
 			auto statProb = M->getProblemStatus();
 			auto statSol = M->getPrimalSolutionStatus();
@@ -5100,11 +5116,8 @@ public:
 					numIllPosed++;
 				}
 
-				// The area taken up by this section
-				areaCovered = 1;
-				for (int k=0; k<toProcess[0].size(); k++) {
-					areaCovered *= toProcess[0][k].second - toProcess[0][k].first;
-				}
+
+				// Update the total area count
 				totalArea += areaCovered;
 
 			// Otherwise, extract the result and figure out where to split
@@ -5190,7 +5203,7 @@ public:
 
 			// Per-iteration output
 			std::cout << std::defaultfloat;
-			std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "            \r" << std::flush;
+			std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << " " << areaCovered << "            \r" << std::flush;
 
 			// Remove the one we just processed
 			toProcess.erase(toProcess.begin());
@@ -5205,9 +5218,9 @@ public:
 		std::cout << std::endl;
 		std::cout << representTime(iter * secondsPerIter) << std::endl;
 
-		// Benchmarks TODO
+		// Benchmarks
 		// d2n4 42 iterations 0.1s (6 vars)
-		// d3n5 42338 iterations 9m (18 vars)
+		// d3n5 29996 iterations 8m (18 vars)
 
 	}
 

@@ -267,14 +267,10 @@ int main(int argc, char ** argv) {
 					int indLeft = i*d*d+j*d+k; 
 					leftSide.addTerm(std::pow(base,leftPow), {indLeft});
 					leftSide.addTerm(std::pow(base,leftPow+1), {indLeft+conjDelta});
-					//leftSide.addTerm(std::pow(base, leftPow), {indLeft, indLeft});
-					//leftSide.addTerm(std::pow(base, leftPow+1), {indLeft+conjDelta, indLeft+conjDelta});
 					leftPow += 2;
 					int indRight = i*d*d+(j+1)*d+k; 
 					rightSide.addTerm(std::pow(base,rightPow), {indRight});
 					rightSide.addTerm(std::pow(base,rightPow+1), {indRight+conjDelta});
-					//rightSide.addTerm(std::pow(base, rightPow), {indRight, indRight});
-					//rightSide.addTerm(std::pow(base, rightPow+1), {indRight+conjDelta, indRight+conjDelta});
 					rightPow += 2;
 				}
 				orderingCons.push_back(leftSide - rightSide);
@@ -298,14 +294,10 @@ int main(int argc, char ** argv) {
 				int indLeft = i*d*d+ind1*d+k;
 				leftSide.addTerm(std::pow(base,leftPow), {indLeft});
 				leftSide.addTerm(std::pow(base,leftPow+1), {indLeft+conjDelta});
-				//leftSide.addTerm(std::pow(base, leftPow), {indLeft, indLeft});
-				//leftSide.addTerm(std::pow(base, leftPow+1), {indLeft+conjDelta, indLeft+conjDelta});
 				leftPow += 2;
 				int indRight = (i+1)*d*d+0*d+k;
 				rightSide.addTerm(std::pow(base,rightPow), {indRight});
 				rightSide.addTerm(std::pow(base,rightPow+1), {indRight+conjDelta});
-				//rightSide.addTerm(std::pow(base, rightPow), {indRight, indRight});
-				//rightSide.addTerm(std::pow(base, rightPow+1), {indRight+conjDelta, indRight+conjDelta});
 				rightPow += 2;
 			}
 			orderingCons.push_back(leftSide - rightSide);
@@ -325,14 +317,10 @@ int main(int argc, char ** argv) {
 					int indLeft = i*d*d+j*d+k;
 					leftSide.addTerm(std::pow(base,leftPow), {indLeft});
 					leftSide.addTerm(std::pow(base,leftPow+1), {indLeft+conjDelta});
-					//leftSide.addTerm(std::pow(base, leftPow), {indLeft, indLeft});
-					//leftSide.addTerm(std::pow(base, leftPow+1), {indLeft+conjDelta, indLeft+conjDelta});
 					leftPow += 2;
 					int indRight = i*d*d+j*d+k+1;
 					rightSide.addTerm(std::pow(base,rightPow), {indRight});
 					rightSide.addTerm(std::pow(base,rightPow+1), {indRight+conjDelta});
-					//rightSide.addTerm(std::pow(base, rightPow), {indRight, indRight});
-					//rightSide.addTerm(std::pow(base, rightPow+1), {indRight+conjDelta, indRight+conjDelta});
 					rightPow += 2;
 				}
 			}
@@ -340,6 +328,7 @@ int main(int argc, char ** argv) {
 		}
 
 		// Combine these equations into a single object
+		//orderingCons = {};
 		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, orderingCons);
 
 		// Remove variables using linear equalities if possible
@@ -347,9 +336,8 @@ int main(int argc, char ** argv) {
 			prob = prob.removeLinear();
 		}
 		
-		// Try to simplify the equations a bit TODO
+		// Try to simplify the equations a bit
 		for (int i=0; i<prob.conZero.size(); i++) {
-			//break;
 
 			// Only consider non-normalization equations
 			if (prob.conZero[i].size() > 3) {
@@ -463,11 +451,12 @@ int main(int argc, char ** argv) {
 				}
 			}
 
+		// If told to prove the search space is infeasible
 		} else if (task == "infeasible") {
 
-			// Find a lower bound
+			// Try to prove infeasiblity
 			std::cout << std::scientific;
-			prob.proveInfeasible(-1, level);
+			prob.proveInfeasible(-1, level, 1.0/std::sqrt(d));
 
 		}
 
