@@ -17,7 +17,7 @@ int main(int argc, char ** argv) {
 		if (arg == "-h") {
 			std::cout << " -d [int]    set the dimension" << std::endl;
 			std::cout << " -n [int]    set the number of bases" << std::endl;
-			std::cout << " -l [str]    set the level for the relaxation e.g. " << std::endl;
+			std::cout << " -l [str]    set the level for the relaxation e.g. 1+2f,3p" << std::endl;
 			std::cout << " -2          use quadratic equations" << std::endl;
 			std::cout << " -4          use quartic equations" << std::endl;
 			std::cout << " -w          use whole bases, not partial" << std::endl;
@@ -454,8 +454,20 @@ int main(int argc, char ** argv) {
 		// If told to prove the search space is infeasible
 		} else if (task == "infeasible") {
 
+			// Try adding the squared cons too TODO
+			int ogCons = prob.conZero.size();
+			for (int i=0; i<ogCons; i++) {
+				prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]);
+			}
+			//for (int i=0; i<ogCons; i++) {
+				//prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
+			//}
+			//int ogCons2 = prob.conPositive.size();
+			//for (int i=0; i<ogCons2; i++) {
+				//prob.conPositive.push_back(prob.conPositive[i]*prob.conPositive[i]);
+			//}
+
 			// Try to prove infeasiblity
-			std::cout << std::scientific;
 			prob.proveInfeasible(-1, level, 1.0/std::sqrt(d));
 
 		}

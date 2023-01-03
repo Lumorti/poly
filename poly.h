@@ -4464,7 +4464,7 @@ public:
 		return {a, b, c};
 	}
 
-	// Calculate the equation of a plane given 2 points TODO
+	// Calculate the equation of a plane given 2 points
 	// In the form a + bx + cy + dz = 0
 	std::vector<double> getPlaneFromPoints(std::vector<double> A, std::vector<double> B, std::vector<double> C) {
 
@@ -4681,11 +4681,13 @@ public:
 		// Create the PSD matrices from this list
 		std::vector<std::shared_ptr<monty::ndarray<int,1>>> shouldBePSD;
 		std::vector<std::shared_ptr<monty::ndarray<double,1>>> shouldBePSDCoeffs;
+		std::vector<std::shared_ptr<monty::ndarray<double,1>>> identityAsSVec;
 		for (int j=0; j<monomProducts.size(); j++) {
 
 			// Get the list of all monomial locations for the PSD matrix
 			std::vector<int> monLocs;
 			std::vector<double> monCoeffs;
+			std::vector<double> idenCoeffs;
 			for (int i=0; i<monomProducts[j].size(); i++) {
 				for (int k=i; k<monomProducts[j].size(); k++) {
 
@@ -4704,8 +4706,10 @@ public:
 					// The coeff for mosek's svec
 					if (i != k) {
 						monCoeffs.push_back(std::sqrt(2.0));
+						idenCoeffs.push_back(0.0);
 					} else {
 						monCoeffs.push_back(1.0);
+						idenCoeffs.push_back(1.0);
 					}
 
 				}
@@ -4714,6 +4718,7 @@ public:
 			// This (when reformatted) should be positive-semidefinite
 			shouldBePSD.push_back(monty::new_array_ptr<int>(monLocs));
 			shouldBePSDCoeffs.push_back(monty::new_array_ptr<double>(monCoeffs));
+			identityAsSVec.push_back(monty::new_array_ptr<double>(idenCoeffs));
 
 			// Clear some memory
 			monomProducts.erase(monomProducts.begin());
@@ -4812,26 +4817,29 @@ public:
 		// Create the variable
 		mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(monty::new_array_ptr<double>(mins), monty::new_array_ptr<double>(maxs)));
 
+		// TODO
+		mosek::fusion::Variable::t lambda = M->variable();
+
 		// Parameterized linear positivity constraints TODO
 		int numParamCons = maxVariables;
-		numParamCons += 4*maxVariables*maxVariables;
+		//numParamCons += 4*maxVariables*maxVariables;
 		//numParamCons += 2*maxVariables;
 		//numParamCons += maxVariables;
-		//std::vector<long> sparsity;
-		//for (int i=0; i<toProcess[0].size(); i++) {
-			//sparsity.push_back((i)*varsTotal + firstMonomInds[i]);
-			//sparsity.push_back((i)*varsTotal + quadraticMonomInds[i][i]);
-			//sparsity.push_back((i)*varsTotal + oneIndex);
+		std::vector<long> sparsity;
+		for (int i=0; i<toProcess[0].size(); i++) {
+			sparsity.push_back((i)*varsTotal + firstMonomInds[i]);
+			sparsity.push_back((i)*varsTotal + quadraticMonomInds[i][i]);
+			sparsity.push_back((i)*varsTotal + oneIndex);
 			//sparsity.push_back((i+maxVariables)*varsTotal + firstMonomInds[i]);
 			//sparsity.push_back((i+maxVariables)*varsTotal + oneIndex);
 			//sparsity.push_back((i+2*maxVariables)*varsTotal + firstMonomInds[i]);
 			//sparsity.push_back((i+2*maxVariables)*varsTotal + oneIndex);
 			//sparsity.push_back((i+3*maxVariables)*varsTotal + quadraticMonomInds[i][i]);
 			//sparsity.push_back((i+3*maxVariables)*varsTotal + oneIndex);
-		//}
-		//std::sort(sparsity.begin(), sparsity.end());
-		//mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
-		mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}));
+		}
+		std::sort(sparsity.begin(), sparsity.end());
+		mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
+		//mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}));
 		M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::greaterThan(0));
 
 		// The first element of the vector should be one
@@ -4844,13 +4852,15 @@ public:
 		M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(0));
 
 		// Try an objective function
-		mosek::fusion::Parameter::t cM = M->parameter(varsTotal);
-		M->objective(mosek::fusion::ObjectiveSense::Minimize, mosek::fusion::Expr::dot(cM, xM));
+		//mosek::fusion::Parameter::t cM = M->parameter(varsTotal);
+		//M->objective(mosek::fusion::ObjectiveSense::Minimize, mosek::fusion::Expr::dot(cM, xM));
+		M->objective(mosek::fusion::ObjectiveSense::Minimize, lambda);
 
 		// SDP constraints
-		//for (int i=0; i<shouldBePSD.size(); i++) {
+		for (int i=0; i<shouldBePSD.size(); i++) {
 			//M->constraint(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Domain::inSVecPSDCone());
-		//}
+			M->constraint(mosek::fusion::Expr::add(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Expr::mul(lambda, identityAsSVec[i])), mosek::fusion::Domain::inSVecPSDCone());
+		}
 
 		// The order in which to branch
 		std::vector<int> splitOrder;
@@ -4885,7 +4895,6 @@ public:
 
 			// The new parameterized constraint vector and objective
 			std::vector<std::vector<double>> newD(numParamCons, std::vector<double>(varsTotal, 0));
-			std::vector<double> newC(varsTotal, 0.0);
 
 			// x[i] - min > 0
 			//for (int i=0; i<toProcess[0].size(); i++) {
@@ -4917,106 +4926,99 @@ public:
 					newD[nextInd][quadraticMonomInds[i][i]] = coeffs[2];
 					nextInd++;
 
-					// Point the objective function to maximize errors TODO
-					//newC[firstMonomInds[i]] = coeffs[2];
-					//newC[quadraticMonomInds[i][i]] = coeffs[1];
-					//if (areaCovered > 1e-5) {
-						//newC[firstMonomInds[i]] = coeffs[2];
-						//newC[quadraticMonomInds[i][i]] = coeffs[1];
-					//} else {
-						//newC[firstMonomInds[i]] = -coeffs[2];
-						//newC[quadraticMonomInds[i][i]] = -coeffs[1];
-					//}
-
 				}
 
 				// Update the linear constraints on the off-diag quadratics
-				for (int i=0; i<toProcess[0].size(); i++) {
-					for (int j=i+1; j<toProcess[0].size(); j++) {
+				//for (int i=0; i<toProcess[0].size(); i++) {
+					//for (int j=i+1; j<toProcess[0].size(); j++) {
 
-						// The four points we need to include in this constraint
-						std::vector<std::vector<double>> points(4);
-						points[0] = {toProcess[0][i].first, toProcess[0][j].first, toProcess[0][i].first*toProcess[0][j].first};
-						points[1] = {toProcess[0][i].first, toProcess[0][j].second, toProcess[0][i].first*toProcess[0][j].second};
-						points[2] = {toProcess[0][i].second, toProcess[0][j].first, toProcess[0][i].second*toProcess[0][j].first};
-						points[3] = {toProcess[0][i].second, toProcess[0][j].second, toProcess[0][i].second*toProcess[0][j].second};
+						//// The four points we need to include in this constraint
+						//std::vector<std::vector<double>> points(4);
+						//points[0] = {toProcess[0][i].first, toProcess[0][j].first, toProcess[0][i].first*toProcess[0][j].first};
+						//points[1] = {toProcess[0][i].first, toProcess[0][j].second, toProcess[0][i].first*toProcess[0][j].second};
+						//points[2] = {toProcess[0][i].second, toProcess[0][j].first, toProcess[0][i].second*toProcess[0][j].first};
+						//points[3] = {toProcess[0][i].second, toProcess[0][j].second, toProcess[0][i].second*toProcess[0][j].second};
 
-						std::cout << std::endl;
-						std::cout << i << " " << j << " " << monoms[quadraticMonomInds[i][j]] << std::endl;
-						std::cout << points << std::endl;
-						std::cout << std::endl;
+						////std::cout << std::endl;
+						////std::cout << i << " " << j << " " << monoms[quadraticMonomInds[i][j]] << std::endl;
+						////std::cout << points << std::endl;
+						////std::cout << std::endl;
 
-						// For each combination of three of these four TODO
-						std::vector<std::vector<int>> pointSets = {
-							{0,1,2},
-							{0,1,3},
-							{0,2,3},
-							{1,2,3}
-						};
-						for (int k=0; k<pointSets.size(); k++) {
+						//// For each combination of three of these four TODO
+						//std::vector<std::vector<int>> pointSets = {
+							//{0,1,2},
+							//{0,1,3},
+							//{0,2,3},
+							//{1,2,3}
+						//};
+						//for (int k=0; k<pointSets.size(); k++) {
 
-							// Get the plane
-							std::vector<double> plane = getPlaneFromPoints(points[pointSets[k][0]], points[pointSets[k][1]], points[pointSets[k][2]]);
+							//// Get the plane
+							//std::vector<double> plane = getPlaneFromPoints(points[pointSets[k][0]], points[pointSets[k][1]], points[pointSets[k][2]]);
 
-							// Check to see if it's above or below the ideal
-							double avgX = (points[pointSets[k][0]][0] + points[pointSets[k][1]][0] + points[pointSets[k][2]][0]) / 3.0;
-							double avgY = (points[pointSets[k][0]][1] + points[pointSets[k][1]][1] + points[pointSets[k][2]][1]) / 3.0;
-							double idealXY = avgX * avgY;
-							double actualXY = -(plane[0] + avgX*plane[1] + avgY*plane[2]) / plane[3];
-							std::cout << plane << std::endl;
-							std::cout << "avgX = " << avgX << ", avgY = " << avgY << std::endl;
-							std::cout << "idealXY = " << idealXY << ", actualXY = " << actualXY << std::endl;
+							//// Check to see if it's above or below the ideal
+							//double avgX = (points[pointSets[k][0]][0] + points[pointSets[k][1]][0] + points[pointSets[k][2]][0]) / 3.0;
+							//double avgY = (points[pointSets[k][0]][1] + points[pointSets[k][1]][1] + points[pointSets[k][2]][1]) / 3.0;
+							//double idealXY = avgX * avgY;
+							//double actualXY = -(plane[0] + avgX*plane[1] + avgY*plane[2]) / plane[3];
+							////std::cout << plane << std::endl;
+							////std::cout << "avgX = " << avgX << ", avgY = " << avgY << std::endl;
+							////std::cout << "idealXY = " << idealXY << ", actualXY = " << actualXY << std::endl;
 
-							// If it's above, we constraint to the area below
+							//// If it's above, we constraint to the area below
 							//if (actualXY > idealXY) {
-							if (std::abs(plane[0])  > 1e-5) {
-								//std::cout << "is above" << std::endl;
-								double scaling = plane[0];
-								newD[nextInd][oneIndex] = plane[0] / scaling;
-								newD[nextInd][firstMonomInds[i]] = plane[1] / scaling;
-								newD[nextInd][firstMonomInds[j]] = plane[2] / scaling;
-								newD[nextInd][quadraticMonomInds[i][j]] = plane[3] / scaling;
-								std::cout << newD[nextInd][oneIndex] << " + " 
-										  << newD[nextInd][firstMonomInds[i]] << "*x + "
-										  << newD[nextInd][firstMonomInds[j]] << "*y + "
-										  << newD[nextInd][quadraticMonomInds[i][j]] << "*xy > 0" << std::endl;
-								nextInd++;
-							} else {
-								double scaling = 1.0;
-								newD[nextInd][oneIndex] = plane[0] / scaling;
-								newD[nextInd][firstMonomInds[i]] = plane[1] / scaling;
-								newD[nextInd][firstMonomInds[j]] = plane[2] / scaling;
-								newD[nextInd][quadraticMonomInds[i][j]] = plane[3] / scaling;
-								std::cout << newD[nextInd][oneIndex] << " + " 
-										  << newD[nextInd][firstMonomInds[i]] << "*x + "
-										  << newD[nextInd][firstMonomInds[j]] << "*y + "
-										  << newD[nextInd][quadraticMonomInds[i][j]] << "*xy > 0" << std::endl;
-							}
+							////if (std::abs(plane[0])  > 1e-5) {
+								////std::cout << "is above" << std::endl;
+								////double scaling = plane[0];
+								//double scaling = plane[3];
+								//newD[nextInd][oneIndex] = -plane[0] / scaling;
+								//newD[nextInd][firstMonomInds[i]] = -plane[1] / scaling;
+								//newD[nextInd][firstMonomInds[j]] = -plane[2] / scaling;
+								//newD[nextInd][quadraticMonomInds[i][j]] = -plane[3] / scaling;
+								////std::cout << newD[nextInd][oneIndex] << " + " 
+										  ////<< newD[nextInd][firstMonomInds[i]] << "*x + "
+										  ////<< newD[nextInd][firstMonomInds[j]] << "*y + "
+										  ////<< newD[nextInd][quadraticMonomInds[i][j]] << "*xy > 0" << std::endl;
+								//nextInd++;
+							////} else {
+								////double scaling = 1.0;
+								////newD[nextInd][oneIndex] = plane[0] / scaling;
+								////newD[nextInd][firstMonomInds[i]] = plane[1] / scaling;
+								////newD[nextInd][firstMonomInds[j]] = plane[2] / scaling;
+								////newD[nextInd][quadraticMonomInds[i][j]] = plane[3] / scaling;
+								////std::cout << newD[nextInd][oneIndex] << " + " 
+										  ////<< newD[nextInd][firstMonomInds[i]] << "*x + "
+										  ////<< newD[nextInd][firstMonomInds[j]] << "*y + "
+										  ////<< newD[nextInd][quadraticMonomInds[i][j]] << "*xy > 0" << std::endl;
+							////}
 
-							// And vice-versa
+							//// And vice-versa
 							//} else {
 								//std::cout << "is below" << std::endl;
-								//newD[nextInd][oneIndex] = -plane[0];
-								//newD[nextInd][firstMonomInds[i]] = -plane[1];
-								//newD[nextInd][firstMonomInds[j]] = -plane[2];
-								//newD[nextInd][quadraticMonomInds[i][j]] = -plane[3];
-								//std::cout << newD[nextInd][oneIndex] << " + " 
-										  //<< newD[nextInd][firstMonomInds[i]] << "*x + "
-										  //<< newD[nextInd][firstMonomInds[j]] << "*y + "
-										  //<< newD[nextInd][quadraticMonomInds[i][j]] << "*xy > 0" << std::endl;
+								//double scaling = plane[3];
+								//newD[nextInd][oneIndex] = plane[0] / scaling;
+								//newD[nextInd][firstMonomInds[i]] = plane[1] / scaling;
+								//newD[nextInd][firstMonomInds[j]] = plane[2] / scaling;
+								//newD[nextInd][quadraticMonomInds[i][j]] = plane[3] / scaling;
+								////std::cout << newD[nextInd][oneIndex] << " + " 
+										  ////<< newD[nextInd][firstMonomInds[i]] << "*x + "
+										  ////<< newD[nextInd][firstMonomInds[j]] << "*y + "
+										  ////<< newD[nextInd][quadraticMonomInds[i][j]] << "*xy > 0" << std::endl;
 								//nextInd++;
 							//}
 
-							// x=0 y=0 xy=0 should always be in it TODO
-							// x=0 y=+-0.707 xy=0 should always be in it
+							//// x=0 y=0 xy=0 should always be in it TODO
+							//// x=0 y=+-0.707 xy=0 should always be in it
 
-							std::cout << std::endl;
+							////std::cout << std::endl;
 
-						}
+						//}
 
-					}
+						////return;
 
-				}
+					//}
+
+				//}
 
 				// max(max^2,min^2) - x[i]^2 > 0
 				//for (int i=0; i<toProcess[0].size(); i++) {
@@ -5028,19 +5030,17 @@ public:
 
 			// Solve the problem
 			DM->setValue(monty::new_array_ptr<double>(newD));
-			cM->setValue(monty::new_array_ptr<double>(newC));
 			M->solve();
 			auto statProb = M->getProblemStatus();
 			auto statSol = M->getPrimalSolutionStatus();
 
 			// If infeasible, good
-			if (statProb == mosek::fusion::ProblemStatus::PrimalInfeasible || statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown) {
+			if (statProb == mosek::fusion::ProblemStatus::PrimalInfeasible || statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown || M->primalObjValue() > 1e-5) {
 
 				// Keep track of how many were ill-posed
-				if (statProb != mosek::fusion::ProblemStatus::PrimalInfeasible) {
+				if (statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown) {
 					numIllPosed++;
 				}
-
 
 				// Update the total area count
 				totalArea += areaCovered;
@@ -5145,7 +5145,7 @@ public:
 
 		// Benchmarks
 		// d2n4 42 iterations 0.1s (6 vars)
-		// d3n5 29996 iterations 8m (18 vars)
+		// d3n5 35984 iterations 6m (18 vars)
 
 	}
 
