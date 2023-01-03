@@ -4051,203 +4051,6 @@ public:
 	}
 
 	// Solve a SDP program given an objective and zero/positive constraints
-	std::pair<bool,std::vector<polyType>> solveSDPWithCuts(std::vector<std::pair<double,double>>& varMinMax, std::vector<Polynomial<polyType>>& conZeroLinear, std::vector<Polynomial<polyType>> conPositiveLinear, std::vector<std::string>& monoms, std::vector<std::vector<Polynomial<polyType>>>& monomProducts, std::vector<std::tuple<double,int,int>> qCones={}) {
-
-		// Create the PSD matrices from this list
-		std::vector<std::shared_ptr<monty::ndarray<int,1>>> shouldBePSD;
-		for (int j=0; j<monomProducts.size(); j++) {
-
-			// Get the list of all monomial locations for the PSD matrix
-			std::vector<int> monLocs;
-			for (int i=0; i<monomProducts[j].size(); i++) {
-				for (int k=0; k<monomProducts[j].size(); k++) {
-
-					// Calculate the product
-					std::string monString = (monomProducts[j][i]*monomProducts[j][k]).getMonomials()[0];
-
-					// Find this in the monomial list
-					auto loc = std::find(monoms.begin(), monoms.end(), monString);
-					if (loc != monoms.end()) {
-						monLocs.push_back(loc - monoms.begin());
-					} else {
-						monLocs.push_back(monoms.size());
-						monoms.push_back(monString);
-					}
-
-				}
-			}
-
-			// This (when reformatted) should be positive-semidefinite
-			shouldBePSD.push_back(monty::new_array_ptr<int>(monLocs));
-
-		}
-
-		// Set some vars
-		int oneIndex = 0;
-		int varsTotal = monoms.size();
-
-		// Get the inds of the first order monomials and their squares
-		std::vector<int> firstMonomInds(varMinMax.size(), -1);
-		std::vector<int> squaredMonomInds(varMinMax.size(), -1);
-		std::vector<int> fourthMonomInds(varMinMax.size(), -1);
-		int highestOrder = 1;
-		for (int i=0; i<monoms.size(); i++) {
-			if (monoms[i].size() == digitsPerInd) {
-				firstMonomInds[std::stoi(monoms[i])] = i;
-			} else if (monoms[i].size() == 2*digitsPerInd && monoms[i].substr(0,digitsPerInd) == monoms[i].substr(digitsPerInd,digitsPerInd)) {
-				squaredMonomInds[std::stoi(monoms[i].substr(0,digitsPerInd))] = i;
-				highestOrder = 2;
-			} else if (monoms[i].size() == 4*digitsPerInd && monoms[i].substr(0,digitsPerInd) == monoms[i].substr(digitsPerInd,digitsPerInd) && monoms[i].substr(digitsPerInd,digitsPerInd) == monoms[i].substr(2*digitsPerInd,digitsPerInd) && monoms[i].substr(2*digitsPerInd,digitsPerInd) == monoms[i].substr(3*digitsPerInd,digitsPerInd)) {
-				fourthMonomInds[std::stoi(monoms[i].substr(0,digitsPerInd))] = i;
-				highestOrder = 4;
-			}
-		}
-
-		// Calculate the linear constraints on the quadratics
-		if (highestOrder >= 2) {
-			for (int i=0; i<varMinMax.size(); i++) {
-
-				// Given two points, find ax+by+c=0
-				std::vector<double> point1 = {varMinMax[i].first, varMinMax[i].first*varMinMax[i].first};
-				std::vector<double> point2 = {varMinMax[i].second, varMinMax[i].second*varMinMax[i].second};
-				double a = point2[1]-point1[1];
-				double b = point1[0]-point2[0];
-				double c = -a*point1[0]-b*point1[1];
-
-				// Add this as a linear pos con
-				Polynomial<polyType> newCon1(varsTotal);
-				newCon1.addTerm(a, {firstMonomInds[i]});
-				newCon1.addTerm(b, {squaredMonomInds[i]});
-				newCon1.addTerm(c, {});
-				conPositiveLinear.push_back(newCon1);
-
-			}
-
-		} 
-		
-		// Calculate the linear constraints on the quartics 
-		if (highestOrder >= 4) {
-			for (int i=0; i<varMinMax.size(); i++) {
-
-				// Given two points, find ax+by+c=0
-				std::vector<double> point1 = {varMinMax[i].first, std::pow(varMinMax[i].first,4)};
-				std::vector<double> point2 = {varMinMax[i].second, std::pow(varMinMax[i].second,4)};
-				double a = point2[1]-point1[1];
-				double b = point1[0]-point2[0];
-				double c = -a*point1[0]-b*point1[1];
-
-				// Add this as a linear pos con
-				Polynomial<polyType> newCon1(varsTotal);
-				newCon1.addTerm(a, {firstMonomInds[i]});
-				newCon1.addTerm(b, {fourthMonomInds[i]});
-				newCon1.addTerm(c, {});
-				conPositiveLinear.push_back(newCon1);
-
-			}
-		}
-
-		// Convert the linear equality constraints to MOSEK form
-		std::vector<int> ARows;
-		std::vector<int> ACols;
-		std::vector<polyType> AVals;
-		for (int i=0; i<conZeroLinear.size(); i++) {
-			for (auto const &pair: conZeroLinear[i].coeffs) {
-				ARows.push_back(i);
-				if (pair.first == "") {
-					ACols.push_back(oneIndex);
-				} else {
-					ACols.push_back(std::stoi(pair.first));
-				}
-				AVals.push_back(pair.second);
-			}
-		}
-		auto AM = mosek::fusion::Matrix::sparse(conZeroLinear.size(), varsTotal, monty::new_array_ptr<int>(ARows), monty::new_array_ptr<int>(ACols), monty::new_array_ptr<polyType>(AVals));
-
-		// Convert the linear positivity constraints to MOSEK form
-		std::vector<int> BRows;
-		std::vector<int> BCols;
-		std::vector<polyType> BVals;
-		for (int i=0; i<conPositiveLinear.size(); i++) {
-			for (auto const &pair: conPositiveLinear[i].coeffs) {
-				BRows.push_back(i);
-				if (pair.first == "") {
-					BCols.push_back(oneIndex);
-				} else {
-					BCols.push_back(std::stoi(pair.first));
-				}
-				BVals.push_back(pair.second);
-			}
-		}
-		auto BM = mosek::fusion::Matrix::sparse(conPositiveLinear.size(), varsTotal, monty::new_array_ptr<int>(BRows), monty::new_array_ptr<int>(BCols), monty::new_array_ptr<polyType>(BVals));
-
-		// The box constraints, given our box
-		std::vector<double> mins(monoms.size(), -1);
-		std::vector<double> maxs(monoms.size(), 1);
-		for (int i=0; i<varMinMax.size(); i++) {
-			mins[firstMonomInds[i]] = varMinMax[i].first;
-			mins[squaredMonomInds[i]] = 0;
-			maxs[firstMonomInds[i]] = varMinMax[i].second;
-			maxs[squaredMonomInds[i]] = std::max(varMinMax[i].first*varMinMax[i].first, varMinMax[i].second*varMinMax[i].second);
-		}
-
-		// Create a model
-		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
-
-		// DEBUG
-		//M->setLogHandler([=](const std::string & msg){std::cout << msg << std::flush;});
-
-		// Create the variable
-		mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(monty::new_array_ptr<double>(mins), monty::new_array_ptr<double>(maxs)));
-
-		// The first element of the vector should be one
-		M->constraint(xM->index(oneIndex), mosek::fusion::Domain::equalsTo(1.0));
-
-		// Linear equality constraints
-		M->constraint(mosek::fusion::Expr::mul(AM, xM), mosek::fusion::Domain::equalsTo(0.0));
-
-		// Linear positivity constraints
-		M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(0));
-
-		// SDP constraints
-		for (int i=0; i<shouldBePSD.size(); i++) {
-			int matDim = std::sqrt(shouldBePSD[i]->size());
-			M->constraint(xM->pick(shouldBePSD[i])->reshape(matDim, matDim), mosek::fusion::Domain::inPSDCone(matDim));
-		}
-
-		// Quadratic cones
-		for (int i=0; i<qCones.size(); i++) {
-			M->constraint(mosek::fusion::Expr::vstack(std::sqrt(std::get<0>(qCones[i])), xM->index(firstMonomInds[std::get<1>(qCones[i])]), xM->index(firstMonomInds[std::get<2>(qCones[i])])), mosek::fusion::Domain::inQCone(3));
-		}
-
-		// Solve the problem
-		M->solve();
-		auto statProb = M->getProblemStatus();
-		auto statSol = M->getPrimalSolutionStatus();
-
-		// If valid, return this fact
-		if (statProb == mosek::fusion::ProblemStatus::PrimalInfeasible || statSol == mosek::fusion::SolutionStatus::Unknown) {
-			return std::pair<bool,std::vector<polyType>>(false, {});
-
-		// Otherwise, extract the result
-		} else {
-
-			// Get the solution values
-			auto sol = *(xM->level());
-			polyType outer = M->primalObjValue();
-
-			// Output the relevent moments
-			std::vector<polyType> solVec(xM->getSize());
-			for (int i=0; i<solVec.size(); i++) {
-				solVec[i] = sol[i];
-			}
-
-			return std::pair<bool,std::vector<polyType>>(true, solVec);
-
-		}
-
-	}
-
-	// Solve a SDP program given an objective and zero/positive constraints
 	std::pair<polyType,std::vector<polyType>> solveSDP(Polynomial<polyType>& objLinear, std::vector<Polynomial<polyType>>& conZeroLinear, std::vector<Polynomial<polyType>> conPositiveLinear, std::vector<std::string>& monoms, std::vector<std::vector<Polynomial<polyType>>>& monomProducts) {
 
 		// Create the PSD matrices from this list
@@ -4652,6 +4455,44 @@ public:
 		}
 	}
 
+	// Calculate the equation of a line given 2 points
+	// In the form a + bx + cy = 0
+	std::vector<double> getLineFromPoints(std::vector<double> point1, std::vector<double> point2) {
+		double b = point2[1]-point1[1];
+		double c = point1[0]-point2[0];
+		double a = -b*point1[0]-c*point1[1];
+		return {a, b, c};
+	}
+
+	// Calculate the equation of a plane given 2 points TODO
+	// In the form a + bx + cy + dz = 0
+	std::vector<double> getPlaneFromPoints(std::vector<double> A, std::vector<double> B, std::vector<double> C) {
+
+		// Get two vectors in the plane
+		std::vector<double> AC(3);
+		std::vector<double> AB(3);
+		for (int i=0; i<3; i++) {
+			AC[i] = C[i] - A[i];
+			AB[i] = B[i] - A[i];
+		}
+
+		// Calculate the normal to these vectors
+		std::vector<double> n(3);
+		n[0] = AC[1]*AB[2] - AC[2]*AB[1];
+		n[1] = AC[2]*AB[0] - AC[0]*AB[2];
+		n[2] = AC[0]*AB[1] - AC[1]*AB[0];
+
+		// Calculate the constant term
+		double d = 0;
+		for (int i=0; i<3; i++) {
+			d += n[i]*A[i];
+		}
+
+		// This is then everything we need to define the plane
+		return {d, n[0], n[1], n[2]};
+
+	}
+
 	// Attempt to find a series of constraints that show this is infeasible
 	void proveInfeasible(int maxIters=-1, std::string level="1f", double bound=1) {
 
@@ -4882,17 +4723,15 @@ public:
 
 		// Get the inds of the first order monomials and their squares
 		std::vector<int> firstMonomInds(varMinMax.size(), -1);
-		std::vector<int> squaredMonomInds(varMinMax.size(), -1);
-		std::vector<int> fourthMonomInds(varMinMax.size(), -1);
+		std::vector<std::vector<int>> quadraticMonomInds(varMinMax.size(), std::vector<int>(varMinMax.size(), 1));
 		for (int i=0; i<monoms.size(); i++) {
 			if (monoms[i].size() == digitsPerInd) {
 				firstMonomInds[std::stoi(monoms[i])] = i;
-			} else if (monoms[i].size() == 2*digitsPerInd && monoms[i].substr(0,digitsPerInd) == monoms[i].substr(digitsPerInd,digitsPerInd)) {
-				squaredMonomInds[std::stoi(monoms[i].substr(0,digitsPerInd))] = i;
-				degree = std::max(degree, 2);
-			} else if (monoms[i].size() == 4*digitsPerInd && monoms[i].substr(0,digitsPerInd) == monoms[i].substr(digitsPerInd,digitsPerInd) && monoms[i].substr(digitsPerInd,digitsPerInd) == monoms[i].substr(2*digitsPerInd,digitsPerInd) && monoms[i].substr(2*digitsPerInd,digitsPerInd) == monoms[i].substr(3*digitsPerInd,digitsPerInd)) {
-				fourthMonomInds[std::stoi(monoms[i].substr(0,digitsPerInd))] = i;
-				degree = std::max(degree, 4);
+			} else if (monoms[i].size() == 2*digitsPerInd) {
+				int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
+				int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+				quadraticMonomInds[ind1][ind2] = i;
+				quadraticMonomInds[ind2][ind1] = i;
 			}
 		}
 
@@ -4975,22 +4814,24 @@ public:
 
 		// Parameterized linear positivity constraints TODO
 		int numParamCons = maxVariables;
+		numParamCons += 4*maxVariables*maxVariables;
 		//numParamCons += 2*maxVariables;
 		//numParamCons += maxVariables;
-		std::vector<long> sparsity;
-		for (int i=0; i<toProcess[0].size(); i++) {
-			sparsity.push_back((i)*varsTotal + firstMonomInds[i]);
-			sparsity.push_back((i)*varsTotal + squaredMonomInds[i]);
-			sparsity.push_back((i)*varsTotal + oneIndex);
+		//std::vector<long> sparsity;
+		//for (int i=0; i<toProcess[0].size(); i++) {
+			//sparsity.push_back((i)*varsTotal + firstMonomInds[i]);
+			//sparsity.push_back((i)*varsTotal + quadraticMonomInds[i][i]);
+			//sparsity.push_back((i)*varsTotal + oneIndex);
 			//sparsity.push_back((i+maxVariables)*varsTotal + firstMonomInds[i]);
 			//sparsity.push_back((i+maxVariables)*varsTotal + oneIndex);
 			//sparsity.push_back((i+2*maxVariables)*varsTotal + firstMonomInds[i]);
 			//sparsity.push_back((i+2*maxVariables)*varsTotal + oneIndex);
-			//sparsity.push_back((i+3*maxVariables)*varsTotal + squaredMonomInds[i]);
+			//sparsity.push_back((i+3*maxVariables)*varsTotal + quadraticMonomInds[i][i]);
 			//sparsity.push_back((i+3*maxVariables)*varsTotal + oneIndex);
-		}
-		std::sort(sparsity.begin(), sparsity.end());
-		mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
+		//}
+		//std::sort(sparsity.begin(), sparsity.end());
+		//mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
+		mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}));
 		M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::greaterThan(0));
 
 		// The first element of the vector should be one
@@ -5007,13 +4848,8 @@ public:
 		M->objective(mosek::fusion::ObjectiveSense::Minimize, mosek::fusion::Expr::dot(cM, xM));
 
 		// SDP constraints
-		for (int i=0; i<shouldBePSD.size(); i++) {
-			M->constraint(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Domain::inSVecPSDCone());
-		}
-
-		// Quadratic cones
-		//for (int i=0; i<qCones.size(); i++) {
-			//M->constraint(mosek::fusion::Expr::vstack(std::sqrt(std::get<0>(qCones[i])), xM->index(firstMonomInds[std::get<1>(qCones[i])]), xM->index(firstMonomInds[std::get<2>(qCones[i])])), mosek::fusion::Domain::inQCone(3));
+		//for (int i=0; i<shouldBePSD.size(); i++) {
+			//M->constraint(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Domain::inSVecPSDCone());
 		//}
 
 		// The order in which to branch
@@ -5057,7 +4893,7 @@ public:
 				//newD[i+maxVariables][oneIndex] = -toProcess[0][i].first;
 			//}
 
-			// max - x[i] > 0 TODO seem to be able to remove without probs
+			// max - x[i] > 0
 			//for (int i=0; i<toProcess[0].size(); i++) {
 				//newD[i+2*maxVariables][firstMonomInds[i]] = -1;
 				//newD[i+2*maxVariables][oneIndex] = toProcess[0][i].second;
@@ -5067,35 +4903,124 @@ public:
 			if (degree >= 2) {
 
 				// Update the linear constraints on the quadratics
+				int nextInd = 0;
 				for (int i=0; i<toProcess[0].size(); i++) {
 
 					// Given two points, find ax+by+c=0
 					std::vector<double> point1 = {toProcess[0][i].first, toProcess[0][i].first*toProcess[0][i].first};
 					std::vector<double> point2 = {toProcess[0][i].second, toProcess[0][i].second*toProcess[0][i].second};
-					double a = point2[1]-point1[1];
-					double b = point1[0]-point2[0];
-					double c = -a*point1[0]-b*point1[1];
+					std::vector<double> coeffs = getLineFromPoints(point1, point2);
 
 					// Add this as a linear pos con
-					newD[i][firstMonomInds[i]] = a;
-					newD[i][squaredMonomInds[i]] = b;
-					newD[i][oneIndex] = c;
+					newD[nextInd][oneIndex] = coeffs[0];
+					newD[nextInd][firstMonomInds[i]] = coeffs[1];
+					newD[nextInd][quadraticMonomInds[i][i]] = coeffs[2];
+					nextInd++;
 
 					// Point the objective function to maximize errors TODO
-					// TODO maximize if big area, minimize if small
-					if (areaCovered > 1e-5) {
-						newC[firstMonomInds[i]] = b;
-						newC[squaredMonomInds[i]] = a;
-					} else {
-						newC[firstMonomInds[i]] = -b;
-						newC[squaredMonomInds[i]] = -a;
+					//newC[firstMonomInds[i]] = coeffs[2];
+					//newC[quadraticMonomInds[i][i]] = coeffs[1];
+					//if (areaCovered > 1e-5) {
+						//newC[firstMonomInds[i]] = coeffs[2];
+						//newC[quadraticMonomInds[i][i]] = coeffs[1];
+					//} else {
+						//newC[firstMonomInds[i]] = -coeffs[2];
+						//newC[quadraticMonomInds[i][i]] = -coeffs[1];
+					//}
+
+				}
+
+				// Update the linear constraints on the off-diag quadratics
+				for (int i=0; i<toProcess[0].size(); i++) {
+					for (int j=i+1; j<toProcess[0].size(); j++) {
+
+						// The four points we need to include in this constraint
+						std::vector<std::vector<double>> points(4);
+						points[0] = {toProcess[0][i].first, toProcess[0][j].first, toProcess[0][i].first*toProcess[0][j].first};
+						points[1] = {toProcess[0][i].first, toProcess[0][j].second, toProcess[0][i].first*toProcess[0][j].second};
+						points[2] = {toProcess[0][i].second, toProcess[0][j].first, toProcess[0][i].second*toProcess[0][j].first};
+						points[3] = {toProcess[0][i].second, toProcess[0][j].second, toProcess[0][i].second*toProcess[0][j].second};
+
+						std::cout << std::endl;
+						std::cout << i << " " << j << " " << monoms[quadraticMonomInds[i][j]] << std::endl;
+						std::cout << points << std::endl;
+						std::cout << std::endl;
+
+						// For each combination of three of these four TODO
+						std::vector<std::vector<int>> pointSets = {
+							{0,1,2},
+							{0,1,3},
+							{0,2,3},
+							{1,2,3}
+						};
+						for (int k=0; k<pointSets.size(); k++) {
+
+							// Get the plane
+							std::vector<double> plane = getPlaneFromPoints(points[pointSets[k][0]], points[pointSets[k][1]], points[pointSets[k][2]]);
+
+							// Check to see if it's above or below the ideal
+							double avgX = (points[pointSets[k][0]][0] + points[pointSets[k][1]][0] + points[pointSets[k][2]][0]) / 3.0;
+							double avgY = (points[pointSets[k][0]][1] + points[pointSets[k][1]][1] + points[pointSets[k][2]][1]) / 3.0;
+							double idealXY = avgX * avgY;
+							double actualXY = -(plane[0] + avgX*plane[1] + avgY*plane[2]) / plane[3];
+							std::cout << plane << std::endl;
+							std::cout << "avgX = " << avgX << ", avgY = " << avgY << std::endl;
+							std::cout << "idealXY = " << idealXY << ", actualXY = " << actualXY << std::endl;
+
+							// If it's above, we constraint to the area below
+							//if (actualXY > idealXY) {
+							if (std::abs(plane[0])  > 1e-5) {
+								//std::cout << "is above" << std::endl;
+								double scaling = plane[0];
+								newD[nextInd][oneIndex] = plane[0] / scaling;
+								newD[nextInd][firstMonomInds[i]] = plane[1] / scaling;
+								newD[nextInd][firstMonomInds[j]] = plane[2] / scaling;
+								newD[nextInd][quadraticMonomInds[i][j]] = plane[3] / scaling;
+								std::cout << newD[nextInd][oneIndex] << " + " 
+										  << newD[nextInd][firstMonomInds[i]] << "*x + "
+										  << newD[nextInd][firstMonomInds[j]] << "*y + "
+										  << newD[nextInd][quadraticMonomInds[i][j]] << "*xy > 0" << std::endl;
+								nextInd++;
+							} else {
+								double scaling = 1.0;
+								newD[nextInd][oneIndex] = plane[0] / scaling;
+								newD[nextInd][firstMonomInds[i]] = plane[1] / scaling;
+								newD[nextInd][firstMonomInds[j]] = plane[2] / scaling;
+								newD[nextInd][quadraticMonomInds[i][j]] = plane[3] / scaling;
+								std::cout << newD[nextInd][oneIndex] << " + " 
+										  << newD[nextInd][firstMonomInds[i]] << "*x + "
+										  << newD[nextInd][firstMonomInds[j]] << "*y + "
+										  << newD[nextInd][quadraticMonomInds[i][j]] << "*xy > 0" << std::endl;
+							}
+
+							// And vice-versa
+							//} else {
+								//std::cout << "is below" << std::endl;
+								//newD[nextInd][oneIndex] = -plane[0];
+								//newD[nextInd][firstMonomInds[i]] = -plane[1];
+								//newD[nextInd][firstMonomInds[j]] = -plane[2];
+								//newD[nextInd][quadraticMonomInds[i][j]] = -plane[3];
+								//std::cout << newD[nextInd][oneIndex] << " + " 
+										  //<< newD[nextInd][firstMonomInds[i]] << "*x + "
+										  //<< newD[nextInd][firstMonomInds[j]] << "*y + "
+										  //<< newD[nextInd][quadraticMonomInds[i][j]] << "*xy > 0" << std::endl;
+								//nextInd++;
+							//}
+
+							// x=0 y=0 xy=0 should always be in it TODO
+							// x=0 y=+-0.707 xy=0 should always be in it
+
+							std::cout << std::endl;
+
+						}
+
 					}
 
 				}
 
 				// max(max^2,min^2) - x[i]^2 > 0
 				//for (int i=0; i<toProcess[0].size(); i++) {
-					//newD[i+3*maxVariables][squaredMonomInds[i]] = -1;
+					//newD[i+3*maxVariables][quadraticMonomInds[i][i]] = -1;
 					//newD[i+3*maxVariables][oneIndex] = std::max(std::pow(toProcess[0][i].second, 2), std::pow(toProcess[0][i].first, 2));
 				//}
 
