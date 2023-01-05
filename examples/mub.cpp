@@ -12,6 +12,7 @@ int main(int argc, char ** argv) {
 	bool useQuadratic = true;
 	bool removeLinear = true;
 	std::string level = "1f";
+	std::string fileName = "";
 	for (int i=0; i<argc; i++) {
 		std::string arg = argv[i];
 		if (arg == "-h") {
@@ -23,6 +24,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -w          use whole bases, not partial" << std::endl;
 			std::cout << " -f          try to find a feasible point" << std::endl;
 			std::cout << " -r          don't use linear reductions" << std::endl;
+			std::cout << " -o [str]    log points to a csv file" << std::endl;
 			return 0;
 		} else if (arg == "-d" && i+1 < argc) {
 			d = std::stoi(argv[i+1]);
@@ -32,6 +34,9 @@ int main(int argc, char ** argv) {
 			i++;
 		} else if (arg == "-l" && i+1 < argc) {
 			level = argv[i+1];
+			i++;
+		} else if (arg == "-o" && i+1 < argc) {
+			fileName = argv[i+1];
 			i++;
 		} else if (arg == "-4") {
 			useQuadratic = false;
@@ -93,7 +98,9 @@ int main(int argc, char ** argv) {
 	for (int i2=0; i2<dLimits.size(); i2++) {
 
 		// List the bases and the variables indices
-		std::cout << "Basis indices:" << std::endl;
+		std::cout << "---------------------" << std::endl;
+		std::cout << "Basis Indices:" << std::endl;
+		std::cout << "---------------------" << std::endl;
 		int nextInd = 0;
 		for (int i=0; i<n; i++) {
 			std::cout << std::endl;
@@ -252,7 +259,7 @@ int main(int argc, char ** argv) {
 		// Add an ordering to all bases
 		std::vector<Polynomial<double>> orderingCons;
 
-		// Ordering within each basis TODO this doesn't fully constrain
+		// Ordering within each basis
 		int base = 2;
 		for (int i=1; i<n; i++) {
 			for (int j=0; j<dLimits[i2][i]-1; j++) {
@@ -349,20 +356,24 @@ int main(int argc, char ** argv) {
 
 					// Find a squared term
 					if (mons[m].size() == 2*digitsPerInd && mons[m].substr(0,digitsPerInd) == mons[m].substr(digitsPerInd,digitsPerInd)) {
-						int ogInd = std::stoi(mons[m].substr(0,digitsPerInd));
-						double ogCoeff = prob.conZero[i][mons[m]];
+						int realInd = std::stoi(mons[m].substr(0,digitsPerInd));
+						double realCoeff = prob.conZero[i][mons[m]];
 
 						// Now find the imag of this 
 						for (int m2=0; m2<mons.size(); m2++) {
-							if (mons[m2].size() == 2*digitsPerInd && mons[m2].substr(0,digitsPerInd) == mons[m2].substr(digitsPerInd,digitsPerInd) && std::stoi(mons[m2].substr(0,digitsPerInd)) == ogInd+conjDelta) {
+							if (mons[m2].size() == 2*digitsPerInd && mons[m2].substr(0,digitsPerInd) == mons[m2].substr(digitsPerInd,digitsPerInd) && std::stoi(mons[m2].substr(0,digitsPerInd)) == realInd+conjDelta) {
+								int imagInd = std::stoi(mons[m2].substr(0,digitsPerInd));
+								double imagCoeff = prob.conZero[i][mons[m2]];
 
 								// Add a scaled version of the corresponding normal equation to simplify
-								Polynomial<double> adjustment(numVars);
-								adjustment.addTerm(1.0/std::pow(d, 2), {});
-								adjustment.addTerm(-1.0/d, {ogInd, ogInd});
-								adjustment.addTerm(-1.0/d, {ogInd+conjDelta, ogInd+conjDelta});
-								prob.conZero[i] += adjustment;
-								break;
+								if (std::abs(realCoeff-imagCoeff) < 1e-6) {
+									Polynomial<double> adjustment(numVars);
+									adjustment.addTerm(realCoeff/d, {});
+									adjustment.addTerm(-realCoeff, {realInd, realInd});
+									adjustment.addTerm(-realCoeff, {imagInd, imagInd});
+									prob.conZero[i] += adjustment;
+									break;
+								}
 
 							}
 						}
@@ -373,12 +384,23 @@ int main(int argc, char ** argv) {
 
 			}
 
+			// Get rid of any almost zeros
+			prob.conZero[i] = prob.conZero[i].prune();
+
 		}
 
 		// Use as few indices as possible
 		std::unordered_map<int,int> reducedMap = prob.getMinimalMap();
 		prob = prob.replaceWithVariable(reducedMap);
+		std::cout << "---------------------" << std::endl;
+		std::cout << "Index Mapping: " << std::endl;
+		std::cout << "---------------------" << std::endl;
 		std::cout << std::endl;
+		std::cout << reducedMap << std::endl;
+		std::cout << std::endl;
+		std::cout << "---------------------" << std::endl;
+		std::cout << "Final Problem: " << std::endl;
+		std::cout << "---------------------" << std::endl;
 		std::cout << prob << std::endl;
 		std::cout << dLimits[i2] << " " << prob.maxVariables << std::endl;
 
@@ -454,21 +476,32 @@ int main(int argc, char ** argv) {
 		// If told to prove the search space is infeasible
 		} else if (task == "infeasible") {
 
-			// Try adding the squared cons too TODO
-			int ogCons = prob.conZero.size();
-			for (int i=0; i<ogCons; i++) {
-				prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]);
+			// If we're using a second level mat, add higher-order cons
+			if (level.find("2") != std::string::npos) {
+				int ogCons = prob.conZero.size();
+				for (int i=0; i<ogCons; i++) {
+					prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]);
+				}
 			}
-			//for (int i=0; i<ogCons; i++) {
-				//prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
-			//}
-			//int ogCons2 = prob.conPositive.size();
-			//for (int i=0; i<ogCons2; i++) {
-				//prob.conPositive.push_back(prob.conPositive[i]*prob.conPositive[i]);
-			//}
+
+			// If we're using a third level mat, add higher-order cons
+			if (level.find("3") != std::string::npos) {
+				int ogCons = prob.conZero.size();
+				for (int i=0; i<ogCons; i++) {
+					prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
+				}
+			}
+
+			// If we're using a third level mat, add higher-order cons
+			if (level.find("4") != std::string::npos) {
+				int ogCons = prob.conZero.size();
+				for (int i=0; i<ogCons; i++) {
+					prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
+				}
+			}
 
 			// Try to prove infeasiblity
-			prob.proveInfeasible(-1, level, 1.0/std::sqrt(d));
+			prob.proveInfeasible(-1, level, 1.0/std::sqrt(d), fileName);
 
 		}
 

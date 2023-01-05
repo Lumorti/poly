@@ -13,6 +13,7 @@
 #include <random>
 #include <algorithm>
 #include <iomanip>
+#include <fstream>
 
 // Use Eigen for matrix/vector ops
 #include <Eigen/Dense>
@@ -4494,7 +4495,7 @@ public:
 	}
 
 	// Attempt to find a series of constraints that show this is infeasible
-	void proveInfeasible(int maxIters=-1, std::string level="1f", double bound=1) {
+	void proveInfeasible(int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="") {
 
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
@@ -4740,6 +4741,37 @@ public:
 			}
 		}
 
+		// Add second order cone for x^2+y^2=1/d
+		std::vector<std::tuple<double,int,int>> qCones;
+		for (int i=0; i<conZero.size(); i++) {
+
+			// First make sure we have a constant and 3 terms total
+			if (conZero[i][""] < 0 && conZero[i].size() == 3) {
+
+				// Get vars and monoms from this
+				auto varsInThisPoly = conZero[i].getVariables();
+				auto monomsInThisPoly = conZero[i].getMonomials();
+
+				// Check to make sure all vars are squares
+				bool allSquares = true;
+				for (int j=0; j<monomsInThisPoly.size(); j++) {
+					if (monomsInThisPoly[j].size() >= 2*digitsPerInd) {
+						if (monomsInThisPoly[j].substr(0,digitsPerInd) != monomsInThisPoly[j].substr(digitsPerInd,digitsPerInd)) {
+							allSquares = false;
+						}
+					}
+				}
+
+				// If all valid, add to the quadratic cones list
+				if (allSquares) {
+					qCones.push_back({-conZero[i][""], varsInThisPoly[0], varsInThisPoly[1]});
+					//conZero.erase(conZero.begin()+i);
+					//i--;
+				}
+
+			}
+		}
+
 		// Set some vars
 		int oneIndex = 0;
 		int varsTotal = monoms.size();
@@ -4782,30 +4814,25 @@ public:
 		std::vector<double> mins(monoms.size(), -1);
 		std::vector<double> maxs(monoms.size(), 1);
 		for (int i=0; i<monoms.size(); i++) {
-			if (monoms[i].size() == 1*digitsPerInd) {
-				mins[i] = -bound;
-				maxs[i] = bound;
-			}
-			if (monoms[i].size() == 2*digitsPerInd) {
-				if (monoms[i].substr(0, digitsPerInd) == monoms[i].substr(digitsPerInd, digitsPerInd)) {
-					mins[i] = 0;
-				} else {
-					mins[i] = -std::pow(bound, 2);
+
+			// Check if the monom is a power of a single var
+			bool allSame = true;
+			int monomDegree = monoms[i].size() / digitsPerInd;
+			for (int j=1; j<monomDegree; j++) {
+				if (monoms[i].substr(j*digitsPerInd, digitsPerInd) != monoms[i].substr(0, digitsPerInd)) {
+					allSame = false;
+					break;
 				}
-				maxs[i] = std::pow(bound, 2);
 			}
-			if (monoms[i].size() == 3*digitsPerInd) {
-				mins[i] = -std::pow(bound, 3);
-				maxs[i] = std::pow(bound, 3);
+
+			// If it's an even power, it's positive
+			if (allSame && monomDegree % 2 == 0) {
+				mins[i] = 0;
+			} else {
+				mins[i] = -std::pow(bound, monomDegree);
 			}
-			if (monoms[i].size() == 4*digitsPerInd) {
-				if (monoms[i].substr(0, digitsPerInd) == monoms[i].substr(digitsPerInd, digitsPerInd) && monoms[i].substr(2*digitsPerInd, digitsPerInd) == monoms[i].substr(3*digitsPerInd, digitsPerInd)) {
-					mins[i] = 0;
-				} else {
-					mins[i] = -std::pow(bound, 4);
-				}
-				maxs[i] = std::pow(bound, 4);
-			}
+			maxs[i] = std::pow(bound, monomDegree);
+
 		}
 
 		// Create a model
@@ -4817,7 +4844,7 @@ public:
 		// Create the variable
 		mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(monty::new_array_ptr<double>(mins), monty::new_array_ptr<double>(maxs)));
 
-		// TODO
+		// Use an extra variable to minimize violation of SD
 		mosek::fusion::Variable::t lambda = M->variable();
 
 		// Parameterized linear positivity constraints TODO
@@ -4851,26 +4878,39 @@ public:
 		// Linear positivity constraints
 		M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(0));
 
-		// Try an objective function
-		//mosek::fusion::Parameter::t cM = M->parameter(varsTotal);
-		//M->objective(mosek::fusion::ObjectiveSense::Minimize, mosek::fusion::Expr::dot(cM, xM));
+		// Try to violate the SDP constraints the least
 		M->objective(mosek::fusion::ObjectiveSense::Minimize, lambda);
 
 		// SDP constraints
 		for (int i=0; i<shouldBePSD.size(); i++) {
-			//M->constraint(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Domain::inSVecPSDCone());
 			M->constraint(mosek::fusion::Expr::add(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Expr::mul(lambda, identityAsSVec[i])), mosek::fusion::Domain::inSVecPSDCone());
 		}
+
+		// Quadratic cones
+		//for (int i=0; i<qCones.size(); i++) {
+			//M->constraint(mosek::fusion::Expr::vstack(std::sqrt(std::get<0>(qCones[i])), xM->index(firstMonomInds[std::get<1>(qCones[i])]), xM->index(firstMonomInds[std::get<2>(qCones[i])])), mosek::fusion::Domain::inQCone(3));
+		//}
 
 		// The order in which to branch
 		std::vector<int> splitOrder;
 		for (int i=0; i<maxVariables; i++) {
 			splitOrder.push_back(i);
 		}
-		//std::random_device rd;
-		//auto rng = std::default_random_engine {rd()};
-		//std::shuffle(std::begin(splitOrder), std::end(splitOrder), rng);
-		//std::cout << splitOrder << std::endl;
+		std::random_device rd;
+		auto rng = std::default_random_engine {rd()};
+		std::shuffle(std::begin(splitOrder), std::end(splitOrder), rng);
+		std::cout << splitOrder << std::endl;
+
+		// Open a file if told to record the points
+		std::ofstream logFile;
+		if (logFileName.size() > 0) {
+			logFile.open(logFileName);
+			for (int i=0; i<toProcess[0].size(); i++) {
+				logFile << i << ", ";
+			}
+			logFile << "feasibility";
+			logFile << std::endl;
+		}
 
 		// Keep splitting until all fail
 		int iter = 0;
@@ -4879,13 +4919,25 @@ public:
 		iter = 0;
 		double totalArea = 0;
 		double areaCovered = 1;
-		int numFound = 0;
 		std::cout << std::scientific;
 		auto begin = std::chrono::steady_clock::now();
 		auto end = std::chrono::steady_clock::now();
 		double secondsPerIter = 0;
 		int numIllPosed = 0;
 		while (toProcess.size() > 0) {
+
+			// Try all possible splits TODO
+			//for (int i=0; i<toProcess[0].size(); i++) {
+
+				//// Split it
+				//double delta = (toProcess[0][bestInd].second - toProcess[0][bestInd].first) / 2.0;
+				//double midPoint = toProcess[0][bestInd].first + delta;
+				//auto copyLeft = toProcess[0];
+				//auto copyRight = toProcess[0];
+				//copyLeft[bestInd].second = midPoint;
+				//copyRight[bestInd].first = midPoint;
+
+			//}
 
 			// The area taken up by this section
 			areaCovered = 1;
@@ -4908,125 +4960,22 @@ public:
 				//newD[i+2*maxVariables][oneIndex] = toProcess[0][i].second;
 			//}
 
-			// If we have secord order monomials
-			if (degree >= 2) {
+			// Update the linear constraints on the quadratics
+			int nextInd = 0;
+			for (int i=0; i<toProcess[0].size(); i++) {
 
-				// Update the linear constraints on the quadratics
-				int nextInd = 0;
-				for (int i=0; i<toProcess[0].size(); i++) {
+				// Given two points, find ax+by+c=0
+				std::vector<double> point1 = {toProcess[0][i].first, toProcess[0][i].first*toProcess[0][i].first};
+				std::vector<double> point2 = {toProcess[0][i].second, toProcess[0][i].second*toProcess[0][i].second};
+				std::vector<double> coeffs = getLineFromPoints(point1, point2);
 
-					// Given two points, find ax+by+c=0
-					std::vector<double> point1 = {toProcess[0][i].first, toProcess[0][i].first*toProcess[0][i].first};
-					std::vector<double> point2 = {toProcess[0][i].second, toProcess[0][i].second*toProcess[0][i].second};
-					std::vector<double> coeffs = getLineFromPoints(point1, point2);
+				// Add this as a linear pos con
+				newD[nextInd][oneIndex] = coeffs[0];
+				newD[nextInd][firstMonomInds[i]] = coeffs[1];
+				newD[nextInd][quadraticMonomInds[i][i]] = coeffs[2];
+				nextInd++;
 
-					// Add this as a linear pos con
-					newD[nextInd][oneIndex] = coeffs[0];
-					newD[nextInd][firstMonomInds[i]] = coeffs[1];
-					newD[nextInd][quadraticMonomInds[i][i]] = coeffs[2];
-					nextInd++;
-
-				}
-
-				// Update the linear constraints on the off-diag quadratics
-				//for (int i=0; i<toProcess[0].size(); i++) {
-					//for (int j=i+1; j<toProcess[0].size(); j++) {
-
-						//// The four points we need to include in this constraint
-						//std::vector<std::vector<double>> points(4);
-						//points[0] = {toProcess[0][i].first, toProcess[0][j].first, toProcess[0][i].first*toProcess[0][j].first};
-						//points[1] = {toProcess[0][i].first, toProcess[0][j].second, toProcess[0][i].first*toProcess[0][j].second};
-						//points[2] = {toProcess[0][i].second, toProcess[0][j].first, toProcess[0][i].second*toProcess[0][j].first};
-						//points[3] = {toProcess[0][i].second, toProcess[0][j].second, toProcess[0][i].second*toProcess[0][j].second};
-
-						////std::cout << std::endl;
-						////std::cout << i << " " << j << " " << monoms[quadraticMonomInds[i][j]] << std::endl;
-						////std::cout << points << std::endl;
-						////std::cout << std::endl;
-
-						//// For each combination of three of these four TODO
-						//std::vector<std::vector<int>> pointSets = {
-							//{0,1,2},
-							//{0,1,3},
-							//{0,2,3},
-							//{1,2,3}
-						//};
-						//for (int k=0; k<pointSets.size(); k++) {
-
-							//// Get the plane
-							//std::vector<double> plane = getPlaneFromPoints(points[pointSets[k][0]], points[pointSets[k][1]], points[pointSets[k][2]]);
-
-							//// Check to see if it's above or below the ideal
-							//double avgX = (points[pointSets[k][0]][0] + points[pointSets[k][1]][0] + points[pointSets[k][2]][0]) / 3.0;
-							//double avgY = (points[pointSets[k][0]][1] + points[pointSets[k][1]][1] + points[pointSets[k][2]][1]) / 3.0;
-							//double idealXY = avgX * avgY;
-							//double actualXY = -(plane[0] + avgX*plane[1] + avgY*plane[2]) / plane[3];
-							////std::cout << plane << std::endl;
-							////std::cout << "avgX = " << avgX << ", avgY = " << avgY << std::endl;
-							////std::cout << "idealXY = " << idealXY << ", actualXY = " << actualXY << std::endl;
-
-							//// If it's above, we constraint to the area below
-							//if (actualXY > idealXY) {
-							////if (std::abs(plane[0])  > 1e-5) {
-								////std::cout << "is above" << std::endl;
-								////double scaling = plane[0];
-								//double scaling = plane[3];
-								//newD[nextInd][oneIndex] = -plane[0] / scaling;
-								//newD[nextInd][firstMonomInds[i]] = -plane[1] / scaling;
-								//newD[nextInd][firstMonomInds[j]] = -plane[2] / scaling;
-								//newD[nextInd][quadraticMonomInds[i][j]] = -plane[3] / scaling;
-								////std::cout << newD[nextInd][oneIndex] << " + " 
-										  ////<< newD[nextInd][firstMonomInds[i]] << "*x + "
-										  ////<< newD[nextInd][firstMonomInds[j]] << "*y + "
-										  ////<< newD[nextInd][quadraticMonomInds[i][j]] << "*xy > 0" << std::endl;
-								//nextInd++;
-							////} else {
-								////double scaling = 1.0;
-								////newD[nextInd][oneIndex] = plane[0] / scaling;
-								////newD[nextInd][firstMonomInds[i]] = plane[1] / scaling;
-								////newD[nextInd][firstMonomInds[j]] = plane[2] / scaling;
-								////newD[nextInd][quadraticMonomInds[i][j]] = plane[3] / scaling;
-								////std::cout << newD[nextInd][oneIndex] << " + " 
-										  ////<< newD[nextInd][firstMonomInds[i]] << "*x + "
-										  ////<< newD[nextInd][firstMonomInds[j]] << "*y + "
-										  ////<< newD[nextInd][quadraticMonomInds[i][j]] << "*xy > 0" << std::endl;
-							////}
-
-							//// And vice-versa
-							//} else {
-								//std::cout << "is below" << std::endl;
-								//double scaling = plane[3];
-								//newD[nextInd][oneIndex] = plane[0] / scaling;
-								//newD[nextInd][firstMonomInds[i]] = plane[1] / scaling;
-								//newD[nextInd][firstMonomInds[j]] = plane[2] / scaling;
-								//newD[nextInd][quadraticMonomInds[i][j]] = plane[3] / scaling;
-								////std::cout << newD[nextInd][oneIndex] << " + " 
-										  ////<< newD[nextInd][firstMonomInds[i]] << "*x + "
-										  ////<< newD[nextInd][firstMonomInds[j]] << "*y + "
-										  ////<< newD[nextInd][quadraticMonomInds[i][j]] << "*xy > 0" << std::endl;
-								//nextInd++;
-							//}
-
-							//// x=0 y=0 xy=0 should always be in it TODO
-							//// x=0 y=+-0.707 xy=0 should always be in it
-
-							////std::cout << std::endl;
-
-						//}
-
-						////return;
-
-					//}
-
-				//}
-
-				// max(max^2,min^2) - x[i]^2 > 0
-				//for (int i=0; i<toProcess[0].size(); i++) {
-					//newD[i+3*maxVariables][quadraticMonomInds[i][i]] = -1;
-					//newD[i+3*maxVariables][oneIndex] = std::max(std::pow(toProcess[0][i].second, 2), std::pow(toProcess[0][i].first, 2));
-				//}
-
-			} 
+			}
 
 			// Solve the problem
 			DM->setValue(monty::new_array_ptr<double>(newD));
@@ -5035,11 +4984,25 @@ public:
 			auto statSol = M->getPrimalSolutionStatus();
 
 			// If infeasible, good
-			if (statProb == mosek::fusion::ProblemStatus::PrimalInfeasible || statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown || M->primalObjValue() > 1e-5) {
+			if (statProb == mosek::fusion::ProblemStatus::PrimalInfeasible || statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown || M->primalObjValue() > 1e-7) {
 
 				// Keep track of how many were ill-posed
 				if (statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown) {
 					numIllPosed++;
+				}
+
+				// Write to a file if told to
+				if (logFileName.size() > 0 && statSol != mosek::fusion::SolutionStatus::Undefined && statSol != mosek::fusion::SolutionStatus::Unknown && statProb != mosek::fusion::ProblemStatus::PrimalInfeasible) {
+					auto sol = *(xM->level());
+					std::vector<polyType> solVec(xM->getSize());
+					for (int i=0; i<solVec.size(); i++) {
+						solVec[i] = sol[i];
+					}
+					for (int i=0; i<toProcess[0].size(); i++) {
+						logFile << solVec[firstMonomInds[i]] << ", ";
+					}
+					logFile << "no";
+					logFile << std::endl;
 				}
 
 				// Update the total area count
@@ -5079,26 +5042,23 @@ public:
 					}
 				}
 
-				// Find the biggest section
-				double biggestDiff = -10000;
-				for (int i=0; i<splitOrder.size(); i++) {
-					double diff = toProcess[0][splitOrder[i]].second-toProcess[0][splitOrder[i]].first;
-					if (diff > biggestDiff) {
-						biggestDiff = diff;
-						//bestInd = splitOrder[i];
-					}
-				}
+				// If we've converged TODO
+				if (biggestError < 1e-6) {
 
-				// If we've converged
-				if (biggestError < 1e-5) {
-					std::cout << std::endl;
-					std::cout << "converged in " << iter << " iters to region " << toProcess[0] << std::endl;
-					std::cout << "with solution:" << std::endl;
-					for (int k=0; k<solVec.size(); k++) {
-						std::cout << monoms[k] << "    " << solVec[k] << std::endl;
+					// If logging, write to file and continue
+					if (logFileName.size() > 0) {
+						for (int i=0; i<toProcess[0].size(); i++) {
+							logFile << solVec[firstMonomInds[i]] << ", ";
+						}
+						logFile << "yes";
+						logFile << std::endl;
+
+					// Otheriwse write to std::out and stop
+					} else {
+						std::cout << std::endl;
+						std::cout << "converged in " << iter << " iters to region " << toProcess[0] << std::endl;
+						break;
 					}
-					break;
-					numFound++;
 
 				// If there's still space to split
 				} else {
@@ -5115,6 +5075,7 @@ public:
 					toProcess.insert(toProcess.begin()+1, copyLeft);
 					toProcess.insert(toProcess.begin()+1, copyRight);
 
+
 				}
 
 			}
@@ -5128,7 +5089,7 @@ public:
 
 			// Per-iteration output
 			std::cout << std::defaultfloat;
-			std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << " " << areaCovered << "            \r" << std::flush;
+			std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << areaCovered << "      \r" << std::flush;
 
 			// Remove the one we just processed
 			toProcess.erase(toProcess.begin());
