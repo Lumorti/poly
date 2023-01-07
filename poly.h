@@ -4896,10 +4896,10 @@ public:
 		for (int i=0; i<maxVariables; i++) {
 			splitOrder.push_back(i);
 		}
-		std::random_device rd;
-		auto rng = std::default_random_engine {rd()};
-		std::shuffle(std::begin(splitOrder), std::end(splitOrder), rng);
-		std::cout << splitOrder << std::endl;
+		//std::random_device rd;
+		//auto rng = std::default_random_engine {rd()};
+		//std::shuffle(std::begin(splitOrder), std::end(splitOrder), rng);
+		//std::cout << splitOrder << std::endl;
 
 		// Open a file if told to record the points
 		std::ofstream logFile;
@@ -4919,25 +4919,11 @@ public:
 		iter = 0;
 		double totalArea = 0;
 		double areaCovered = 1;
-		std::cout << std::scientific;
 		auto begin = std::chrono::steady_clock::now();
 		auto end = std::chrono::steady_clock::now();
 		double secondsPerIter = 0;
 		int numIllPosed = 0;
 		while (toProcess.size() > 0) {
-
-			// Try all possible splits TODO
-			//for (int i=0; i<toProcess[0].size(); i++) {
-
-				//// Split it
-				//double delta = (toProcess[0][bestInd].second - toProcess[0][bestInd].first) / 2.0;
-				//double midPoint = toProcess[0][bestInd].first + delta;
-				//auto copyLeft = toProcess[0];
-				//auto copyRight = toProcess[0];
-				//copyLeft[bestInd].second = midPoint;
-				//copyRight[bestInd].first = midPoint;
-
-			//}
 
 			// The area taken up by this section
 			areaCovered = 1;
@@ -4947,18 +4933,6 @@ public:
 
 			// The new parameterized constraint vector and objective
 			std::vector<std::vector<double>> newD(numParamCons, std::vector<double>(varsTotal, 0));
-
-			// x[i] - min > 0
-			//for (int i=0; i<toProcess[0].size(); i++) {
-				//newD[i+maxVariables][firstMonomInds[i]] = 1;
-				//newD[i+maxVariables][oneIndex] = -toProcess[0][i].first;
-			//}
-
-			// max - x[i] > 0
-			//for (int i=0; i<toProcess[0].size(); i++) {
-				//newD[i+2*maxVariables][firstMonomInds[i]] = -1;
-				//newD[i+2*maxVariables][oneIndex] = toProcess[0][i].second;
-			//}
 
 			// Update the linear constraints on the quadratics
 			int nextInd = 0;
@@ -5063,18 +5037,89 @@ public:
 				// If there's still space to split
 				} else {
 
-					// Split it
-					double delta = (toProcess[0][bestInd].second - toProcess[0][bestInd].first) / 2.0;
-					double midPoint = toProcess[0][bestInd].first + delta;
-					auto copyLeft = toProcess[0];
-					auto copyRight = toProcess[0];
-					copyLeft[bestInd].second = midPoint;
-					copyRight[bestInd].first = midPoint;
+					// Try all possible splits TODO
+					bool foundInfeas = false;
+					for (int i=0; i<toProcess[0].size(); i++) {
+						break;
+					//for (int l=0; l<3; l++) {
+						//int i = int(toProcess[0].size()*(double(rand())/RAND_MAX));
 
-					// Add the new paths to the queue
-					toProcess.insert(toProcess.begin()+1, copyLeft);
-					toProcess.insert(toProcess.begin()+1, copyRight);
+						// Don't do the best index, since we do this anyway
+						//if (i == bestInd) {
+							//continue;
+						//}
 
+						// Split it
+						double delta = (toProcess[0][i].second - toProcess[0][i].first) / 2.0;
+						double midPoint = toProcess[0][i].first + delta;
+						auto copyLeft = toProcess[0];
+						auto copyRight = toProcess[0];
+						copyLeft[i].second = midPoint;
+						copyRight[i].first = midPoint;
+						std::vector<std::vector<std::pair<double,double>>> splits = {copyLeft, copyRight};
+
+						// Check each split
+						int numInfeas = 0;
+						for (int j=0; j<splits.size(); j++) {
+
+							// Update the linear constraints on the quadratics
+							newD = std::vector<std::vector<double>>(numParamCons, std::vector<double>(varsTotal, 0));
+							nextInd = 0;
+							for (int k=0; k<splits[j].size(); k++) {
+
+								// Given two points, find ax+by+c=0
+								std::vector<double> point1 = {splits[j][k].first, splits[j][k].first*splits[j][k].first};
+								std::vector<double> point2 = {splits[j][k].second, splits[j][k].second*splits[j][k].second};
+								std::vector<double> coeffs = getLineFromPoints(point1, point2);
+
+								// Add this as a linear pos con
+								newD[nextInd][oneIndex] = coeffs[0];
+								newD[nextInd][firstMonomInds[i]] = coeffs[1];
+								newD[nextInd][quadraticMonomInds[i][i]] = coeffs[2];
+								nextInd++;
+
+							}
+
+							// Solve the problem
+							DM->setValue(monty::new_array_ptr<double>(newD));
+							M->solve();
+							statProb = M->getProblemStatus();
+							statSol = M->getPrimalSolutionStatus();
+
+							// If infeasible, good
+							if (statProb == mosek::fusion::ProblemStatus::PrimalInfeasible || statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown || M->primalObjValue() > 1e-7) {
+								numInfeas++;
+							} else {
+								break;
+							}
+
+						}
+
+						// If we have two infeasible, this is better
+						if (numInfeas == 2) {
+							bestInd = i;
+							foundInfeas = true;
+							totalArea += areaCovered;
+							break;
+						}
+
+					}
+
+					if (!foundInfeas) {
+
+						// Split it
+						double delta = (toProcess[0][bestInd].second - toProcess[0][bestInd].first) / 2.0;
+						double midPoint = toProcess[0][bestInd].first + delta;
+						auto copyLeft = toProcess[0];
+						auto copyRight = toProcess[0];
+						copyLeft[bestInd].second = midPoint;
+						copyRight[bestInd].first = midPoint;
+
+						// Add the new paths to the queue
+						toProcess.insert(toProcess.begin()+1, copyLeft);
+						toProcess.insert(toProcess.begin()+1, copyRight);
+
+					}
 
 				}
 
@@ -5098,7 +5143,7 @@ public:
 			iter++;
 			if (maxIters >= 0 && iter > maxIters) {
 				break;
-			}
+			}	
 
 		}
 		std::cout << std::endl;

@@ -11,6 +11,7 @@ int main(int argc, char ** argv) {
 	bool useFull = false;
 	bool useQuadratic = true;
 	bool removeLinear = true;
+	int maxIters = -1;
 	std::string level = "1f";
 	std::string fileName = "";
 	for (int i=0; i<argc; i++) {
@@ -19,6 +20,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -d [int]    set the dimension" << std::endl;
 			std::cout << " -n [int]    set the number of bases" << std::endl;
 			std::cout << " -l [str]    set the level for the relaxation e.g. 1+2f,3p" << std::endl;
+			std::cout << " -i [int]    set max iterations (-1 for no limit)" << std::endl;
 			std::cout << " -2          use quadratic equations" << std::endl;
 			std::cout << " -4          use quartic equations" << std::endl;
 			std::cout << " -w          use whole bases, not partial" << std::endl;
@@ -31,6 +33,9 @@ int main(int argc, char ** argv) {
 			i++;
 		} else if (arg == "-n" && i+1 < argc) {
 			n = std::stoi(argv[i+1]);
+			i++;
+		} else if (arg == "-i" && i+1 < argc) {
+			maxIters = std::stoi(argv[i+1]);
 			i++;
 		} else if (arg == "-l" && i+1 < argc) {
 			level = argv[i+1];
@@ -501,7 +506,7 @@ int main(int argc, char ** argv) {
 			}
 
 			// Try to prove infeasiblity
-			prob.proveInfeasible(-1, level, 1.0/std::sqrt(d), fileName);
+			prob.proveInfeasible(maxIters, level, 1.0/std::sqrt(d), fileName);
 
 		}
 
