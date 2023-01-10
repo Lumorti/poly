@@ -4842,23 +4842,25 @@ public:
 		//M->setLogHandler([=](const std::string & msg){std::cout << msg << std::flush;});
 
 		// Create the variable
-		mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(monty::new_array_ptr<double>(mins), monty::new_array_ptr<double>(maxs)));
+		//mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(monty::new_array_ptr<double>(mins), monty::new_array_ptr<double>(maxs)));
+		mosek::fusion::Variable::t xM = M->variable(varsTotal);
 
 		// Use an extra variable to minimize violation of SD
 		mosek::fusion::Variable::t lambda = M->variable();
 
-		// Parameterized linear positivity constraints TODO
+		// Parameterized linear positivity constraints
 		int numParamCons = maxVariables;
 		//numParamCons += 4*maxVariables*maxVariables;
-		//numParamCons += 2*maxVariables;
+		numParamCons += maxVariables;
+		//numParamCons += maxVariables;
 		//numParamCons += maxVariables;
 		std::vector<long> sparsity;
 		for (int i=0; i<toProcess[0].size(); i++) {
 			sparsity.push_back((i)*varsTotal + firstMonomInds[i]);
 			sparsity.push_back((i)*varsTotal + quadraticMonomInds[i][i]);
 			sparsity.push_back((i)*varsTotal + oneIndex);
-			//sparsity.push_back((i+maxVariables)*varsTotal + firstMonomInds[i]);
-			//sparsity.push_back((i+maxVariables)*varsTotal + oneIndex);
+			sparsity.push_back((i+maxVariables)*varsTotal + firstMonomInds[i]);
+			sparsity.push_back((i+maxVariables)*varsTotal + oneIndex);
 			//sparsity.push_back((i+2*maxVariables)*varsTotal + firstMonomInds[i]);
 			//sparsity.push_back((i+2*maxVariables)*varsTotal + oneIndex);
 			//sparsity.push_back((i+3*maxVariables)*varsTotal + quadraticMonomInds[i][i]);
@@ -4949,6 +4951,16 @@ public:
 				newD[nextInd][quadraticMonomInds[i][i]] = coeffs[2];
 				nextInd++;
 
+				// x - min > 0
+				newD[nextInd][oneIndex] = -toProcess[0][i].first;
+				newD[nextInd][firstMonomInds[i]] = 1;
+				nextInd++;
+
+				// max - x > 0
+				//newD[nextInd][oneIndex] = toProcess[0][i].second;
+				//newD[nextInd][firstMonomInds[i]] = -1;
+				//nextInd++;
+
 			}
 
 			// Solve the problem
@@ -5016,7 +5028,7 @@ public:
 					}
 				}
 
-				// If we've converged TODO
+				// If we've converged
 				if (biggestError < 1e-6) {
 
 					// If logging, write to file and continue
@@ -5037,89 +5049,20 @@ public:
 				// If there's still space to split
 				} else {
 
-					// Try all possible splits TODO
-					bool foundInfeas = false;
-					for (int i=0; i<toProcess[0].size(); i++) {
-						break;
-					//for (int l=0; l<3; l++) {
-						//int i = int(toProcess[0].size()*(double(rand())/RAND_MAX));
+					// Split it TODO split at a different point
+					double delta = (toProcess[0][bestInd].second - toProcess[0][bestInd].first) / 2.0;
+					double midPoint = toProcess[0][bestInd].first + delta;
+					//double midPoint = solVec[bestInd];
+					auto copyLeft = toProcess[0];
+					auto copyRight = toProcess[0];
+					copyLeft[bestInd].second = midPoint;
+					copyRight[bestInd].first = midPoint;
+					//std::cout << toProcess[0][bestInd] << std::endl;
+					//std::cout << copyLeft[bestInd] << " < " << midPoint << " < " << copyRight[bestInd] << std::endl;
 
-						// Don't do the best index, since we do this anyway
-						//if (i == bestInd) {
-							//continue;
-						//}
-
-						// Split it
-						double delta = (toProcess[0][i].second - toProcess[0][i].first) / 2.0;
-						double midPoint = toProcess[0][i].first + delta;
-						auto copyLeft = toProcess[0];
-						auto copyRight = toProcess[0];
-						copyLeft[i].second = midPoint;
-						copyRight[i].first = midPoint;
-						std::vector<std::vector<std::pair<double,double>>> splits = {copyLeft, copyRight};
-
-						// Check each split
-						int numInfeas = 0;
-						for (int j=0; j<splits.size(); j++) {
-
-							// Update the linear constraints on the quadratics
-							newD = std::vector<std::vector<double>>(numParamCons, std::vector<double>(varsTotal, 0));
-							nextInd = 0;
-							for (int k=0; k<splits[j].size(); k++) {
-
-								// Given two points, find ax+by+c=0
-								std::vector<double> point1 = {splits[j][k].first, splits[j][k].first*splits[j][k].first};
-								std::vector<double> point2 = {splits[j][k].second, splits[j][k].second*splits[j][k].second};
-								std::vector<double> coeffs = getLineFromPoints(point1, point2);
-
-								// Add this as a linear pos con
-								newD[nextInd][oneIndex] = coeffs[0];
-								newD[nextInd][firstMonomInds[i]] = coeffs[1];
-								newD[nextInd][quadraticMonomInds[i][i]] = coeffs[2];
-								nextInd++;
-
-							}
-
-							// Solve the problem
-							DM->setValue(monty::new_array_ptr<double>(newD));
-							M->solve();
-							statProb = M->getProblemStatus();
-							statSol = M->getPrimalSolutionStatus();
-
-							// If infeasible, good
-							if (statProb == mosek::fusion::ProblemStatus::PrimalInfeasible || statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown || M->primalObjValue() > 1e-7) {
-								numInfeas++;
-							} else {
-								break;
-							}
-
-						}
-
-						// If we have two infeasible, this is better
-						if (numInfeas == 2) {
-							bestInd = i;
-							foundInfeas = true;
-							totalArea += areaCovered;
-							break;
-						}
-
-					}
-
-					if (!foundInfeas) {
-
-						// Split it
-						double delta = (toProcess[0][bestInd].second - toProcess[0][bestInd].first) / 2.0;
-						double midPoint = toProcess[0][bestInd].first + delta;
-						auto copyLeft = toProcess[0];
-						auto copyRight = toProcess[0];
-						copyLeft[bestInd].second = midPoint;
-						copyRight[bestInd].first = midPoint;
-
-						// Add the new paths to the queue
-						toProcess.insert(toProcess.begin()+1, copyLeft);
-						toProcess.insert(toProcess.begin()+1, copyRight);
-
-					}
+					// Add the new paths to the queue
+					toProcess.insert(toProcess.begin()+1, copyLeft);
+					toProcess.insert(toProcess.begin()+1, copyRight);
 
 				}
 
