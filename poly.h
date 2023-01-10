@@ -26,6 +26,9 @@
 // MOSEK for SOS checking
 #include "fusion.h"
 
+// SCS
+#include "scs.h"
+
 // Allow complex literals like 1i
 using namespace std::complex_literals;
 
@@ -4435,7 +4438,7 @@ public:
 
 	// Make a number of a seconds look nicer for output
 	std::string representTime(double numSeconds) {
-		if (numSeconds < 0) {
+		if (numSeconds <= 0) {
 			return "?s";
 		} else if (numSeconds < 1) {
 			return std::to_string(int(numSeconds * 1.0e3)) + "ms";
@@ -4452,7 +4455,7 @@ public:
 		} else if (numSeconds < 3.156e+7) {
 			return std::to_string(int(numSeconds / 2.628e6)) + "mo";
 		} else {
-			return std::to_string(numSeconds / 3.156e+7) + "y";
+			return std::to_string(long(numSeconds / 3.156e+7)) + "y";
 		}
 	}
 
@@ -4570,8 +4573,7 @@ public:
 			conPositiveLinear[i] = conPositive[i].replaceWithVariable(mapping);
 		}
 
-		// Process the level string
-		// 1+2f 3p
+		// Process the level string e.g. "1+2f,3p"
 		std::vector<int> levelsToInclude = {};
 		std::string currentThing = "";
 		for (int i=0; i<level.size(); i++) {
@@ -4634,39 +4636,6 @@ public:
 			}
 
 		}
-		
-		// Add second order cone for x^2+y^2=1/d
-		//int d = 0;
-		//std::vector<std::tuple<double,int,int>> qCones;
-		//for (int i=0; i<conZero.size(); i++) {
-
-			//// First make sure we have a constant and 3 terms total
-			//if (conZero[i][""] < 0 && conZero[i].size() == 3) {
-
-				//// Get vars and monoms from this
-				//auto varsInThisPoly = conZero[i].getVariables();
-				//auto monomsInThisPoly = conZero[i].getMonomials();
-
-				//// Check to make sure all vars are squares
-				//bool allSquares = true;
-				//for (int j=0; j<monomsInThisPoly.size(); j++) {
-					//if (monomsInThisPoly[j].size() >= 2*digitsPerInd) {
-						//if (monomsInThisPoly[j].substr(0,digitsPerInd) != monomsInThisPoly[j].substr(digitsPerInd,digitsPerInd)) { 
-							//allSquares = false;
-						//}
-					//}
-				//}
-
-				//// If all valid, add to the quadratic cones list
-				//if (allSquares) {
-					//d = std::round(-1.0 / conZero[i][""]);
-					////qCones.push_back({-conZero[i][""], varsInThisPoly[0], varsInThisPoly[1]});
-					////conZero.erase(conZero.begin()+i);
-					////i--;
-				//}
-
-			//}
-		//}
 
 		// Start with the most general area
 		double maxArea = 1;
@@ -4683,12 +4652,15 @@ public:
 		std::vector<std::shared_ptr<monty::ndarray<int,1>>> shouldBePSD;
 		std::vector<std::shared_ptr<monty::ndarray<double,1>>> shouldBePSDCoeffs;
 		std::vector<std::shared_ptr<monty::ndarray<double,1>>> identityAsSVec;
+		std::vector<double> idenCoeffs;
+		std::vector<double> monCoeffs;
+		std::vector<int> monLocs;
 		for (int j=0; j<monomProducts.size(); j++) {
 
 			// Get the list of all monomial locations for the PSD matrix
-			std::vector<int> monLocs;
-			std::vector<double> monCoeffs;
-			std::vector<double> idenCoeffs;
+			monLocs = {};
+			monCoeffs = {};
+			idenCoeffs = {};
 			for (int i=0; i<monomProducts[j].size(); i++) {
 				for (int k=i; k<monomProducts[j].size(); k++) {
 
@@ -4765,8 +4737,6 @@ public:
 				// If all valid, add to the quadratic cones list
 				if (allSquares) {
 					qCones.push_back({-conZero[i][""], varsInThisPoly[0], varsInThisPoly[1]});
-					//conZero.erase(conZero.begin()+i);
-					//i--;
 				}
 
 			}
@@ -4852,7 +4822,7 @@ public:
 		int numParamCons = maxVariables;
 		//numParamCons += 4*maxVariables*maxVariables;
 		numParamCons += maxVariables;
-		//numParamCons += maxVariables;
+		numParamCons += maxVariables;
 		//numParamCons += maxVariables;
 		std::vector<long> sparsity;
 		for (int i=0; i<toProcess[0].size(); i++) {
@@ -4861,8 +4831,8 @@ public:
 			sparsity.push_back((i)*varsTotal + oneIndex);
 			sparsity.push_back((i+maxVariables)*varsTotal + firstMonomInds[i]);
 			sparsity.push_back((i+maxVariables)*varsTotal + oneIndex);
-			//sparsity.push_back((i+2*maxVariables)*varsTotal + firstMonomInds[i]);
-			//sparsity.push_back((i+2*maxVariables)*varsTotal + oneIndex);
+			sparsity.push_back((i+2*maxVariables)*varsTotal + firstMonomInds[i]);
+			sparsity.push_back((i+2*maxVariables)*varsTotal + oneIndex);
 			//sparsity.push_back((i+3*maxVariables)*varsTotal + quadraticMonomInds[i][i]);
 			//sparsity.push_back((i+3*maxVariables)*varsTotal + oneIndex);
 		}
@@ -4883,15 +4853,149 @@ public:
 		// Try to violate the SDP constraints the least
 		M->objective(mosek::fusion::ObjectiveSense::Minimize, lambda);
 
+		//M->constraint(lambda, mosek::fusion::Domain::lessThan(0));
+
 		// SDP constraints
 		for (int i=0; i<shouldBePSD.size(); i++) {
-			M->constraint(mosek::fusion::Expr::add(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Expr::mul(lambda, identityAsSVec[i])), mosek::fusion::Domain::inSVecPSDCone());
+			if (i == 0) {
+				M->constraint(mosek::fusion::Expr::add(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Expr::mul(lambda, identityAsSVec[i])), mosek::fusion::Domain::inSVecPSDCone());
+			} else {
+				M->constraint(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Domain::inSVecPSDCone());
+			}
 		}
 
 		// Quadratic cones
 		//for (int i=0; i<qCones.size(); i++) {
 			//M->constraint(mosek::fusion::Expr::vstack(std::sqrt(std::get<0>(qCones[i])), xM->index(firstMonomInds[std::get<1>(qCones[i])]), xM->index(firstMonomInds[std::get<2>(qCones[i])])), mosek::fusion::Domain::inQCone(3));
 		//}
+
+		// Convert the linear equality constraints to SCS form TODO
+		std::vector<int> ARowsSCS;
+		std::vector<int> AColsSCS;
+		std::vector<polyType> AValsSCS;
+		ARowsSCS.push_back(0);
+		AColsSCS.push_back(oneIndex);
+		AValsSCS.push_back(1);
+		int nextI = 1;
+		for (int i=0; i<conZeroLinear.size(); i++) {
+			for (auto const &pair: conZeroLinear[i].coeffs) {
+				ARowsSCS.push_back(nextI);
+				if (pair.first == "") {
+					AColsSCS.push_back(oneIndex);
+				} else {
+					AColsSCS.push_back(std::stoi(pair.first));
+				}
+				AValsSCS.push_back(pair.second);
+			}
+			nextI++;
+		}
+		for (int i=0; i<toProcess[0].size(); i++) {
+			ARowsSCS.push_back(nextI);
+			AColsSCS.push_back(firstMonomInds[i]);
+			AValsSCS.push_back(42);
+			ARowsSCS.push_back(nextI);
+			AColsSCS.push_back(quadraticMonomInds[i][i]);
+			AValsSCS.push_back(42);
+			ARowsSCS.push_back(nextI);
+			AColsSCS.push_back(oneIndex);
+			AValsSCS.push_back(42);
+			nextI++;
+			ARowsSCS.push_back(nextI);
+			AColsSCS.push_back(firstMonomInds[i]);
+			AValsSCS.push_back(1);
+			ARowsSCS.push_back(nextI);
+			AColsSCS.push_back(oneIndex);
+			AValsSCS.push_back(42);
+			nextI++;
+			ARowsSCS.push_back(nextI);
+			AColsSCS.push_back(firstMonomInds[i]);
+			AValsSCS.push_back(-1);
+			ARowsSCS.push_back(nextI);
+			AColsSCS.push_back(oneIndex);
+			AValsSCS.push_back(42);
+			nextI++;
+		}
+		for (int i=0; i<conPositiveLinear.size(); i++) {
+			for (auto const &pair: conPositiveLinear[i].coeffs) {
+				ARowsSCS.push_back(nextI);
+				if (pair.first == "") {
+					AColsSCS.push_back(oneIndex);
+				} else {
+					AColsSCS.push_back(std::stoi(pair.first));
+				}
+				AValsSCS.push_back(pair.second);
+			}
+			nextI++;
+		}
+		for (int i=0; i<varsTotal; i++) {
+			ARowsSCS.push_back(nextI);
+			AColsSCS.push_back(i);
+			AValsSCS.push_back(32);
+		}
+		nextI++;
+
+		for (int i=0; i<AValsSCS.size(); i++) {
+			std::cout << ARowsSCS[i] << " " << AColsSCS[i] << " " << AValsSCS[i] << std::endl;
+		}
+
+		// Params needed for SCS
+		int coneSize = shouldBePSD[0]->size();
+		int numVarsSCS = varsTotal;
+		int numConsSCS = nextI;
+
+		// The A matrix for SCS
+		double* A_x = new double[AValsSCS.size()];
+		A_x[0] = -1;
+		A_x[1] = 1;
+		A_x[2] = 1;
+		A_x[3] = 1;
+		int A_i[4] = {0, 1, 0, 2};
+		int A_p[3] = {0, 2, 4};
+
+		// The b vector for SCS
+		double b[numConsSCS];
+		b[0] = -1;
+		nextI = 0;
+		for (int i=0; i<conZeroLinear.size(); i++) {
+			b[nextI] = 0;
+			nextI++;
+		}
+		for (int i=0; i<conPositiveLinear.size(); i++) {
+			b[nextI] = 0;
+			nextI++;
+		}
+		for (int i=0; i<coneSize; i++) {
+			b[nextI] = 0;
+			nextI++;
+		}
+
+		// Set up the SCS system TODO
+		ScsCone *kTest = (ScsCone *)calloc(1, sizeof(ScsCone));
+		ScsData *dTest = (ScsData *)calloc(1, sizeof(ScsData));
+		ScsSettings *stgs = (ScsSettings *)calloc(1, sizeof(ScsSettings));
+		ScsSolution *sol = (ScsSolution *)calloc(1, sizeof(ScsSolution));
+		ScsInfo *info = (ScsInfo *)calloc(1, sizeof(ScsInfo));
+		dTest->m = numConsSCS;
+		dTest->n = numVarsSCS;
+		dTest->b = b;
+		auto A = ScsMatrix({A_x, A_i, A_p, numConsSCS, numVarsSCS});
+		dTest->A = &A;
+		kTest->z = conZeroLinear.size();
+		kTest->l = conPositiveLinear.size();
+		kTest->s = {&coneSize};
+		scs_set_default_settings(stgs);
+		ScsWork *scs_work = scs_init(dTest, kTest, stgs);
+
+		/* Free allocated memory */
+		free(kTest);
+		free(dTest);
+		free(stgs);
+		free(info);
+		free(sol->x);
+		free(sol->y);
+		free(sol->s);
+		free(sol);
+		return;
 
 		// The order in which to branch
 		std::vector<int> splitOrder;
@@ -4951,16 +5055,20 @@ public:
 				newD[nextInd][quadraticMonomInds[i][i]] = coeffs[2];
 				nextInd++;
 
-				// x - min > 0
+			}
+
+			// max - x > 0
+			for (int i=0; i<toProcess[0].size(); i++) {
+				newD[nextInd][oneIndex] = toProcess[0][i].second;
+				newD[nextInd][firstMonomInds[i]] = -1;
+				nextInd++;
+			}
+
+			// x - min > 0
+			for (int i=0; i<toProcess[0].size(); i++) {
 				newD[nextInd][oneIndex] = -toProcess[0][i].first;
 				newD[nextInd][firstMonomInds[i]] = 1;
 				nextInd++;
-
-				// max - x > 0
-				//newD[nextInd][oneIndex] = toProcess[0][i].second;
-				//newD[nextInd][firstMonomInds[i]] = -1;
-				//nextInd++;
-
 			}
 
 			// Solve the problem
@@ -5050,15 +5158,17 @@ public:
 				} else {
 
 					// Split it TODO split at a different point
-					double delta = (toProcess[0][bestInd].second - toProcess[0][bestInd].first) / 2.0;
-					double midPoint = toProcess[0][bestInd].first + delta;
-					//double midPoint = solVec[bestInd];
+					double minPoint = toProcess[0][bestInd].first;
+					double maxPoint = toProcess[0][bestInd].second;
+					double midPoint = (minPoint + maxPoint) / 2.0;
+					double mostFeasiblePoint = solVec[firstMonomInds[bestInd]];
+					double distanceBetween = mostFeasiblePoint - midPoint;
+					double splitPoint = mostFeasiblePoint;
+					//double splitPoint = midPoint;
 					auto copyLeft = toProcess[0];
 					auto copyRight = toProcess[0];
-					copyLeft[bestInd].second = midPoint;
-					copyRight[bestInd].first = midPoint;
-					//std::cout << toProcess[0][bestInd] << std::endl;
-					//std::cout << copyLeft[bestInd] << " < " << midPoint << " < " << copyRight[bestInd] << std::endl;
+					copyLeft[bestInd].second = splitPoint;
+					copyRight[bestInd].first = splitPoint;
 
 					// Add the new paths to the queue
 					toProcess.insert(toProcess.begin()+1, copyLeft);
@@ -5070,14 +5180,14 @@ public:
 
 			// Time estimation
 			end = std::chrono::steady_clock::now();
-			secondsPerIter = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / (iter * 1.0e6);
-			double areaPerIter = totalArea / iter;
+			secondsPerIter = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / ((iter+1) * 1.0e6);
+			double areaPerIter = totalArea / (iter+1);
 			double itersRemaining = (maxArea - totalArea) / areaPerIter;
 			double secondsRemaining = itersRemaining * secondsPerIter;
 
 			// Per-iteration output
 			std::cout << std::defaultfloat;
-			std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << areaCovered << "      \r" << std::flush;
+			std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << 100.0 * areaCovered / maxArea << "%             \r" << std::flush;
 
 			// Remove the one we just processed
 			toProcess.erase(toProcess.begin());
@@ -5090,11 +5200,11 @@ public:
 
 		}
 		std::cout << std::endl;
-		std::cout << representTime(iter * secondsPerIter) << std::endl;
+		std::cout << representTime((iter+1) * secondsPerIter) << std::endl;
 
 		// Benchmarks
 		// d2n4 42 iterations 0.1s (6 vars)
-		// d3n5 35984 iterations 6m (18 vars)
+		// d3n5 27036 iterations 4m (18 vars)
 
 	}
 

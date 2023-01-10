@@ -261,8 +261,8 @@ int main(int argc, char ** argv) {
 			eqns[i] = eqns[i].replaceWithValue(indsToReplace, valsToReplace);
 		}
 
-		// Add an ordering to all bases
-		std::vector<Polynomial<double>> orderingCons;
+		// Find the symmetries of the problem
+		std::vector<std::unordered_map<int,int>> syms;
 
 		// Ordering within each basis
 		int base = 2;
@@ -271,21 +271,14 @@ int main(int argc, char ** argv) {
 				if (i == 1 && j == 0) {
 					continue;
 				}
-				Polynomial<double> leftSide(numVars);
-				Polynomial<double> rightSide(numVars);
-				int leftPow = 0;
-				int rightPow = 0;
+				std::unordered_map<int,int> newSym;
 				for (int k=1; k<d; k++) {
 					int indLeft = i*d*d+j*d+k; 
-					leftSide.addTerm(std::pow(base,leftPow), {indLeft});
-					leftSide.addTerm(std::pow(base,leftPow+1), {indLeft+conjDelta});
-					leftPow += 2;
 					int indRight = i*d*d+(j+1)*d+k; 
-					rightSide.addTerm(std::pow(base,rightPow), {indRight});
-					rightSide.addTerm(std::pow(base,rightPow+1), {indRight+conjDelta});
-					rightPow += 2;
+					newSym[indLeft] = indRight;
+					newSym[indLeft+conjDelta] = indRight+conjDelta;
 				}
-				orderingCons.push_back(leftSide - rightSide);
+				syms.push_back(newSym);
 			}
 		}
 
@@ -298,45 +291,51 @@ int main(int argc, char ** argv) {
 			if (ind1 > dLimits[i2][i]-1) {
 				continue;
 			}
-			Polynomial<double> leftSide(numVars);
-			Polynomial<double> rightSide(numVars);
-			int leftPow = 0;
-			int rightPow = 0;
+			std::unordered_map<int,int> newSym;
 			for (int k=1; k<d; k++) {
 				int indLeft = i*d*d+ind1*d+k;
-				leftSide.addTerm(std::pow(base,leftPow), {indLeft});
-				leftSide.addTerm(std::pow(base,leftPow+1), {indLeft+conjDelta});
-				leftPow += 2;
 				int indRight = (i+1)*d*d+0*d+k;
-				rightSide.addTerm(std::pow(base,rightPow), {indRight});
-				rightSide.addTerm(std::pow(base,rightPow+1), {indRight+conjDelta});
-				rightPow += 2;
+				newSym[indLeft] = indRight;
+				newSym[indLeft+conjDelta] = indRight+conjDelta;
 			}
-			orderingCons.push_back(leftSide - rightSide);
+			syms.push_back(newSym);
 		}
 
 		// Ordering of the elements in the vectors
 		for (int k=1; k<d-1; k++) {
-			Polynomial<double> leftSide(numVars);
-			Polynomial<double> rightSide(numVars);
-			int leftPow = 0;
-			int rightPow = 0;
+			std::unordered_map<int,int> newSym;
 			for (int i=1; i<n; i++) {
 				for (int j=0; j<dLimits[i2][i]; j++) {
 					if (i == 1 && j == 0) {
 						continue;
 					}
 					int indLeft = i*d*d+j*d+k;
-					leftSide.addTerm(std::pow(base,leftPow), {indLeft});
-					leftSide.addTerm(std::pow(base,leftPow+1), {indLeft+conjDelta});
-					leftPow += 2;
 					int indRight = i*d*d+j*d+k+1;
-					rightSide.addTerm(std::pow(base,rightPow), {indRight});
-					rightSide.addTerm(std::pow(base,rightPow+1), {indRight+conjDelta});
-					rightPow += 2;
+					newSym[indLeft] = indRight;
+					newSym[indLeft+conjDelta] = indRight+conjDelta;
 				}
 			}
-			orderingCons.push_back(leftSide - rightSide);
+			syms.push_back(newSym);
+		}
+
+		// Convert these symmetries into constraints with break them TODO
+		std::vector<Polynomial<double>> orderingCons;
+		for (int i=0; i<syms.size(); i++) {
+			Polynomial<double> newCon(numVars);
+			int pow = 0;
+			for (auto const &pair: syms[i]) {
+				newCon.addTerm(std::pow(2, pow), {pair.first});
+				newCon.addTerm(-std::pow(2, pow), {pair.second});
+				pow++;
+			}
+			//for (auto const &pair1: syms[i]) {
+				//for (auto const &pair2: syms[i]) {
+					//newCon.addTerm(std::pow(2, pow), {pair1.first, pair2.first});
+					//newCon.addTerm(-std::pow(2, pow), {pair1.second, pair2.second});
+					//pow++;
+				//}
+			//}
+			orderingCons.push_back(newCon);
 		}
 
 		// Combine these equations into a single object
