@@ -21,10 +21,13 @@
 #include <Eigen/Sparse>
 
 // OpenMP for parallelisation
-#include <omp.h>
+//#include <omp.h>
 
 // MOSEK for SOS checking
 #include "fusion.h"
+
+// SCS
+#include "scs.h"
 
 // Allow complex literals like 1i
 using namespace std::complex_literals;
@@ -4646,18 +4649,13 @@ public:
 		toProcess.push_back(varMinMax);
 
 		// Create the PSD matrices from this list
-		std::vector<std::shared_ptr<monty::ndarray<int,1>>> shouldBePSD;
-		std::vector<std::shared_ptr<monty::ndarray<double,1>>> shouldBePSDCoeffs;
-		std::vector<std::shared_ptr<monty::ndarray<double,1>>> identityAsSVec;
-		std::vector<double> idenCoeffs;
-		std::vector<double> monCoeffs;
-		std::vector<int> monLocs;
+		std::vector<std::vector<int>> shouldBePSD;
+		std::vector<std::vector<double>> shouldBePSDCoeffs;
 		for (int j=0; j<monomProducts.size(); j++) {
 
 			// Get the list of all monomial locations for the PSD matrix
-			monLocs = {};
-			monCoeffs = {};
-			idenCoeffs = {};
+			std::vector<int> monLocs;
+			std::vector<double> monCoeffs = {};
 			for (int i=0; i<monomProducts[j].size(); i++) {
 				for (int k=i; k<monomProducts[j].size(); k++) {
 
@@ -4676,23 +4674,16 @@ public:
 					// The coeff for mosek's svec
 					if (i != k) {
 						monCoeffs.push_back(std::sqrt(2.0));
-						idenCoeffs.push_back(0.0);
 					} else {
 						monCoeffs.push_back(1.0);
-						idenCoeffs.push_back(1.0);
 					}
 
 				}
 			}
 
 			// This (when reformatted) should be positive-semidefinite
-			shouldBePSD.push_back(monty::new_array_ptr<int>(monLocs));
-			shouldBePSDCoeffs.push_back(monty::new_array_ptr<double>(monCoeffs));
-			identityAsSVec.push_back(monty::new_array_ptr<double>(idenCoeffs));
-
-			// Clear some memory
-			monomProducts.erase(monomProducts.begin());
-			j--;
+			shouldBePSD.push_back(monLocs);
+			shouldBePSDCoeffs.push_back(monCoeffs);
 
 		}
 
@@ -4743,40 +4734,6 @@ public:
 		int oneIndex = 0;
 		int varsTotal = monoms.size();
 
-		// Convert the linear equality constraints to MOSEK form
-		std::vector<int> ARows;
-		std::vector<int> ACols;
-		std::vector<polyType> AVals;
-		for (int i=0; i<conZeroLinear.size(); i++) {
-			for (auto const &pair: conZeroLinear[i].coeffs) {
-				ARows.push_back(i);
-				if (pair.first == "") {
-					ACols.push_back(oneIndex);
-				} else {
-					ACols.push_back(std::stoi(pair.first));
-				}
-				AVals.push_back(pair.second);
-			}
-		}
-		auto AM = mosek::fusion::Matrix::sparse(conZeroLinear.size(), varsTotal, monty::new_array_ptr<int>(ARows), monty::new_array_ptr<int>(ACols), monty::new_array_ptr<polyType>(AVals));
-
-		// Convert the linear positivity constraints to MOSEK form
-		std::vector<int> BRows;
-		std::vector<int> BCols;
-		std::vector<polyType> BVals;
-		for (int i=0; i<conPositiveLinear.size(); i++) {
-			for (auto const &pair: conPositiveLinear[i].coeffs) {
-				BRows.push_back(i);
-				if (pair.first == "") {
-					BCols.push_back(oneIndex);
-				} else {
-					BCols.push_back(std::stoi(pair.first));
-				}
-				BVals.push_back(pair.second);
-			}
-		}
-		auto BM = mosek::fusion::Matrix::sparse(conPositiveLinear.size(), varsTotal, monty::new_array_ptr<int>(BRows), monty::new_array_ptr<int>(BCols), monty::new_array_ptr<polyType>(BVals));
-		
 		// The box constraints, given our box
 		std::vector<double> mins(monoms.size(), -1);
 		std::vector<double> maxs(monoms.size(), 1);
@@ -4802,69 +4759,193 @@ public:
 
 		}
 
-		// Create a model
-		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
-
-		// DEBUG
-		//M->setLogHandler([=](const std::string & msg){std::cout << msg << std::flush;});
-
-		// Create the variable
-		//mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(monty::new_array_ptr<double>(mins), monty::new_array_ptr<double>(maxs)));
-		mosek::fusion::Variable::t xM = M->variable(varsTotal);
-
-		// Use an extra variable to minimize violation of SD
-		mosek::fusion::Variable::t lambda = M->variable();
-
-		// Parameterized linear positivity constraints
-		int numParamCons = maxVariables;
-		//numParamCons += 4*maxVariables*maxVariables;
-		numParamCons += maxVariables;
-		numParamCons += maxVariables;
-		//numParamCons += maxVariables;
-		std::vector<long> sparsity;
-		for (int i=0; i<toProcess[0].size(); i++) {
-			sparsity.push_back((i)*varsTotal + firstMonomInds[i]);
-			sparsity.push_back((i)*varsTotal + quadraticMonomInds[i][i]);
-			sparsity.push_back((i)*varsTotal + oneIndex);
-			sparsity.push_back((i+maxVariables)*varsTotal + firstMonomInds[i]);
-			sparsity.push_back((i+maxVariables)*varsTotal + oneIndex);
-			sparsity.push_back((i+2*maxVariables)*varsTotal + firstMonomInds[i]);
-			sparsity.push_back((i+2*maxVariables)*varsTotal + oneIndex);
-			//sparsity.push_back((i+3*maxVariables)*varsTotal + quadraticMonomInds[i][i]);
-			//sparsity.push_back((i+3*maxVariables)*varsTotal + oneIndex);
+		// Convert the linear equality constraints to SCS form
+		std::vector<int> ARowsSCS;
+		std::vector<int> AColsSCS;
+		std::vector<polyType> AValsSCS;
+		int nextI = 0;
+		ARowsSCS.push_back(nextI);
+		AColsSCS.push_back(oneIndex);
+		AValsSCS.push_back(1);
+		nextI++;
+		for (int i=0; i<conZeroLinear.size(); i++) {
+			for (auto const &pair: conZeroLinear[i].coeffs) {
+				ARowsSCS.push_back(nextI);
+				if (pair.first == "") {
+					AColsSCS.push_back(oneIndex);
+				} else {
+					AColsSCS.push_back(std::stoi(pair.first));
+				}
+				AValsSCS.push_back(pair.second);
+			}
+			nextI++;
 		}
-		std::sort(sparsity.begin(), sparsity.end());
-		mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
-		//mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}));
-		M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::greaterThan(0));
 
-		// The first element of the vector should be one
-		M->constraint(xM->index(oneIndex), mosek::fusion::Domain::equalsTo(1.0));
+		// The original positivity constraints
+		for (int i=0; i<conPositiveLinear.size(); i++) {
+			for (auto const &pair: conPositiveLinear[i].coeffs) {
+				ARowsSCS.push_back(nextI);
+				if (pair.first == "") {
+					AColsSCS.push_back(oneIndex);
+				} else {
+					AColsSCS.push_back(std::stoi(pair.first));
+				}
+				AValsSCS.push_back(pair.second);
+			}
+			nextI++;
+		}
 
-		// Linear equality constraints
-		M->constraint(mosek::fusion::Expr::mul(AM, xM), mosek::fusion::Domain::equalsTo(0.0));
+		// The cutting constraints 
+		std::vector<std::vector<int>> paramLocsCutting;
+		std::vector<std::vector<int>> paramLocsMin;
+		std::vector<std::vector<int>> paramLocsMax;
+		for (int i=0; i<toProcess[0].size(); i++) {
 
-		// Linear positivity constraints
-		M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(0));
+			// ax + bx^2 + c >= 0
+			ARowsSCS.push_back(nextI);
+			AColsSCS.push_back(oneIndex);
+			AValsSCS.push_back(42);
+			ARowsSCS.push_back(nextI);
+			AColsSCS.push_back(firstMonomInds[i]);
+			AValsSCS.push_back(42);
+			ARowsSCS.push_back(nextI);
+			AColsSCS.push_back(quadraticMonomInds[i][i]);
+			AValsSCS.push_back(42);
+			paramLocsCutting.push_back({int(AValsSCS.size()-3), int(AValsSCS.size()-2), int(AValsSCS.size()-1)});
+			nextI++;
 
-		// Try to violate the SDP constraints the least
-		M->objective(mosek::fusion::ObjectiveSense::Minimize, lambda);
+			// x - min >= 0 TODO use box constraints
+			ARowsSCS.push_back(nextI);
+			AColsSCS.push_back(oneIndex);
+			AValsSCS.push_back(42);
+			ARowsSCS.push_back(nextI);
+			AColsSCS.push_back(firstMonomInds[i]);
+			AValsSCS.push_back(42);
+			paramLocsMin.push_back({int(AValsSCS.size()-2), int(AValsSCS.size()-1)});
+			nextI++;
 
-		//M->constraint(lambda, mosek::fusion::Domain::lessThan(0));
+			// max - x >= 0
+			ARowsSCS.push_back(nextI);
+			AColsSCS.push_back(oneIndex);
+			AValsSCS.push_back(42);
+			ARowsSCS.push_back(nextI);
+			AColsSCS.push_back(firstMonomInds[i]);
+			AValsSCS.push_back(42);
+			paramLocsMax.push_back({int(AValsSCS.size()-2), int(AValsSCS.size()-1)});
+			nextI++;
 
-		// SDP constraints
+		}
+		int numParamCons = paramLocsMin.size() + paramLocsMax.size() + paramLocsCutting.size();
+
+		// The SDP constraints
 		for (int i=0; i<shouldBePSD.size(); i++) {
-			if (i == 0) {
-				M->constraint(mosek::fusion::Expr::add(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Expr::mul(lambda, identityAsSVec[i])), mosek::fusion::Domain::inSVecPSDCone());
-			} else {
-				M->constraint(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Domain::inSVecPSDCone());
+			for (int j=0; j<shouldBePSD[i].size(); j++) {
+				ARowsSCS.push_back(nextI);
+				AColsSCS.push_back(shouldBePSD[i][j]);
+				AValsSCS.push_back(shouldBePSDCoeffs[i][j]);
+				nextI++;
 			}
 		}
 
-		// Quadratic cones
-		//for (int i=0; i<qCones.size(); i++) {
-			//M->constraint(mosek::fusion::Expr::vstack(std::sqrt(std::get<0>(qCones[i])), xM->index(firstMonomInds[std::get<1>(qCones[i])]), xM->index(firstMonomInds[std::get<2>(qCones[i])])), mosek::fusion::Domain::inQCone(3));
-		//}
+		// Sort the A matrix by columns
+		std::vector<int> AOrdering(AValsSCS.size());
+		for (int i=0; i<AValsSCS.size(); i++) {
+			AOrdering[i] = i;
+		}
+		std::sort(AOrdering.begin(), AOrdering.end(),
+			[&](const int& a, const int& b) {
+				return (AColsSCS[a]*nextI + ARowsSCS[a] < AColsSCS[b]*nextI + ARowsSCS[b]);
+			}
+		);
+
+		// Get the inverse map and apply it to the cutting locations
+		std::vector<int> AOrderingInv(AOrdering.size());
+		for (int i=0; i<AOrdering.size(); i++) {
+			AOrderingInv[AOrdering[i]] = i;
+		}
+		for (int i=0; i<paramLocsCutting.size(); i++) {
+			paramLocsCutting[i][0] = AOrderingInv[paramLocsCutting[i][0]];
+			paramLocsCutting[i][1] = AOrderingInv[paramLocsCutting[i][1]];
+			paramLocsCutting[i][2] = AOrderingInv[paramLocsCutting[i][2]];
+		}
+		for (int i=0; i<paramLocsMax.size(); i++) {
+			paramLocsMax[i][0] = AOrderingInv[paramLocsMax[i][0]];
+			paramLocsMax[i][1] = AOrderingInv[paramLocsMax[i][1]];
+		}
+		for (int i=0; i<paramLocsMin.size(); i++) {
+			paramLocsMin[i][0] = AOrderingInv[paramLocsMin[i][0]];
+			paramLocsMin[i][1] = AOrderingInv[paramLocsMin[i][1]];
+		}
+
+		// The A matrix for SCS
+		double* A_x = new double[AValsSCS.size()];
+		for (int i=0; i<AValsSCS.size(); i++) {
+			A_x[i] = -AValsSCS[AOrdering[i]];
+		}
+		int* A_i = new int[ARowsSCS.size()];
+		int* A_p = new int[varsTotal+1];
+		for (int i=0; i<varsTotal+1; i++) {
+			A_p[i] = -1;
+		}
+		A_p[varsTotal] = AValsSCS.size();
+		int maxRow = 0;
+		for (int i=0; i<AOrdering.size(); i++) {
+			A_i[i] = ARowsSCS[AOrdering[i]];
+			maxRow = std::max(A_i[i], maxRow);
+			if (A_p[AColsSCS[AOrdering[i]]] == -1) {
+				A_p[AColsSCS[AOrdering[i]]] = i;
+			}
+		}
+
+		// Params needed for SCS
+		int* SDPSizes = new int[monomProducts.size()];
+		for (int i=0; i<monomProducts.size(); i++) {
+			SDPSizes[i] = monomProducts[i].size();
+		}
+		int numVarsSCS = varsTotal;
+		int numConsSCS = nextI;
+
+		// The b vector for SCS
+		double b[numConsSCS];
+		for (int i=0; i<numConsSCS; i++) {
+			b[i] = 0;
+		}
+		b[oneIndex] = -1;
+
+		// The c vector for SCS
+		double c[numVarsSCS];
+		for (int i=0; i<numVarsSCS; i++) {
+			c[i] = 0;
+		}
+
+		// Set up the SCS system
+		ScsCone *coneSCS = (ScsCone *)calloc(1, sizeof(ScsCone));
+		ScsData *dataSCS = (ScsData *)calloc(1, sizeof(ScsData));
+		ScsSettings *stgs = (ScsSettings *)calloc(1, sizeof(ScsSettings));
+		ScsSolution *sol = (ScsSolution *)calloc(1, sizeof(ScsSolution));
+		ScsInfo *info = (ScsInfo *)calloc(1, sizeof(ScsInfo));
+		dataSCS->m = numConsSCS;
+		dataSCS->n = numVarsSCS;
+		dataSCS->b = b;
+		dataSCS->c = c;
+		dataSCS->P = SCS_NULL;
+		auto A = ScsMatrix({A_x, A_i, A_p, dataSCS->m, dataSCS->n});
+		dataSCS->A = &A;
+		coneSCS->z = 1 + conZeroLinear.size();
+		coneSCS->l = numParamCons + conPositiveLinear.size();
+		coneSCS->ssize = 1;
+		coneSCS->s = SDPSizes;
+		scs_set_default_settings(stgs);
+		stgs->verbose = false;
+		//stgs->max_iters = 5000;
+		stgs->adaptive_scale = false;
+		stgs->normalize = true;
+		stgs->acceleration_lookback = 100;
+		//stgs->scale = 0.01;
+		//stgs->rho_x = 1e-8;
+		stgs->eps_abs = 1e-6;
+		stgs->eps_rel = 1e-6;
+		//stgs->eps_infeas = 0.5;
 
 		// The order in which to branch
 		std::vector<int> splitOrder;
@@ -4906,9 +4987,6 @@ public:
 				areaCovered *= toProcess[0][k].second - toProcess[0][k].first;
 			}
 
-			// The new parameterized constraint vector and objective
-			std::vector<std::vector<double>> newD(numParamCons, std::vector<double>(varsTotal, 0));
-
 			// Update the linear constraints on the quadratics
 			int nextInd = 0;
 			for (int i=0; i<toProcess[0].size(); i++) {
@@ -4919,48 +4997,43 @@ public:
 				std::vector<double> coeffs = getLineFromPoints(point1, point2);
 
 				// Add this as a linear pos con
-				newD[nextInd][oneIndex] = coeffs[0];
-				newD[nextInd][firstMonomInds[i]] = coeffs[1];
-				newD[nextInd][quadraticMonomInds[i][i]] = coeffs[2];
-				nextInd++;
+				dataSCS->A->x[paramLocsCutting[i][0]] = -coeffs[0];
+				dataSCS->A->x[paramLocsCutting[i][1]] = -coeffs[1];
+				dataSCS->A->x[paramLocsCutting[i][2]] = -coeffs[2];
 
 			}
 
 			// max - x > 0
 			for (int i=0; i<toProcess[0].size(); i++) {
-				newD[nextInd][oneIndex] = toProcess[0][i].second;
-				newD[nextInd][firstMonomInds[i]] = -1;
-				nextInd++;
+				dataSCS->A->x[paramLocsMax[i][0]] = -toProcess[0][i].second;
+				dataSCS->A->x[paramLocsMax[i][1]] = 1;
 			}
 
 			// x - min > 0
 			for (int i=0; i<toProcess[0].size(); i++) {
-				newD[nextInd][oneIndex] = -toProcess[0][i].first;
-				newD[nextInd][firstMonomInds[i]] = 1;
-				nextInd++;
+				dataSCS->A->x[paramLocsMin[i][0]] = toProcess[0][i].first;
+				dataSCS->A->x[paramLocsMin[i][1]] = -1;
 			}
 
-			// Solve the problem
-			DM->setValue(monty::new_array_ptr<double>(newD));
-			M->solve();
-			auto statProb = M->getProblemStatus();
-			auto statSol = M->getPrimalSolutionStatus();
+			// Solve the SDP and then free memory
+			ScsWork *scs_work = scs_init(dataSCS, coneSCS, stgs);
+			int exitFlag = scs_solve(scs_work, sol, info, 0);
+			std::vector<double> solVec(dataSCS->n, 0);
+			for (int i=0; i<dataSCS->n; i++) {
+				solVec[i] = sol->x[i];
+			}
+			scs_finish(scs_work);
+			//std::cout << exitFlag << std::endl;
 
 			// If infeasible, good
-			if (statProb == mosek::fusion::ProblemStatus::PrimalInfeasible || statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown || M->primalObjValue() > 1e-7) {
+			if (exitFlag <= 0) {
 
 				// Keep track of how many were ill-posed
-				if (statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown) {
+				if (exitFlag != SCS_INFEASIBLE) {
 					numIllPosed++;
-				}
 
 				// Write to a file if told to
-				if (logFileName.size() > 0 && statSol != mosek::fusion::SolutionStatus::Undefined && statSol != mosek::fusion::SolutionStatus::Unknown && statProb != mosek::fusion::ProblemStatus::PrimalInfeasible) {
-					auto sol = *(xM->level());
-					std::vector<polyType> solVec(xM->getSize());
-					for (int i=0; i<solVec.size(); i++) {
-						solVec[i] = sol[i];
-					}
+				} else if (logFileName.size() > 0) {
 					for (int i=0; i<toProcess[0].size(); i++) {
 						logFile << solVec[firstMonomInds[i]] << ", ";
 					}
@@ -4973,16 +5046,6 @@ public:
 
 			// Otherwise, extract the result and figure out where to split
 			} else {
-
-				// Get the solution values
-				auto sol = *(xM->level());
-				polyType outer = M->primalObjValue();
-
-				// Output the relevant moments
-				std::vector<polyType> solVec(xM->getSize());
-				for (int i=0; i<solVec.size(); i++) {
-					solVec[i] = sol[i];
-				}
 
 				// Check the resulting vector for a good place to split 
 				std::vector<double> errors(maxVariables);
@@ -5026,7 +5089,7 @@ public:
 				// If there's still space to split
 				} else {
 
-					// Split it TODO split at a different point
+					// Split it
 					double minPoint = toProcess[0][bestInd].first;
 					double maxPoint = toProcess[0][bestInd].second;
 					double midPoint = (minPoint + maxPoint) / 2.0;
@@ -5056,7 +5119,8 @@ public:
 
 			// Per-iteration output
 			std::cout << std::defaultfloat;
-			std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << 100.0 * areaCovered / maxArea << "%             \r" << std::flush;
+			std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << exitFlag << " " << 100.0 * areaCovered / maxArea << "%             \r" << std::flush;
+			//std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << 100.0 * areaCovered / maxArea << "%             \n" << std::flush;
 
 			// Remove the one we just processed
 			toProcess.erase(toProcess.begin());
@@ -5070,6 +5134,16 @@ public:
 		}
 		std::cout << std::endl;
 		std::cout << representTime((iter+1) * secondsPerIter) << std::endl;
+
+		// Free the memory used by SCS
+		free(coneSCS);
+		free(dataSCS);
+		free(stgs);
+		free(info);
+		free(sol->x);
+		free(sol->y);
+		free(sol->s);
+		free(sol);
 
 		// Benchmarks
 		// d2n4 42 iterations 0.1s (6 vars)
