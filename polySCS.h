@@ -4732,7 +4732,8 @@ public:
 
 		// Set some vars
 		int oneIndex = 0;
-		int varsTotal = monoms.size();
+		int varsTotal = monoms.size() + 1;
+		int lambdaInd = varsTotal - 1;
 
 		// The box constraints, given our box
 		std::vector<double> mins(monoms.size(), -1);
@@ -4843,6 +4844,11 @@ public:
 				ARowsSCS.push_back(nextI);
 				AColsSCS.push_back(shouldBePSD[i][j]);
 				AValsSCS.push_back(shouldBePSDCoeffs[i][j]);
+				if (std::abs(shouldBePSDCoeffs[i][j]-1.0) < 1e-5) {
+					ARowsSCS.push_back(nextI);
+					AColsSCS.push_back(lambdaInd);
+					AValsSCS.push_back(1);
+				}
 				nextI++;
 			}
 		}
@@ -4917,6 +4923,7 @@ public:
 		for (int i=0; i<numVarsSCS; i++) {
 			c[i] = 0;
 		}
+		c[lambdaInd] = 1;
 
 		// Set up the SCS system
 		ScsCone *coneSCS = (ScsCone *)calloc(1, sizeof(ScsCone));
@@ -4935,17 +4942,20 @@ public:
 		coneSCS->l = numParamCons + conPositiveLinear.size();
 		coneSCS->ssize = 1;
 		coneSCS->s = SDPSizes;
+
+		// Solver parameters TODO
 		scs_set_default_settings(stgs);
 		stgs->verbose = false;
 		//stgs->max_iters = 5000;
-		stgs->adaptive_scale = false;
-		stgs->normalize = true;
-		stgs->acceleration_lookback = 100;
-		//stgs->scale = 0.01;
+		//stgs->normalize = false;
+		//stgs->acceleration_lookback = 100;
+		//stgs->adaptive_scale = false;
+		//stgs->scale = 0.9;
 		//stgs->rho_x = 1e-8;
-		stgs->eps_abs = 1e-6;
-		stgs->eps_rel = 1e-6;
+		stgs->eps_abs = 1e-5;
+		stgs->eps_rel = 0;
 		//stgs->eps_infeas = 0.5;
+		double infeasTol = 1e-7;
 
 		// The order in which to branch
 		std::vector<int> splitOrder;
@@ -5018,22 +5028,24 @@ public:
 			// Solve the SDP and then free memory
 			ScsWork *scs_work = scs_init(dataSCS, coneSCS, stgs);
 			int exitFlag = scs_solve(scs_work, sol, info, 0);
+			double objPrimal = info->pobj;
+			double objDual = info->dobj;
 			std::vector<double> solVec(dataSCS->n, 0);
 			for (int i=0; i<dataSCS->n; i++) {
 				solVec[i] = sol->x[i];
 			}
 			scs_finish(scs_work);
-			//std::cout << exitFlag << std::endl;
 
 			// If infeasible, good
-			if (exitFlag <= 0) {
+			if (exitFlag <= 0 || (objDual > infeasTol && objPrimal > infeasTol)) {
 
-				// Keep track of how many were ill-posed
-				if (exitFlag != SCS_INFEASIBLE) {
-					numIllPosed++;
+				// Stop if we ctrl-c'd
+				if (exitFlag == -5) {
+					return;
+				}
 
 				// Write to a file if told to
-				} else if (logFileName.size() > 0) {
+				if (logFileName.size() > 0) {
 					for (int i=0; i<toProcess[0].size(); i++) {
 						logFile << solVec[firstMonomInds[i]] << ", ";
 					}
@@ -5067,6 +5079,16 @@ public:
 						bestInd = splitOrder[i];
 					}
 				}
+
+				// Find the biggest error
+				//double biggestDiff = -10000;
+				//for (int i=0; i<toProcess[0].size(); i++) {
+					//double diff = toProcess[0][i].second - toProcess[0][i].first;
+					//if (diff > biggestDiff) {
+						//biggestDiff = diff;
+						//bestInd = i;
+					//}
+				//}
 
 				// If we've converged
 				if (biggestError < 1e-6) {
@@ -5115,12 +5137,14 @@ public:
 			secondsPerIter = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / ((iter+1) * 1.0e6);
 			double areaPerIter = totalArea / (iter+1);
 			double itersRemaining = (maxArea - totalArea) / areaPerIter;
+			if (totalArea < 1e-8) {
+				itersRemaining = -1;
+			}
 			double secondsRemaining = itersRemaining * secondsPerIter;
 
 			// Per-iteration output
 			std::cout << std::defaultfloat;
-			std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << exitFlag << " " << 100.0 * areaCovered / maxArea << "%             \r" << std::flush;
-			//std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << 100.0 * areaCovered / maxArea << "%             \n" << std::flush;
+			std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << " " << objPrimal << " " << objDual << "%        \r" << std::flush;
 
 			// Remove the one we just processed
 			toProcess.erase(toProcess.begin());
