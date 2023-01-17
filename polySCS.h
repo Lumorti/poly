@@ -4818,7 +4818,7 @@ public:
 		}
 		int numParamCons = paramLocsCutting.size();
 
-		// Box constraints TODO
+		// Box constraints
 		for (int i=0; i<monoms.size(); i++) {
 			ARowsSCS.push_back(nextI);
 			AColsSCS.push_back(i);
@@ -4891,7 +4891,7 @@ public:
 			}
 		}
 
-		// Params needed for SCS TODO
+		// Params needed for SCS
 		int* SDPSizes = new int[monomProducts.size()];
 		for (int i=0; i<monomProducts.size(); i++) {
 			SDPSizes[i] = monomProducts[i].size();
@@ -4940,14 +4940,14 @@ public:
 		coneSCS->ssize = 1;
 		coneSCS->s = SDPSizes;
 
-		// Solver parameters
+		// Solver parameters TODO
 		scs_set_default_settings(stgs);
-		//stgs->verbose = false;
+		stgs->verbose = false;
 		//stgs->max_iters = 1000;
 		//stgs->normalize = false;
 		//stgs->acceleration_lookback = 100;
 		//stgs->adaptive_scale = false;
-		//stgs->scale = 0.9;
+		//stgs->scale = 0.01;
 		//stgs->rho_x = 1e-8;
 		stgs->eps_abs = 1e-8;
 		stgs->eps_rel = 0;
@@ -5009,7 +5009,7 @@ public:
 
 			}
 
-			// Update the box constraints TODO
+			// Update the box constraints
 			for (int i=1; i<monoms.size(); i++) {
 
 				// Get the indices from this monomial
@@ -5187,9 +5187,9 @@ public:
 			}
 			double secondsRemaining = itersRemaining * secondsPerIter;
 
-			// Per-iteration output
+			// Per-iteration output TODO
 			std::cout << std::defaultfloat;
-			std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << "  " << representTime(secondsRemaining) << " " << std::min(objPrimal, objDual) << " " << gap << "         \r" << std::flush;
+			std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << "  " << representTime(secondsRemaining) << " " << std::min(objPrimal, objDual) << " " << gap << "         \n" << std::flush;
 
 			// Remove the one we just processed
 			toProcess.erase(toProcess.begin());

@@ -147,7 +147,7 @@ int main(int argc, char ** argv) {
 							continue;
 						}
 
-						// (a+ib)*(c+id)
+						// (a+ib)*(c-id)
 						Polynomial<std::complex<double>> eqn(numVars);
 						for (int m=0; m<d; m++) {
 							int var1 = i*d*d + k*d + m;
@@ -330,7 +330,6 @@ int main(int argc, char ** argv) {
 			}
 			orderingCons.push_back(newCon);
 		}
-		//orderingCons = {};
 
 		// Combine these equations into a single object
 		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, orderingCons);
