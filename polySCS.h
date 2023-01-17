@@ -4815,28 +4815,16 @@ public:
 			paramLocsCutting.push_back({int(AValsSCS.size()-3), int(AValsSCS.size()-2), int(AValsSCS.size()-1)});
 			nextI++;
 
-			// x - min >= 0 TODO use box constraints
-			ARowsSCS.push_back(nextI);
-			AColsSCS.push_back(oneIndex);
-			AValsSCS.push_back(42);
-			ARowsSCS.push_back(nextI);
-			AColsSCS.push_back(firstMonomInds[i]);
-			AValsSCS.push_back(42);
-			paramLocsMin.push_back({int(AValsSCS.size()-2), int(AValsSCS.size()-1)});
-			nextI++;
-
-			// max - x >= 0
-			ARowsSCS.push_back(nextI);
-			AColsSCS.push_back(oneIndex);
-			AValsSCS.push_back(42);
-			ARowsSCS.push_back(nextI);
-			AColsSCS.push_back(firstMonomInds[i]);
-			AValsSCS.push_back(42);
-			paramLocsMax.push_back({int(AValsSCS.size()-2), int(AValsSCS.size()-1)});
-			nextI++;
-
 		}
-		int numParamCons = paramLocsMin.size() + paramLocsMax.size() + paramLocsCutting.size();
+		int numParamCons = paramLocsCutting.size();
+
+		// Box constraints TODO
+		for (int i=0; i<monoms.size(); i++) {
+			ARowsSCS.push_back(nextI);
+			AColsSCS.push_back(i);
+			AValsSCS.push_back(1);
+			nextI++;
+		}
 
 		// The SDP constraints
 		for (int i=0; i<shouldBePSD.size(); i++) {
@@ -4903,10 +4891,16 @@ public:
 			}
 		}
 
-		// Params needed for SCS
+		// Params needed for SCS TODO
 		int* SDPSizes = new int[monomProducts.size()];
 		for (int i=0; i<monomProducts.size(); i++) {
 			SDPSizes[i] = monomProducts[i].size();
+		}
+		double* boxConsMin = new double[monoms.size()-1];
+		double* boxConsMax = new double[monoms.size()-1];
+		for (int i=0; i<monoms.size()-1; i++) {
+			boxConsMin[i] = -bound;
+			boxConsMax[i] = bound;
 		}
 		int numVarsSCS = varsTotal;
 		int numConsSCS = nextI;
@@ -4940,22 +4934,24 @@ public:
 		dataSCS->A = &A;
 		coneSCS->z = 1 + conZeroLinear.size();
 		coneSCS->l = numParamCons + conPositiveLinear.size();
+		coneSCS->bl = boxConsMin;
+		coneSCS->bu = boxConsMax;
+		coneSCS->bsize = monoms.size();
 		coneSCS->ssize = 1;
 		coneSCS->s = SDPSizes;
 
-		// Solver parameters TODO
+		// Solver parameters
 		scs_set_default_settings(stgs);
-		stgs->verbose = false;
-		//stgs->max_iters = 5000;
+		//stgs->verbose = false;
+		//stgs->max_iters = 1000;
 		//stgs->normalize = false;
 		//stgs->acceleration_lookback = 100;
 		//stgs->adaptive_scale = false;
 		//stgs->scale = 0.9;
 		//stgs->rho_x = 1e-8;
-		stgs->eps_abs = 1e-5;
+		stgs->eps_abs = 1e-8;
 		stgs->eps_rel = 0;
 		//stgs->eps_infeas = 0.5;
-		double infeasTol = 1e-7;
 
 		// The order in which to branch
 		std::vector<int> splitOrder;
@@ -5013,16 +5009,64 @@ public:
 
 			}
 
-			// max - x > 0
-			for (int i=0; i<toProcess[0].size(); i++) {
-				dataSCS->A->x[paramLocsMax[i][0]] = -toProcess[0][i].second;
-				dataSCS->A->x[paramLocsMax[i][1]] = 1;
-			}
+			// Update the box constraints TODO
+			for (int i=1; i<monoms.size(); i++) {
 
-			// x - min > 0
-			for (int i=0; i<toProcess[0].size(); i++) {
-				dataSCS->A->x[paramLocsMin[i][0]] = toProcess[0][i].first;
-				dataSCS->A->x[paramLocsMin[i][1]] = -1;
+				// Get the indices from this monomial
+				std::vector<int> varIndices;
+				for (int j=0; j<monoms[i].size(); j+=digitsPerInd) {
+					varIndices.push_back(std::stoi(monoms[i].substr(j, digitsPerInd)));
+				}
+
+				// Check if the monom is a power of a single var
+				bool allSame = true;
+				for (int j=1; j<varIndices.size(); j++) {
+					if (varIndices[j] != varIndices[j-1]) {
+						allSame = false;
+						break;
+					}
+				}
+
+				// 2 if no idea, 0 if mixed, 1 if pos, -1 if neg 
+				int fixedSign = 2;
+				for (int j=0; j<varIndices.size(); j++) {
+					if (toProcess[0][varIndices[j]].first >= 0) {
+						if (fixedSign == 2) {
+							fixedSign = 1;
+						}
+					} else if (toProcess[0][varIndices[j]].second <= 0) {
+						if (fixedSign == 2) {
+							fixedSign = -1;
+						} else {
+							fixedSign *= -1;
+						}
+					} else if (j+1 < varIndices.size() && varIndices[j] == varIndices[j+1]) {
+						if (fixedSign == 2) {
+							fixedSign = 1;
+						}
+						j++;
+					} else {
+						fixedSign = 0;
+						break;
+					}
+				}
+
+				// Get the max magnitude this could take
+				double maxMag = 1;
+				for (int j=0; j<varIndices.size(); j++) {
+					maxMag *= std::max(std::abs(toProcess[0][varIndices[j]].first), std::abs(toProcess[0][varIndices[j]].second));
+				}
+
+				// Maybe one of the bounds can be tighter
+				coneSCS->bl[i-1] = -maxMag;
+				coneSCS->bu[i-1] = maxMag;
+				if (fixedSign == 1) {
+					coneSCS->bl[i-1] = 0;
+				} else if (fixedSign == -1) {
+					coneSCS->bu[i-1] = 0;
+				}
+				//std::cout << monoms[i] << " from " << coneSCS->bl[i] << " to " << coneSCS->bu[i] << std::endl;
+
 			}
 
 			// Solve the SDP and then free memory
@@ -5030,6 +5074,7 @@ public:
 			int exitFlag = scs_solve(scs_work, sol, info, 0);
 			double objPrimal = info->pobj;
 			double objDual = info->dobj;
+			double gap = info->gap;
 			std::vector<double> solVec(dataSCS->n, 0);
 			for (int i=0; i<dataSCS->n; i++) {
 				solVec[i] = sol->x[i];
@@ -5037,7 +5082,7 @@ public:
 			scs_finish(scs_work);
 
 			// If infeasible, good
-			if (exitFlag <= 0 || (objDual > infeasTol && objPrimal > infeasTol)) {
+			if (exitFlag <= 0 || std::min(objDual, objPrimal) > gap*100) {
 
 				// Stop if we ctrl-c'd
 				if (exitFlag == -5) {
@@ -5144,7 +5189,7 @@ public:
 
 			// Per-iteration output
 			std::cout << std::defaultfloat;
-			std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << " " << objPrimal << " " << objDual << "%        \r" << std::flush;
+			std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << "  " << representTime(secondsRemaining) << " " << std::min(objPrimal, objDual) << " " << gap << "         \r" << std::flush;
 
 			// Remove the one we just processed
 			toProcess.erase(toProcess.begin());

@@ -330,6 +330,7 @@ int main(int argc, char ** argv) {
 			}
 			orderingCons.push_back(newCon);
 		}
+		//orderingCons = {};
 
 		// Combine these equations into a single object
 		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, orderingCons);

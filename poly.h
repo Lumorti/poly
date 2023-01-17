@@ -4947,7 +4947,7 @@ public:
 			auto statSol = M->getPrimalSolutionStatus();
 
 			// If infeasible, good
-			if (statProb == mosek::fusion::ProblemStatus::PrimalInfeasible || statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown || M->primalObjValue() > 1e-7) {
+			if (statProb == mosek::fusion::ProblemStatus::PrimalInfeasible || statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown || M->dualObjValue() > 1e-7) {
 
 				// Keep track of how many were ill-posed
 				if (statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown) {
@@ -4976,7 +4976,8 @@ public:
 
 				// Get the solution values
 				auto sol = *(xM->level());
-				polyType outer = M->primalObjValue();
+				polyType objPrimal = M->primalObjValue();
+				polyType objDual = M->dualObjValue();
 
 				// Output the relevant moments
 				std::vector<polyType> solVec(xM->getSize());
