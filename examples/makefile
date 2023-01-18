@@ -18,6 +18,9 @@ mub:
 mubSCS:
 	$(CXX) $(CXXFLAGS) -o mubSCS mubSCS.cpp $(LIBS) $(LDLIBSMOSEK) $(LIBSCS)
 
+mubComplex:
+	$(CXX) $(CXXFLAGS) -o mubComplex mubComplex.cpp $(LIBS) $(LDLIBSMOSEK)
+
 testing:
 	$(CXX) $(CXXFLAGS) -o testing testing.cpp $(LIBS) $(LDLIBSMOSEK)
 
