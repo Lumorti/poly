@@ -135,7 +135,7 @@ int main(int argc, char ** argv) {
 		std::cout << std::endl;
 
 		// The list of equations to fill
-		std::vector<Polynomial<std::complex<double>>> eqns;
+		std::vector<Polynomial<double>> eqns;
 
 		// Generate equations
 		int newVarInd = 2*numVarsNonConj;
@@ -150,8 +150,8 @@ int main(int argc, char ** argv) {
 						}
 
 						// z_i* z_j
-						Polynomial<std::complex<double>> eqn(numVars);
-						Polynomial<std::complex<double>> eqnConj(numVars);
+						Polynomial<double> eqn(numVars);
+						Polynomial<double> eqnConj(numVars);
 						for (int m=0; m<d; m++) {
 							int var1 = i*d*d + k*d + m;
 							int var2 = j*d*d + l*d + m;
@@ -170,7 +170,7 @@ int main(int argc, char ** argv) {
 								eqnConj.addTerm(-1, {newVarInd+conjDelta});
 
 								// Constrain that this new complex should have mag 1/d
-								Polynomial<std::complex<double>> extraEqn(numVars);
+								Polynomial<double> extraEqn(numVars);
 								extraEqn.addTerm(1, {newVarInd,newVarInd+conjDelta});
 								extraEqn.addTerm(-1.0/d, {});
 								eqns.push_back(extraEqn);
@@ -205,7 +205,7 @@ int main(int argc, char ** argv) {
 		for (int i=d*d; i<numVarsNonConj; i++) {
 			for (int j=0; j<ogEqns; j++) {
 				if (eqns[j].contains(i)) {
-					Polynomial<std::complex<double>> extraEqn(numVars);
+					Polynomial<double> extraEqn(numVars);
 					extraEqn.addTerm(1, {i+conjDelta,i});
 					extraEqn.addTerm(-1.0/d, {});
 					eqns.push_back(extraEqn);
@@ -216,17 +216,17 @@ int main(int argc, char ** argv) {
 
 		// Can assume the first basis is the computational
 		std::vector<int> indsToReplace;
-		std::vector<std::complex<double>> valsToReplace;
+		std::vector<double> valsToReplace;
 		for (int i=0; i<d; i++) {
 			for (int j=0; j<d; j++) {
 				indsToReplace.push_back(i*d+j);
 				indsToReplace.push_back(i*d+j+conjDelta);
 				if (i == j) {
-					valsToReplace.push_back(1i);
-					valsToReplace.push_back(1i);
+					valsToReplace.push_back(1);
+					valsToReplace.push_back(1);
 				} else {
-					valsToReplace.push_back(0i);
-					valsToReplace.push_back(0i);
+					valsToReplace.push_back(0);
+					valsToReplace.push_back(0);
 				}
 			}
 		}
@@ -312,7 +312,7 @@ int main(int argc, char ** argv) {
 		//}
 
 		// Convert these symmetries into constraints with break them
-		std::vector<Polynomial<std::complex<double>>> orderingCons;
+		std::vector<Polynomial<double>> orderingCons;
 		//for (int i=0; i<syms.size(); i++) {
 			//Polynomial<double> newCon(numVars);
 			//int pow = 0;
@@ -325,60 +325,13 @@ int main(int argc, char ** argv) {
 		//}
 
 		// Combine these equations into a single object
-		//orderingCons = {};
-		PolynomialProblem<std::complex<double>> prob(Polynomial<std::complex<double>>(numVars), eqns, orderingCons);
+		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, orderingCons);
 
 		// Remove variables using linear equalities if possible
 		if (removeLinear) {
 			prob = prob.removeLinear();
 		}
 		
-		// Try to simplify the equations a bit
-		//for (int i=0; i<prob.conZero.size(); i++) {
-
-			//// Only consider non-normalization equations
-			//if (prob.conZero[i].size() > 3) {
-
-				//// Loop over the monoms of this
-				//std::vector<std::string> mons = prob.conZero[i].getMonomials();
-				//int digitsPerInd = prob.conZero[i].digitsPerInd;
-				//for (int m=0; m<mons.size(); m++) {
-
-					//// Find a squared term
-					//if (mons[m].size() == 2*digitsPerInd && mons[m].substr(0,digitsPerInd) == mons[m].substr(digitsPerInd,digitsPerInd)) {
-						//int realInd = std::stoi(mons[m].substr(0,digitsPerInd));
-						//double realCoeff = prob.conZero[i][mons[m]];
-
-						//// Now find the imag of this 
-						//for (int m2=0; m2<mons.size(); m2++) {
-							//if (mons[m2].size() == 2*digitsPerInd && mons[m2].substr(0,digitsPerInd) == mons[m2].substr(digitsPerInd,digitsPerInd) && std::stoi(mons[m2].substr(0,digitsPerInd)) == realInd+conjDelta) {
-								//int imagInd = std::stoi(mons[m2].substr(0,digitsPerInd));
-								//double imagCoeff = prob.conZero[i][mons[m2]];
-
-								//// Add a scaled version of the corresponding normal equation to simplify
-								//if (std::abs(realCoeff-imagCoeff) < 1e-6) {
-									//Polynomial<double> adjustment(numVars);
-									//adjustment.addTerm(realCoeff/d, {});
-									//adjustment.addTerm(-realCoeff, {realInd, realInd});
-									//adjustment.addTerm(-realCoeff, {imagInd, imagInd});
-									//prob.conZero[i] += adjustment;
-									//break;
-								//}
-
-							//}
-						//}
-
-					//}
-
-				//}
-
-			//}
-
-			//// Get rid of any almost zeros
-			//prob.conZero[i] = prob.conZero[i].prune();
-
-		//}
-
 		// Use as few indices as possible
 		std::unordered_map<int,int> reducedMap = prob.getMinimalMap();
 		prob = prob.replaceWithVariable(reducedMap);
@@ -394,106 +347,8 @@ int main(int argc, char ** argv) {
 		std::cout << prob << std::endl;
 		std::cout << dLimits[i2] << " " << prob.maxVariables << std::endl;
 
-		// If told to find a feasible point
-		//if (task == "feasible") {
-
-			//// Find a upper bound
-			//std::cout << std::scientific;
-			//std::vector<double> x = prob.findFeasiblePoint(-1, 0.1, 1e-12, 1000000, 4, false, 1.0/std::sqrt(d));
-			//double maxVal = -1000;
-			//for (int i=0; i<prob.conZero.size(); i++) {
-				//maxVal = std::max(maxVal, std::abs(prob.conZero[i].eval(x)));
-			//}
-			//std::cout << "max viol = " << maxVal << std::endl;
-
-			//// Reverse the map
-			//std::vector<double> origX(numVars, 0);
-			//for (auto const &pair: reducedMap) {
-				//origX[pair.first] = x[pair.second];
-			//}
-			//double maxVal2 = -1000;
-			//for (int i=0; i<eqns.size(); i++) {
-				//maxVal2 = std::max(maxVal2, std::abs(eqns[i].eval(origX)));
-			//}
-			//std::cout << "max viol of orig = " << maxVal2 << std::endl;
-
-			//// Put the bases in a nicer form
-			//std::vector<std::vector<std::vector<std::complex<double>>>> bases(n, std::vector<std::vector<std::complex<double>>>(d, std::vector<std::complex<double>>(d, 0)));
-			//nextInd = 0;
-			//for (int i=0; i<n; i++) {
-				//for (int k=0; k<d; k++) {
-					//for (int m=0; m<d; m++) {
-						//if (i > 0 && m == 0) {
-							//bases[i][k][m] = 1/std::sqrt(d);
-						//} else if (i == 1 && k == 0) {
-							//bases[i][k][m] = 1/std::sqrt(d);
-						//} else if (i == 0 && m == k) {
-							//bases[i][k][m] = 1;
-						//} else {
-							//bases[i][k][m] = origX[nextInd] + 1i*origX[nextInd+conjDelta];
-						//}
-						//nextInd++;
-					//}
-				//}
-			//}
-
-			//// List the bases 
-			//std::cout << "In a nicer form:" << std::endl;
-			//for (int i=0; i<n; i++) {
-				//std::cout << bases[i] << std::endl;
-			//}
-
-			//// Calculate overlaps
-			//if (!removeLinear) {
-				//for (int i=0; i<n; i++) {
-					//for (int j=0; j<n; j++) {
-						//std::vector<std::vector<double>> overlap(d, std::vector<double>(d, -1));
-						//for (int k=0; k<dLimits[i2][i]; k++) {
-							//for (int l=0; l<dLimits[i2][j]; l++) {
-								//std::complex<double> beforeSquare = 0;
-								//for (int m=0; m<d; m++) {
-									//beforeSquare += std::conj(bases[i][k][m]) * bases[j][l][m];
-								//}
-								//overlap[k][l] = std::real(std::conj(beforeSquare) * beforeSquare);
-							//}
-						//}
-						//std::cout << "overlap between " << i << " and " << j << ":" << std::endl;
-						//std::cout << overlap << std::endl;
-					//}
-				//}
-			//}
-
-		//// If told to prove the search space is infeasible
-		//} else if (task == "infeasible") {
-
-			//// If we're using a second level mat, add higher-order cons
-			//if (level.find("2") != std::string::npos) {
-				//int ogCons = prob.conZero.size();
-				//for (int i=0; i<ogCons; i++) {
-					//prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]);
-				//}
-			//}
-
-			//// If we're using a third level mat, add higher-order cons
-			//if (level.find("3") != std::string::npos) {
-				//int ogCons = prob.conZero.size();
-				//for (int i=0; i<ogCons; i++) {
-					//prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
-				//}
-			//}
-
-			//// If we're using a third level mat, add higher-order cons
-			//if (level.find("4") != std::string::npos) {
-				//int ogCons = prob.conZero.size();
-				//for (int i=0; i<ogCons; i++) {
-					//prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
-				//}
-			//}
-
-			//// Try to prove infeasiblity
-			//prob.proveInfeasible(maxIters, level, 1.0/std::sqrt(d), fileName);
-
-		//}
+		// Nullstellensatz TODO
+		prob.useNull(1);
 
 	}
 

@@ -5078,6 +5078,117 @@ public:
 
 	}
 
+	// Return combinations with repeats
+	// choose 2 from {0,1} = 00, 01, 10, 11, 0, 1
+	std::vector<std::vector<int>> getAllMonomials(int numVars, int dimension) {
+
+		// Stop when asking for single order monomials
+		std::vector<std::vector<int>> toReturn;
+		if (dimension == 1) {
+			for (int i=0; i<numVars; i++) {
+				toReturn.push_back({i});
+			}
+			return toReturn;
+		}
+
+		// For each var, consider this var as the first and then recurse
+		for (int i=0; i<numVars; i++) {
+			std::vector<std::vector<int>> y = getAllMonomials(numVars, dimension-1);
+			for (int j=0; j<y.size(); j++) {
+				y[j].insert(y[j].begin(), i);
+			}
+			toReturn.insert(toReturn.end(), y.begin(), y.end());
+		}
+
+		return toReturn;
+
+	}
+
+	// Same as above but converts to Polynomial
+	std::vector<Polynomial<double>> getAllMonomialsAsPoly(int numVars, int dimension) {
+
+		// Get the monomials
+		std::vector<std::vector<int>> toReturn;
+		for (int d=1; d<=dimension; d++) {
+			std::vector<std::vector<int>> nextDim = getAllMonomials(numVars, d);
+			toReturn.insert(toReturn.end(), nextDim.begin(), nextDim.end());
+		}
+
+		// Convert to Polynomial
+		std::vector<Polynomial<double>> toReturnPoly(toReturn.size(), Polynomial<double>(numVars));
+		for (int i=0; i<toReturn.size(); i++) {
+			toReturnPoly[i].addTerm(1, toReturn[i]);
+		}
+
+		return toReturnPoly;
+
+	}
+
+	// Use Hilbert's Nullstellensatz to try to prove infeasiblity TODO
+	void useNull (int level) {
+
+		// Get the monomial list and sort it
+		std::vector<std::string> monoms = getMonomials();
+		std::sort(monoms.begin(), monoms.end(), [](const std::string& first, const std::string& second){return first.size() < second.size();});
+
+		// Get the order of the set of equations
+		int degree = getDegree();
+
+		// Make sure we have all first order moments
+		addMonomsOfOrder(monoms, 1);
+
+		// Make sure we have all the moments we need
+		for (int i=1; i<degree+level+1; i++) {
+			addMonomsOfOrder(monoms, i);
+		}
+
+		// First monom should always be 1
+		auto loc = std::find(monoms.begin(), monoms.end(), "");
+		if (loc != monoms.end()) {
+			monoms.erase(loc);
+		}
+		monoms.insert(monoms.begin(), "");
+
+		// The size of our linear system
+		std::vector<Polynomial<double>> polyPerEquation = {Polynomial<double>(maxVariables, 1)};
+		for (int i=0; i<level; i++) {
+			std::vector<Polynomial<double>> all = getAllMonomialsAsPoly(maxVariables, i+1);
+			polyPerEquation.insert(polyPerEquation.end(), all.begin(), all.end());
+		}
+		int sysSize = polyPerEquation.size() * conZero.size();
+
+		std::cout << "matrix is " << monoms.size() << " by " << sysSize << std::endl;
+
+		Eigen::SparseMatrix<std::complex<double>> A(monoms.size(), sysSize);
+		std::vector<Eigen::Triplet<std::complex<double>>> tripletsA;
+		for (int i=0; i<conZero.size(); i++) {
+			for (int j=0; j<polyPerEquation.size(); j++) {
+				Polynomial<double> newEqn = conZero[i] * polyPerEquation[j];
+				for (auto const &pair: newEqn.coeffs) {
+					int loc = std::find(monoms.begin(), monoms.end(), pair.first) - monoms.begin(); 
+					tripletsA.push_back(Eigen::Triplet<std::complex<double>>(loc, j+i*polyPerEquation.size(), pair.second));
+				}
+			}
+		}
+		A.setFromTriplets(tripletsA.begin(), tripletsA.end());
+
+		Eigen::VectorXcd b = Eigen::VectorXcd::Zero(monoms.size());
+		b[0] = 1.0;
+
+		// Solve Ax = b
+		Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<std::complex<double>> > lscg;
+		lscg.compute(A);
+		Eigen::VectorXcd x = lscg.solve(b);
+		Eigen::VectorXcd leftSide = A*x;
+		for (int i=0; i<monoms.size(); i++) {
+			if (std::abs(leftSide[i]) > 1e-6) {
+				std::cout << monoms[i] << " " << leftSide[i] << std::endl;
+			}
+		}
+		std::cout << "error = " << (A*x-b).norm() << std::endl;
+
+	}
+
 };
 
 #endif
