@@ -12,7 +12,7 @@ int main(int argc, char ** argv) {
 	bool useQuadratic = true;
 	bool removeLinear = true;
 	int maxIters = -1;
-	std::string level = "1f";
+	int level = 1;
 	std::string fileName = "";
 	for (int i=0; i<argc; i++) {
 		std::string arg = argv[i];
@@ -38,7 +38,7 @@ int main(int argc, char ** argv) {
 			maxIters = std::stoi(argv[i+1]);
 			i++;
 		} else if (arg == "-l" && i+1 < argc) {
-			level = argv[i+1];
+			level = std::stoi(argv[i+1]);
 			i++;
 		} else if (arg == "-o" && i+1 < argc) {
 			fileName = argv[i+1];
@@ -254,93 +254,50 @@ int main(int argc, char ** argv) {
 			eqns[i] = eqns[i].replaceWithValue(indsToReplace, valsToReplace);
 		}
 
-		// Find the symmetries of the problem
-		std::vector<std::unordered_map<int,int>> syms;
-
-		// Ordering within each basis
-		//int base = 2;
-		//for (int i=1; i<n; i++) {
-			//for (int j=0; j<dLimits[i2][i]-1; j++) {
-				//if (i == 1 && j == 0) {
-					//continue;
-				//}
-				//std::unordered_map<int,int> newSym;
-				//for (int k=1; k<d; k++) {
-					//int indLeft = i*d*d+j*d+k; 
-					//int indRight = i*d*d+(j+1)*d+k; 
-					//newSym[indLeft] = indRight;
-					//newSym[indLeft+conjDelta] = indRight+conjDelta;
-				//}
-				//syms.push_back(newSym);
-			//}
-		//}
-
-		// Ordering of the bases
-		//for (int i=1; i<n-1; i++) {
-			//int ind1 = 0;
-			//if (i == 1) {
-				//ind1 = 1;
-			//}
-			//if (ind1 > dLimits[i2][i]-1) {
-				//continue;
-			//}
-			//std::unordered_map<int,int> newSym;
-			//for (int k=1; k<d; k++) {
-				//int indLeft = i*d*d+ind1*d+k;
-				//int indRight = (i+1)*d*d+0*d+k;
-				//newSym[indLeft] = indRight;
-				//newSym[indLeft+conjDelta] = indRight+conjDelta;
-			//}
-			//syms.push_back(newSym);
-		//}
-
-		// Ordering of the elements in the vectors
-		//for (int k=1; k<d-1; k++) {
-			//std::unordered_map<int,int> newSym;
-			//for (int i=1; i<n; i++) {
-				//for (int j=0; j<dLimits[i2][i]; j++) {
-					//if (i == 1 && j == 0) {
-						//continue;
-					//}
-					//int indLeft = i*d*d+j*d+k;
-					//int indRight = i*d*d+j*d+k+1;
-					//newSym[indLeft] = indRight;
-					//newSym[indLeft+conjDelta] = indRight+conjDelta;
-				//}
-			//}
-			//syms.push_back(newSym);
-		//}
-
 		// Convert these symmetries into constraints with break them
-		std::vector<Polynomial<double>> orderingCons;
-		//for (int i=0; i<syms.size(); i++) {
-			//Polynomial<double> newCon(numVars);
-			//int pow = 0;
-			//for (auto const &pair: syms[i]) {
-				//newCon.addTerm(std::pow(2, pow), {pair.first});
-				//newCon.addTerm(-std::pow(2, pow), {pair.second});
-				//pow++;
-			//}
-			//orderingCons.push_back(newCon);
-		//}
+		std::vector<Polynomial<double>> consPositive;
+		//consPositive.push_back(Polynomial<double>(numVars, 1, {9, 25}));
+		//consPositive.push_back(Polynomial<double>(numVars, 1, {13, 29}));
+		//consPositive.push_back(Polynomial<double>(numVars, 1, {36, 52}));
+
+		eqns = {};
+		eqns.push_back(Polynomial<double>(2, "1*{00}-1*{}"));
+		eqns.push_back(Polynomial<double>(2, "1*{11}+1*{}"));
+		eqns.push_back(Polynomial<double>(2, "1*{01}+1*{}"));
+		consPositive = {};
+		consPositive.push_back(Polynomial<double>(2, "1*{}"));
+		std::vector<std::pair<double,double>> region = {{-1, -0.5}, {-1, 0}};
+		for (int i=0; i<region.size(); i++) {
+			Polynomial<double> newCon1(2);
+			newCon1.addTerm(1, {i});
+			newCon1.addTerm(-region[i].first, {});
+			consPositive.push_back(newCon1);
+			Polynomial<double> newCon2(2);
+			newCon2.addTerm(-1, {i});
+			newCon2.addTerm(region[i].second, {});
+			consPositive.push_back(newCon2);
+		}
+		PolynomialProblem<double> prob(Polynomial<double>(2), eqns, consPositive);
+
+		//std::cout << eqns << std::endl;
 
 		// Combine these equations into a single object
-		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, orderingCons);
+		//PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, consPositive);
 
 		// Remove variables using linear equalities if possible
-		if (removeLinear) {
-			prob = prob.removeLinear();
-		}
+		//if (removeLinear) {
+			//prob = prob.removeLinear();
+		//}
 		
 		// Use as few indices as possible
-		std::unordered_map<int,int> reducedMap = prob.getMinimalMap();
-		prob = prob.replaceWithVariable(reducedMap);
-		std::cout << "---------------------" << std::endl;
-		std::cout << "Index Mapping: " << std::endl;
-		std::cout << "---------------------" << std::endl;
-		std::cout << std::endl;
-		std::cout << reducedMap << std::endl;
-		std::cout << std::endl;
+		//std::unordered_map<int,int> reducedMap = prob.getMinimalMap();
+		//prob = prob.replaceWithVariable(reducedMap);
+		//std::cout << "---------------------" << std::endl;
+		//std::cout << "Index Mapping: " << std::endl;
+		//std::cout << "---------------------" << std::endl;
+		//std::cout << std::endl;
+		//std::cout << reducedMap << std::endl;
+		//std::cout << std::endl;
 		std::cout << "---------------------" << std::endl;
 		std::cout << "Final Problem: " << std::endl;
 		std::cout << "---------------------" << std::endl;
@@ -348,7 +305,7 @@ int main(int argc, char ** argv) {
 		std::cout << dLimits[i2] << " " << prob.maxVariables << std::endl;
 
 		// Nullstellensatz TODO
-		prob.useNull(1);
+		prob.useNull(level);
 
 	}
 

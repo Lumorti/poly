@@ -270,9 +270,7 @@ public:
 
 		}
 
-
 	}
-
 
 	// Change the digits per index
 	Polynomial changeMaxVariables(int newMaxVariables) {
@@ -5155,37 +5153,74 @@ public:
 			std::vector<Polynomial<double>> all = getAllMonomialsAsPoly(maxVariables, i+1);
 			polyPerEquation.insert(polyPerEquation.end(), all.begin(), all.end());
 		}
-		int sysSize = polyPerEquation.size() * conZero.size();
+		int numa = polyPerEquation.size() * conZero.size();
+		int numb = conPositive.size();
+		int sysSize = numa + numb;
 
 		std::cout << "matrix is " << monoms.size() << " by " << sysSize << std::endl;
 
-		Eigen::SparseMatrix<std::complex<double>> A(monoms.size(), sysSize);
-		std::vector<Eigen::Triplet<std::complex<double>>> tripletsA;
+		// Convert the constraints to MOSEK form
+		std::vector<int> ARows;
+		std::vector<int> ACols;
+		std::vector<polyType> AVals;
 		for (int i=0; i<conZero.size(); i++) {
 			for (int j=0; j<polyPerEquation.size(); j++) {
 				Polynomial<double> newEqn = conZero[i] * polyPerEquation[j];
 				for (auto const &pair: newEqn.coeffs) {
 					int loc = std::find(monoms.begin(), monoms.end(), pair.first) - monoms.begin(); 
-					tripletsA.push_back(Eigen::Triplet<std::complex<double>>(loc, j+i*polyPerEquation.size(), pair.second));
+					ARows.push_back(loc);
+					ACols.push_back(j+i*polyPerEquation.size());
+					AVals.push_back(pair.second);
 				}
 			}
 		}
-		A.setFromTriplets(tripletsA.begin(), tripletsA.end());
-
-		Eigen::VectorXcd b = Eigen::VectorXcd::Zero(monoms.size());
-		b[0] = 1.0;
-
-		// Solve Ax = b
-		Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<std::complex<double>> > lscg;
-		lscg.compute(A);
-		Eigen::VectorXcd x = lscg.solve(b);
-		Eigen::VectorXcd leftSide = A*x;
-		for (int i=0; i<monoms.size(); i++) {
-			if (std::abs(leftSide[i]) > 1e-6) {
-				std::cout << monoms[i] << " " << leftSide[i] << std::endl;
+		for (int i=0; i<conPositive.size(); i++) {
+			for (auto const &pair: conPositive[i].coeffs) {
+				int loc = std::find(monoms.begin(), monoms.end(), pair.first) - monoms.begin(); 
+				ARows.push_back(loc);
+				ACols.push_back(numa+i);
+				AVals.push_back(pair.second);
 			}
 		}
-		std::cout << "error = " << (A*x-b).norm() << std::endl;
+		std::cout << "with " << AVals.size() << " non-zeros" << std::endl;
+		auto AM = mosek::fusion::Matrix::sparse(monoms.size(), sysSize, monty::new_array_ptr<int>(ARows), monty::new_array_ptr<int>(ACols), monty::new_array_ptr<polyType>(AVals));
+
+		// Create a model
+		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
+
+		// Create the variable
+		mosek::fusion::Variable::t xM = M->variable(sysSize);
+
+		// Linear equality constraints
+		M->constraint(mosek::fusion::Expr::mul(AM, xM), mosek::fusion::Domain::equalsTo(0.0));
+
+
+		// Constrain the constant element of b
+		M->constraint(xM->index(numa+0), mosek::fusion::Domain::inRange(0.0, 1.0));
+
+		// All elements of b should be positive
+		for (int i=1; i<numb; i++) {
+			M->constraint(xM->index(numa+i), mosek::fusion::Domain::greaterThan(0.0));
+		}
+
+		// Try to maxmime the difference from zero
+		M->objective(mosek::fusion::ObjectiveSense::Maximize, xM->index(numa+0));
+
+		// Solve the problem
+		M->solve();
+
+		// If it's infeasible, say so
+		if (M->getProblemStatus() == mosek::fusion::ProblemStatus::PrimalInfeasible) {
+			std::cout << "infeasible" << std::endl;
+
+		// Otherwise extract and return the objective
+		} else {
+			auto sol = *(xM->level());
+			double objVal = M->primalObjValue();
+			std::cout << "feasible" << std::endl;
+			std::cout << objVal << std::endl;
+
+		}
 
 	}
 
