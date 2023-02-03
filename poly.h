@@ -5178,16 +5178,16 @@ public:
 			// Update the positivity cons
 			conPositive = conPositiveCopy;
 			conPositive.insert(conPositive.begin(), Polynomial<double>(maxVariables, "1*{}"));
-			//for (int i=0; i<maxVariables; i++) {
-				//Polynomial<double> newCon1(maxVariables);
-				//newCon1.addTerm(1, {i});
-				//newCon1.addTerm(-toProcess[0][i].first, {});
-				//conPositive.push_back(newCon1);
-				//Polynomial<double> newCon2(2);
-				//newCon2.addTerm(-1, {i});
-				//newCon2.addTerm(toProcess[0][i].second, {});
-				//conPositive.push_back(newCon2);
-			//}
+			for (int i=0; i<maxVariables; i++) {
+				Polynomial<double> newCon1(maxVariables);
+				newCon1.addTerm(1, {i});
+				newCon1.addTerm(-toProcess[0][i].first, {});
+				conPositive.push_back(newCon1);
+				Polynomial<double> newCon2(2);
+				newCon2.addTerm(-1, {i});
+				newCon2.addTerm(toProcess[0][i].second, {});
+				conPositive.push_back(newCon2);
+			}
 
 			// The size of our linear system
 			std::vector<Polynomial<double>> polyPerEquation = {Polynomial<double>(maxVariables, 1)};

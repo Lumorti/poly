@@ -291,9 +291,9 @@ int main(int argc, char ** argv) {
 		//prob.conZero.push_back(Polynomial<double>(numVars, "1*{0}+1*{1}+1*{2}+1*{3}+1*{4}-1*{5}"));
 		//prob.conZero.push_back(Polynomial<double>(numVars, "-1*{0}-1*{1}-1*{2}-1*{3}+1*{4}-1*{5}"));
 		//prob.conPositive.push_back(Polynomial<double>(numVars, "1*{0}+1*{1}+1*{2}+1*{3}-1*{4}+1*{5}"));
-		for (int i=0; i<prob.obj.maxVariables; i++) {
-			prob.conPositive.push_back(Polynomial<double>(newNumVars, 1, {i}));
-		}
+		//for (int i=0; i<prob.obj.maxVariables; i++) {
+			//prob.conPositive.push_back(Polynomial<double>(newNumVars, 1, {i}));
+		//}
 		//auto mons = prob.getMonomials();
 		//for (int i=0; i<mons.size(); i++) {
 			//if (mons[i].size() > 0) {
@@ -318,18 +318,24 @@ int main(int argc, char ** argv) {
 				//}
 			//}
 		//}
-		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 0 8}"));
-		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 1 9}"));
-		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{12}"));
-		//prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 0 6}"));
-		//prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 1 7}"));
-		//prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 2 8}"));
-		//prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 3 9}"));
-		//prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 410}"));
-		//prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 511}"));
-		//prob.conPositive.push_back(Polynomial<double>(numVars, "1*{1215}"));
-		//prob.conPositive.push_back(Polynomial<double>(numVars, "1*{1316}"));
-		//prob.conPositive.push_back(Polynomial<double>(numVars, "1*{1417}"));
+		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 0 6}"));
+		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 0 0}+1*{ 6 6}+2*{ 0 6}"));
+		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 1 7}"));
+		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 1 1}+1*{ 7 7}+2*{ 1 7}"));
+		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 2 8}"));
+		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 2 2}+1*{ 8 8}+2*{ 2 8}"));
+		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 3 9}"));
+		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 3 3}+1*{ 9 9}+2*{ 3 9}"));
+		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 410}"));
+		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 4 4}+1*{1010}+2*{ 410}"));
+		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 511}"));
+		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 5 5}+1*{1111}+2*{ 511}"));
+		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{1215}"));
+		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{1212}+1*{1515}+2*{1215}"));
+		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{1316}"));
+		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{1313}+1*{1616}+2*{1316}"));
+		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{1417}"));
+		prob.conPositive.push_back(Polynomial<double>(numVars, "1*{1414}+1*{1717}+2*{1417}"));
 		//prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 1}"));
 		//prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 2}"));
 		//prob.conPositive.push_back(Polynomial<double>(numVars, "1*{ 3}"));
