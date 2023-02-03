@@ -5123,7 +5123,7 @@ public:
 	}
 
 	// Use Hilbert's Nullstellensatz to try to prove infeasiblity TODO
-	void useNull (int level) {
+	void useNull(int level=1, double bounds=1, int maxIters=-1) {
 
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
@@ -5147,78 +5147,159 @@ public:
 		}
 		monoms.insert(monoms.begin(), "");
 
-		// The size of our linear system
-		std::vector<Polynomial<double>> polyPerEquation = {Polynomial<double>(maxVariables, 1)};
-		for (int i=0; i<level; i++) {
-			std::vector<Polynomial<double>> all = getAllMonomialsAsPoly(maxVariables, i+1);
-			polyPerEquation.insert(polyPerEquation.end(), all.begin(), all.end());
+		// Cache the original positivity constraints
+		auto conPositiveCopy = conPositive;
+
+		// The list of regions to check TODO
+		std::vector<std::vector<std::pair<double,double>>> toProcess;
+		toProcess.push_back(std::vector<std::pair<double,double>>(maxVariables, {-bounds, bounds}));
+
+		// Start with the most general area
+		double maxArea = 1;
+		for (int i=0; i<maxVariables; i++) {
+			maxArea *= 2*bounds;
 		}
-		int numa = polyPerEquation.size() * conZero.size();
-		int numb = conPositive.size();
-		int sysSize = numa + numb;
 
-		std::cout << "matrix is " << monoms.size() << " by " << sysSize << std::endl;
+		// Keep going whilst we have stuff to check
+		int iter = 0;
+		int numFixed = 0;
+		double totalArea = 0;
+		while (toProcess.size() > 0 && (iter < maxIters || maxIters < 0)) {
+			iter++;
 
-		// Convert the constraints to MOSEK form
-		std::vector<int> ARows;
-		std::vector<int> ACols;
-		std::vector<polyType> AVals;
-		for (int i=0; i<conZero.size(); i++) {
-			for (int j=0; j<polyPerEquation.size(); j++) {
-				Polynomial<double> newEqn = conZero[i] * polyPerEquation[j];
-				for (auto const &pair: newEqn.coeffs) {
+			std::cout << iter << " processing: " << toProcess[0] << "  num fixed: " << numFixed << " area covered: " << totalArea / maxArea << std::endl;
+
+			// The area taken up by this section
+			double areaCovered = 1;
+			for (int k=0; k<toProcess[0].size(); k++) {
+				areaCovered *= toProcess[0][k].second - toProcess[0][k].first;
+			}
+
+			// Update the positivity cons
+			conPositive = conPositiveCopy;
+			conPositive.insert(conPositive.begin(), Polynomial<double>(maxVariables, "1*{}"));
+			//for (int i=0; i<maxVariables; i++) {
+				//Polynomial<double> newCon1(maxVariables);
+				//newCon1.addTerm(1, {i});
+				//newCon1.addTerm(-toProcess[0][i].first, {});
+				//conPositive.push_back(newCon1);
+				//Polynomial<double> newCon2(2);
+				//newCon2.addTerm(-1, {i});
+				//newCon2.addTerm(toProcess[0][i].second, {});
+				//conPositive.push_back(newCon2);
+			//}
+
+			// The size of our linear system
+			std::vector<Polynomial<double>> polyPerEquation = {Polynomial<double>(maxVariables, 1)};
+			for (int i=0; i<level; i++) {
+				std::vector<Polynomial<double>> all = getAllMonomialsAsPoly(maxVariables, i+1);
+				polyPerEquation.insert(polyPerEquation.end(), all.begin(), all.end());
+			}
+			int numa = polyPerEquation.size() * conZero.size();
+			int numb = conPositive.size();
+			int sysSize = numa + numb;
+
+			// Convert the constraints to MOSEK form
+			std::vector<int> ARows;
+			std::vector<int> ACols;
+			std::vector<polyType> AVals;
+			for (int i=0; i<conZero.size(); i++) {
+				for (int j=0; j<polyPerEquation.size(); j++) {
+					Polynomial<double> newEqn = conZero[i] * polyPerEquation[j];
+					for (auto const &pair: newEqn.coeffs) {
+						int loc = std::find(monoms.begin(), monoms.end(), pair.first) - monoms.begin(); 
+						ARows.push_back(loc);
+						ACols.push_back(j+i*polyPerEquation.size());
+						AVals.push_back(pair.second);
+					}
+				}
+			}
+			for (int i=0; i<conPositive.size(); i++) {
+				for (auto const &pair: conPositive[i].coeffs) {
 					int loc = std::find(monoms.begin(), monoms.end(), pair.first) - monoms.begin(); 
 					ARows.push_back(loc);
-					ACols.push_back(j+i*polyPerEquation.size());
+					ACols.push_back(numa+i);
 					AVals.push_back(pair.second);
 				}
 			}
-		}
-		for (int i=0; i<conPositive.size(); i++) {
-			for (auto const &pair: conPositive[i].coeffs) {
-				int loc = std::find(monoms.begin(), monoms.end(), pair.first) - monoms.begin(); 
-				ARows.push_back(loc);
-				ACols.push_back(numa+i);
-				AVals.push_back(pair.second);
+			auto AM = mosek::fusion::Matrix::sparse(monoms.size(), sysSize, monty::new_array_ptr<int>(ARows), monty::new_array_ptr<int>(ACols), monty::new_array_ptr<polyType>(AVals));
+
+			// Create a model
+			mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
+
+			// Create the variable
+			mosek::fusion::Variable::t xM = M->variable(sysSize);
+
+			// Linear equality constraints
+			M->constraint(mosek::fusion::Expr::mul(AM, xM), mosek::fusion::Domain::equalsTo(0.0));
+
+			// Constrain the elements of b
+			//M->constraint(xM->index(numa), mosek::fusion::Domain::inRange(-100.0, 100.0));
+			//M->constraint(xM->slice(numa+1, sysSize), mosek::fusion::Domain::inRange(-100.0, 100.0));
+			M->constraint(xM->index(numa), mosek::fusion::Domain::inRange(0, 100.0));
+			M->constraint(xM->slice(numa+1, sysSize), mosek::fusion::Domain::inRange(0, 100.0));
+
+			// Try to max any of the functions non zero
+			//M->objective(mosek::fusion::ObjectiveSense::Maximize, xM->index(numa));
+			M->objective(mosek::fusion::ObjectiveSense::Maximize, mosek::fusion::Expr::sum(xM->slice(numa, sysSize)));
+
+			// Solve the problem
+			M->solve();
+
+			// If it's infeasible, say so
+			if (M->getProblemStatus() == mosek::fusion::ProblemStatus::PrimalInfeasible) {
+				std::cout << "primally infeasible" << std::endl;
+
+			// Otherwise extract and return the objective
+			} else {
+				auto sol = *(xM->level());
+				double objVal = M->primalObjValue();
+				std::vector<polyType> solVec(xM->getSize());
+				for (int i=0; i<solVec.size(); i++) {
+					solVec[i] = sol[i];
+					if (i >= numa) {
+						std::cout << solVec[i] << " * " << conPositive[i-numa] << std::endl;
+					}
+				}
+
+				if (objVal > 1e-3) {
+					std::cout << "infeasible with " << objVal << std::endl;
+					totalArea += areaCovered;
+				} else {
+					std::cout << "feasible with " << objVal << std::endl;
+
+					// Find the biggest difference
+					double biggestDiff = -10000;
+					double diff = -10000;
+					int bestInd = -1;
+					for (int i=0; i<maxVariables; i++) {
+						diff = toProcess[0][i].second - toProcess[0][i].first;
+						if (diff > biggestDiff) {
+							biggestDiff = diff;
+							bestInd = i;
+						}
+					}
+
+					// Split the region
+					double minPoint = toProcess[0][bestInd].first;
+					double maxPoint = toProcess[0][bestInd].second;
+					double midPoint = (minPoint + maxPoint) / 2.0;
+					double splitPoint = midPoint;
+					auto copyLeft = toProcess[0];
+					auto copyRight = toProcess[0];
+					copyLeft[bestInd].second = splitPoint;
+					copyRight[bestInd].first = splitPoint;
+
+					// Add the new paths to the queue
+					toProcess.insert(toProcess.begin()+1, copyLeft);
+					toProcess.insert(toProcess.begin()+1, copyRight);
+
+				}
+
 			}
-		}
-		std::cout << "with " << AVals.size() << " non-zeros" << std::endl;
-		auto AM = mosek::fusion::Matrix::sparse(monoms.size(), sysSize, monty::new_array_ptr<int>(ARows), monty::new_array_ptr<int>(ACols), monty::new_array_ptr<polyType>(AVals));
 
-		// Create a model
-		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
-
-		// Create the variable
-		mosek::fusion::Variable::t xM = M->variable(sysSize);
-
-		// Linear equality constraints
-		M->constraint(mosek::fusion::Expr::mul(AM, xM), mosek::fusion::Domain::equalsTo(0.0));
-
-
-		// Constrain the constant element of b
-		M->constraint(xM->index(numa+0), mosek::fusion::Domain::inRange(0.0, 1.0));
-
-		// All elements of b should be positive
-		for (int i=1; i<numb; i++) {
-			M->constraint(xM->index(numa+i), mosek::fusion::Domain::greaterThan(0.0));
-		}
-
-		// Try to maxmime the difference from zero
-		M->objective(mosek::fusion::ObjectiveSense::Maximize, xM->index(numa+0));
-
-		// Solve the problem
-		M->solve();
-
-		// If it's infeasible, say so
-		if (M->getProblemStatus() == mosek::fusion::ProblemStatus::PrimalInfeasible) {
-			std::cout << "infeasible" << std::endl;
-
-		// Otherwise extract and return the objective
-		} else {
-			auto sol = *(xM->level());
-			double objVal = M->primalObjValue();
-			std::cout << "feasible" << std::endl;
-			std::cout << objVal << std::endl;
+			// Regardless, this is now done
+			toProcess.erase(toProcess.begin());
 
 		}
 
