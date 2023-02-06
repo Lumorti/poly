@@ -12,6 +12,7 @@ int main(int argc, char ** argv) {
 	bool useQuadratic = true;
 	bool removeLinear = true;
 	int maxIters = -1;
+	double testParam = 0;
 	std::string level = "1f";
 	std::string fileName = "";
 	for (int i=0; i<argc; i++) {
@@ -21,6 +22,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -n [int]    set the number of bases" << std::endl;
 			std::cout << " -l [str]    set the level for the relaxation e.g. 1+2f,3p" << std::endl;
 			std::cout << " -i [int]    set max iterations (-1 for no limit)" << std::endl;
+			std::cout << " -t [dbl]    set the test parameter" << std::endl;
 			std::cout << " -2          use quadratic equations" << std::endl;
 			std::cout << " -4          use quartic equations" << std::endl;
 			std::cout << " -w          use whole bases, not partial" << std::endl;
@@ -36,6 +38,9 @@ int main(int argc, char ** argv) {
 			i++;
 		} else if (arg == "-i" && i+1 < argc) {
 			maxIters = std::stoi(argv[i+1]);
+			i++;
+		} else if (arg == "-t" && i+1 < argc) {
+			testParam = std::stod(argv[i+1]);
 			i++;
 		} else if (arg == "-l" && i+1 < argc) {
 			level = argv[i+1];
@@ -328,18 +333,10 @@ int main(int argc, char ** argv) {
 				newCon.addTerm(-std::pow(2, pow), {pair.second});
 				pow++;
 			}
-			//for (auto const &pair1: syms[i]) {
-				//for (auto const &pair2: syms[i]) {
-					//newCon.addTerm(std::pow(2, pow), {pair1.first, pair2.first});
-					//newCon.addTerm(-std::pow(2, pow), {pair1.second, pair2.second});
-					//pow++;
-				//}
-			//}
 			orderingCons.push_back(newCon);
 		}
 
 		// Combine these equations into a single object
-		//orderingCons = {};
 		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, orderingCons);
 
 		// Remove variables using linear equalities if possible
@@ -480,7 +477,7 @@ int main(int argc, char ** argv) {
 		// If told to prove the search space is infeasible
 		} else if (task == "infeasible") {
 
-			// If we're using a second level mat, add higher-order cons
+			// If we're using a higher level mat, add higher-order cons
 			if (level.find("2") != std::string::npos) {
 				int ogCons = prob.conZero.size();
 				for (int i=0; i<ogCons; i++) {
@@ -488,7 +485,7 @@ int main(int argc, char ** argv) {
 				}
 			}
 
-			// If we're using a third level mat, add higher-order cons
+			// If we're using a higher level mat, add higher-order cons
 			if (level.find("3") != std::string::npos) {
 				int ogCons = prob.conZero.size();
 				for (int i=0; i<ogCons; i++) {
@@ -496,7 +493,7 @@ int main(int argc, char ** argv) {
 				}
 			}
 
-			// If we're using a third level mat, add higher-order cons
+			// If we're using a higher level mat, add higher-order cons
 			if (level.find("4") != std::string::npos) {
 				int ogCons = prob.conZero.size();
 				for (int i=0; i<ogCons; i++) {
@@ -505,7 +502,8 @@ int main(int argc, char ** argv) {
 			}
 
 			// Try to prove infeasiblity
-			prob.proveInfeasible(maxIters, level, 1.0/std::sqrt(d), fileName);
+			//prob.proveInfeasible(maxIters, level, 1.0/std::sqrt(d), fileName);
+			prob.proveInfeasibleRadial(maxIters, level, 1.0/std::sqrt(d), fileName, testParam);
 
 		}
 

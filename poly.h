@@ -4540,13 +4540,6 @@ public:
 			}
 		}
 		
-		// Also get the monomials as polynomials and prepare for fast eval
-		//std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
-		//for (int i=0; i<monoms.size(); i++) {
-			//monomsAsPolys[i] = Polynomial<polyType>(maxVariables, 1, monoms[i]);
-			//monomsAsPolys[i].prepareEvalMixed();
-		//}
-
 		// Create the mapping from monomials to indices (to linearize)
 		int numOGMonoms = monoms.size();
 		std::unordered_map<std::string,std::string> mapping;
@@ -4803,9 +4796,6 @@ public:
 		// Create a model
 		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
 
-		// DEBUG
-		//M->setLogHandler([=](const std::string & msg){std::cout << msg << std::flush;});
-
 		// Create the variable
 		//mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(monty::new_array_ptr<double>(mins), monty::new_array_ptr<double>(maxs)));
 		mosek::fusion::Variable::t xM = M->variable(varsTotal);
@@ -4814,11 +4804,7 @@ public:
 		mosek::fusion::Variable::t lambda = M->variable();
 
 		// Parameterized linear positivity constraints
-		int numParamCons = maxVariables;
-		//numParamCons += 4*maxVariables*maxVariables;
-		numParamCons += maxVariables;
-		numParamCons += maxVariables;
-		//numParamCons += maxVariables;
+		int numParamCons = 3*maxVariables;
 		std::vector<long> sparsity;
 		for (int i=0; i<toProcess[0].size(); i++) {
 			sparsity.push_back((i)*varsTotal + firstMonomInds[i]);
@@ -4828,12 +4814,9 @@ public:
 			sparsity.push_back((i+maxVariables)*varsTotal + oneIndex);
 			sparsity.push_back((i+2*maxVariables)*varsTotal + firstMonomInds[i]);
 			sparsity.push_back((i+2*maxVariables)*varsTotal + oneIndex);
-			//sparsity.push_back((i+3*maxVariables)*varsTotal + quadraticMonomInds[i][i]);
-			//sparsity.push_back((i+3*maxVariables)*varsTotal + oneIndex);
 		}
 		std::sort(sparsity.begin(), sparsity.end());
 		mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
-		//mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}));
 		M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::greaterThan(0));
 
 		// The first element of the vector should be one
@@ -4848,15 +4831,9 @@ public:
 		// Try to violate the SDP constraints the least
 		M->objective(mosek::fusion::ObjectiveSense::Minimize, lambda);
 
-		//M->constraint(lambda, mosek::fusion::Domain::lessThan(0));
-
 		// SDP constraints
 		for (int i=0; i<shouldBePSD.size(); i++) {
-			if (i == 0) {
-				M->constraint(mosek::fusion::Expr::add(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Expr::mul(lambda, identityAsSVec[i])), mosek::fusion::Domain::inSVecPSDCone());
-			} else {
-				M->constraint(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Domain::inSVecPSDCone());
-			}
+			M->constraint(mosek::fusion::Expr::add(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Expr::mul(lambda, identityAsSVec[i])), mosek::fusion::Domain::inSVecPSDCone());
 		}
 
 		// Quadratic cones
@@ -4869,10 +4846,6 @@ public:
 		for (int i=0; i<maxVariables; i++) {
 			splitOrder.push_back(i);
 		}
-		//std::random_device rd;
-		//auto rng = std::default_random_engine {rd()};
-		//std::shuffle(std::begin(splitOrder), std::end(splitOrder), rng);
-		//std::cout << splitOrder << std::endl;
 
 		// Open a file if told to record the points
 		std::ofstream logFile;
@@ -4886,10 +4859,9 @@ public:
 		}
 
 		// Keep splitting until all fail
-		int iter = 0;
+		int iter = 1;
 		auto toProcessBackup = toProcess;
 		toProcess = toProcessBackup;
-		iter = 0;
 		double totalArea = 0;
 		double areaCovered = 1;
 		auto begin = std::chrono::steady_clock::now();
@@ -5048,8 +5020,8 @@ public:
 
 			// Time estimation
 			end = std::chrono::steady_clock::now();
-			secondsPerIter = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / ((iter+1) * 1.0e6);
-			double areaPerIter = totalArea / (iter+1);
+			secondsPerIter = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / (iter * 1.0e6);
+			double areaPerIter = totalArea / iter;
 			double itersRemaining = (maxArea - totalArea) / areaPerIter;
 			double secondsRemaining = itersRemaining * secondsPerIter;
 
@@ -5068,7 +5040,7 @@ public:
 
 		}
 		std::cout << std::endl;
-		std::cout << representTime((iter+1) * secondsPerIter) << std::endl;
+		std::cout << representTime(iter * secondsPerIter) << std::endl;
 
 		// Benchmarks
 		// d2n4 42 iterations 0.1s (6 vars)
@@ -5306,7 +5278,7 @@ public:
 	}
 
 	// Attempt to find a series of constraints that show this is infeasible
-	void proveInfeasibleRadial(std::unordered_map<int,int> radialMap, int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="") {
+	void proveInfeasibleRadial(int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="", double testParam=0) {
 
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
@@ -5438,17 +5410,6 @@ public:
 
 		}
 
-		// Start with the most general area
-		double maxArea = 1;
-		std::vector<std::vector<std::pair<double,double>>> toProcess;
-		std::vector<std::pair<double,double>> varMinMax(obj.maxVariables);
-		for (int i=0; i<obj.maxVariables; i++) {
-			varMinMax[i].first = -bound;
-			varMinMax[i].second = bound;
-			maxArea *= 2*bound;
-		}
-		toProcess.push_back(varMinMax);
-
 		// Create the PSD matrices from this list
 		std::vector<std::shared_ptr<monty::ndarray<int,1>>> shouldBePSD;
 		std::vector<std::shared_ptr<monty::ndarray<double,1>>> shouldBePSDCoeffs;
@@ -5501,8 +5462,8 @@ public:
 		}
 
 		// Get the inds of the first order monomials and their squares
-		std::vector<int> firstMonomInds(varMinMax.size(), -1);
-		std::vector<std::vector<int>> quadraticMonomInds(varMinMax.size(), std::vector<int>(varMinMax.size(), 1));
+		std::vector<int> firstMonomInds(maxVariables, -1);
+		std::vector<std::vector<int>> quadraticMonomInds(maxVariables, std::vector<int>(maxVariables, 1));
 		for (int i=0; i<monoms.size(); i++) {
 			if (monoms[i].size() == digitsPerInd) {
 				firstMonomInds[std::stoi(monoms[i])] = i;
@@ -5543,6 +5504,17 @@ public:
 			}
 		}
 
+		// Start with the most general area 
+		double maxArea = 1;
+		std::vector<std::vector<std::pair<double,double>>> toProcess;
+		std::vector<std::pair<double,double>> varMinMax(qCones.size());
+		for (int i=0; i<qCones.size(); i++) {
+			varMinMax[i].first = 0;
+			varMinMax[i].second = 360;
+			maxArea *= M_PI*bound*bound;
+		}
+		toProcess.push_back(varMinMax);
+
 		// Set some vars
 		int oneIndex = 0;
 		int varsTotal = monoms.size();
@@ -5581,62 +5553,65 @@ public:
 		}
 		auto BM = mosek::fusion::Matrix::sparse(conPositiveLinear.size(), varsTotal, monty::new_array_ptr<int>(BRows), monty::new_array_ptr<int>(BCols), monty::new_array_ptr<polyType>(BVals));
 		
-		// The box constraints, given our box
-		std::vector<double> mins(monoms.size(), -1);
-		std::vector<double> maxs(monoms.size(), 1);
-		for (int i=0; i<monoms.size(); i++) {
-
-			// Check if the monom is a power of a single var
-			bool allSame = true;
-			int monomDegree = monoms[i].size() / digitsPerInd;
-			for (int j=1; j<monomDegree; j++) {
-				if (monoms[i].substr(j*digitsPerInd, digitsPerInd) != monoms[i].substr(0, digitsPerInd)) {
-					allSame = false;
-					break;
-				}
-			}
-
-			// If it's an even power, it's positive
-			if (allSame && monomDegree % 2 == 0) {
-				mins[i] = 0;
-			} else {
-				mins[i] = -std::pow(bound, monomDegree);
-			}
-			maxs[i] = std::pow(bound, monomDegree);
-
-		}
-
 		// Create a model
 		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
 
 		// Create the variable
-		//mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(monty::new_array_ptr<double>(mins), monty::new_array_ptr<double>(maxs)));
 		mosek::fusion::Variable::t xM = M->variable(varsTotal);
 
 		// Use an extra variable to minimize violation of SD
 		mosek::fusion::Variable::t lambda = M->variable();
 
-		// Parameterized linear positivity constraints TODO radial
-		int numParamCons = maxVariables;
-		//numParamCons += 4*maxVariables*maxVariables;
-		numParamCons += maxVariables;
-		numParamCons += maxVariables;
-		//numParamCons += maxVariables;
+		// Parameterized linear positivity constraints 
+		int numParamCons = 0;
 		std::vector<long> sparsity;
-		for (int i=0; i<toProcess[0].size(); i++) {
-			sparsity.push_back((i)*varsTotal + firstMonomInds[i]);
-			sparsity.push_back((i)*varsTotal + quadraticMonomInds[i][i]);
-			sparsity.push_back((i)*varsTotal + oneIndex);
-			sparsity.push_back((i+maxVariables)*varsTotal + firstMonomInds[i]);
-			sparsity.push_back((i+maxVariables)*varsTotal + oneIndex);
-			sparsity.push_back((i+2*maxVariables)*varsTotal + firstMonomInds[i]);
-			sparsity.push_back((i+2*maxVariables)*varsTotal + oneIndex);
-			//sparsity.push_back((i+3*maxVariables)*varsTotal + quadraticMonomInds[i][i]);
-			//sparsity.push_back((i+3*maxVariables)*varsTotal + oneIndex);
+		for (int i=0; i<qCones.size(); i++) {
+
+			// The var indices
+			int var1Ind = std::get<1>(qCones[i]);
+			int var2Ind = std::get<2>(qCones[i]);
+
+			// The min 1
+			sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var1Ind]);
+			sparsity.push_back(numParamCons*varsTotal + oneIndex);
+			numParamCons++;
+
+			// The max 1
+			sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var1Ind]);
+			sparsity.push_back(numParamCons*varsTotal + oneIndex);
+			numParamCons++;
+
+			// The square 1
+			sparsity.push_back(numParamCons*varsTotal + oneIndex);
+			sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var1Ind]);
+			sparsity.push_back(numParamCons*varsTotal + quadraticMonomInds[var1Ind][var1Ind]);
+			numParamCons++;
+
+			// The min 2
+			sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var2Ind]);
+			sparsity.push_back(numParamCons*varsTotal + oneIndex);
+			numParamCons++;
+
+			// The max 2
+			sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var2Ind]);
+			sparsity.push_back(numParamCons*varsTotal + oneIndex);
+			numParamCons++;
+
+			// The square 2
+			sparsity.push_back(numParamCons*varsTotal + oneIndex);
+			sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var2Ind]);
+			sparsity.push_back(numParamCons*varsTotal + quadraticMonomInds[var2Ind][var2Ind]);
+			numParamCons++;
+
+			// The radial
+			sparsity.push_back(numParamCons*varsTotal + oneIndex);
+			sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var1Ind]);
+			sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var2Ind]);
+			numParamCons++;
+
 		}
 		std::sort(sparsity.begin(), sparsity.end());
 		mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
-		//mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}));
 		M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::greaterThan(0));
 
 		// The first element of the vector should be one
@@ -5651,31 +5626,10 @@ public:
 		// Try to violate the SDP constraints the least
 		M->objective(mosek::fusion::ObjectiveSense::Minimize, lambda);
 
-		//M->constraint(lambda, mosek::fusion::Domain::lessThan(0));
-
 		// SDP constraints
 		for (int i=0; i<shouldBePSD.size(); i++) {
-			if (i == 0) {
-				M->constraint(mosek::fusion::Expr::add(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Expr::mul(lambda, identityAsSVec[i])), mosek::fusion::Domain::inSVecPSDCone());
-			} else {
-				M->constraint(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Domain::inSVecPSDCone());
-			}
+			M->constraint(mosek::fusion::Expr::add(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Expr::mul(lambda, identityAsSVec[i])), mosek::fusion::Domain::inSVecPSDCone());
 		}
-
-		// Quadratic cones
-		//for (int i=0; i<qCones.size(); i++) {
-			//M->constraint(mosek::fusion::Expr::vstack(std::sqrt(std::get<0>(qCones[i])), xM->index(firstMonomInds[std::get<1>(qCones[i])]), xM->index(firstMonomInds[std::get<2>(qCones[i])])), mosek::fusion::Domain::inQCone(3));
-		//}
-
-		// The order in which to branch
-		std::vector<int> splitOrder;
-		for (int i=0; i<maxVariables; i++) {
-			splitOrder.push_back(i);
-		}
-		//std::random_device rd;
-		//auto rng = std::default_random_engine {rd()};
-		//std::shuffle(std::begin(splitOrder), std::end(splitOrder), rng);
-		//std::cout << splitOrder << std::endl;
 
 		// Open a file if told to record the points
 		std::ofstream logFile;
@@ -5689,22 +5643,24 @@ public:
 		}
 
 		// Keep splitting until all fail
-		int iter = 0;
+		int iter = 1;
 		auto toProcessBackup = toProcess;
 		toProcess = toProcessBackup;
-		iter = 0;
 		double totalArea = 0;
 		double areaCovered = 1;
 		auto begin = std::chrono::steady_clock::now();
 		auto end = std::chrono::steady_clock::now();
 		double secondsPerIter = 0;
 		int numIllPosed = 0;
+		double toRadians = M_PI / 180.0;
+		double toDegrees = 180.0 / M_PI;
+		double shift = testParam;
 		while (toProcess.size() > 0) {
 
 			// The area taken up by this section
 			areaCovered = 1;
 			for (int k=0; k<toProcess[0].size(); k++) {
-				areaCovered *= toProcess[0][k].second - toProcess[0][k].first;
+				areaCovered *= M_PI*bound*bound*(toProcess[0][k].second - toProcess[0][k].first) / 360.0;
 			}
 
 			// The new parameterized constraint vector and objective
@@ -5712,33 +5668,82 @@ public:
 
 			// Update the linear constraints on the quadratics
 			int nextInd = 0;
-			for (int i=0; i<toProcess[0].size(); i++) {
+			for (int i=0; i<qCones.size(); i++) {
 
-				// Given two points, find ax+by+c=0
-				std::vector<double> point1 = {toProcess[0][i].first, toProcess[0][i].first*toProcess[0][i].first};
-				std::vector<double> point2 = {toProcess[0][i].second, toProcess[0][i].second*toProcess[0][i].second};
-				std::vector<double> coeffs = getLineFromPoints(point1, point2);
+				//shift = i*testParam;
+				//if (i % 2 == 0) {
+					//shift = 45;
+				//} else {
+					//shift = -45;
+				//}
 
-				// Add this as a linear pos con
-				newD[nextInd][oneIndex] = coeffs[0];
-				newD[nextInd][firstMonomInds[i]] = coeffs[1];
-				newD[nextInd][quadraticMonomInds[i][i]] = coeffs[2];
+				// Get the min and max bounds from this angular cut
+				int var1Ind = std::get<1>(qCones[i]);
+				double var1FromMinAngle = bound*std::cos((toProcess[0][i].first+shift)*toRadians);
+				double var1FromMaxAngle = bound*std::cos((toProcess[0][i].second+shift)*toRadians);
+				double var1Min = std::min(var1FromMinAngle, var1FromMaxAngle); 
+				double var1Max = std::max(var1FromMinAngle, var1FromMaxAngle); 
+				if (toProcess[0][i].first <= 0 && toProcess[0][i].second >= 0) {
+					var1Max = bound;
+				}
+				if (toProcess[0][i].first <= 180 && toProcess[0][i].second >= 180) {
+					var1Min = -bound;
+				}
+
+				// Bound the value from above/max
+				newD[nextInd][oneIndex] = var1Max;
+				newD[nextInd][firstMonomInds[var1Ind]] = -1;
 				nextInd++;
 
-			}
-
-			// max - x > 0
-			for (int i=0; i<toProcess[0].size(); i++) {
-				newD[nextInd][oneIndex] = toProcess[0][i].second;
-				newD[nextInd][firstMonomInds[i]] = -1;
+				// Bound the value from below/min
+				newD[nextInd][oneIndex] = -var1Min;
+				newD[nextInd][firstMonomInds[var1Ind]] = 1;
 				nextInd++;
-			}
 
-			// x - min > 0
-			for (int i=0; i<toProcess[0].size(); i++) {
-				newD[nextInd][oneIndex] = -toProcess[0][i].first;
-				newD[nextInd][firstMonomInds[i]] = 1;
+				// Bound the square of this var
+				std::vector<double> coeffs1 = getLineFromPoints({var1Min, var1Min*var1Min}, {var1Max, var1Max*var1Max});
+				newD[nextInd][oneIndex] = coeffs1[0];
+				newD[nextInd][firstMonomInds[var1Ind]] = coeffs1[1];
+				newD[nextInd][quadraticMonomInds[var1Ind][var1Ind]] = coeffs1[2];
 				nextInd++;
+
+				// Get the min and max bounds from this angular cut
+				int var2Ind = std::get<2>(qCones[i]);
+				double var2FromMinAngle = bound*std::sin((toProcess[0][i].first+shift)*toRadians);
+				double var2FromMaxAngle = bound*std::sin((toProcess[0][i].second+shift)*toRadians);
+				double var2Min = std::min(var2FromMinAngle, var2FromMaxAngle); 
+				double var2Max = std::max(var2FromMinAngle, var2FromMaxAngle); 
+				if (toProcess[0][i].first <= 270 && toProcess[0][i].second >= 270) {
+					var2Min = -bound;
+				}
+				if (toProcess[0][i].first <= 90 && toProcess[0][i].second >= 90) {
+					var2Max = bound;
+				}
+
+				// Bound the value from above/max
+				newD[nextInd][oneIndex] = var2Max;
+				newD[nextInd][firstMonomInds[var2Ind]] = -1;
+				nextInd++;
+
+				// Bound the value from below/min
+				newD[nextInd][oneIndex] = -var2Min;
+				newD[nextInd][firstMonomInds[var2Ind]] = 1;
+				nextInd++;
+
+				// Bound the square of this var
+				std::vector<double> coeffs2 = getLineFromPoints({var2Min, var2Min*var2Min}, {var2Max, var2Max*var2Max});
+				newD[nextInd][oneIndex] = coeffs2[0];
+				newD[nextInd][firstMonomInds[var2Ind]] = coeffs2[1];
+				newD[nextInd][quadraticMonomInds[var2Ind][var2Ind]] = coeffs2[2];
+				nextInd++;
+
+				// Bound the space between both
+				std::vector<double> coeffs3 = getLineFromPoints({var1FromMinAngle, var2FromMinAngle}, {var1FromMaxAngle, var2FromMaxAngle});
+				newD[nextInd][oneIndex] = coeffs3[0];
+				newD[nextInd][firstMonomInds[var1Ind]] = coeffs3[1];
+				newD[nextInd][firstMonomInds[var2Ind]] = coeffs3[2];
+				nextInd++;
+
 			}
 
 			// Solve the problem
@@ -5786,24 +5791,27 @@ public:
 					solVec[i] = sol[i];
 				}
 
-				// Check the resulting vector for a good place to split 
-				std::vector<double> errors(maxVariables);
-				for (int i=0; i<monoms.size(); i++) {
-					if (monoms[i].size() == 2*digitsPerInd) {
-						int ind1 = std::stoi(monoms[i].substr(0, digitsPerInd));
-						int ind2 = std::stoi(monoms[i].substr(digitsPerInd, digitsPerInd));
-						errors[ind1] += std::pow(solVec[i] - solVec[firstMonomInds[ind1]]*solVec[firstMonomInds[ind2]], 2);
-						errors[ind2] += std::pow(solVec[i] - solVec[firstMonomInds[ind1]]*solVec[firstMonomInds[ind2]], 2);
+				// See which variable has the worst error
+				std::vector<double> errorsPerVar(maxVariables);
+				std::vector<double> errors(qCones.size());
+				for (int i=0; i<qCones.size(); i++) {
+					int ind1 = std::get<1>(qCones[i]);
+					int ind2 = std::get<2>(qCones[i]);
+					for (int j=0; j<maxVariables; j++) {
+						errors[i] += std::pow(solVec[quadraticMonomInds[ind1][j]] - solVec[firstMonomInds[j]]*solVec[firstMonomInds[ind1]], 2);
+						errorsPerVar[ind1] += std::pow(solVec[quadraticMonomInds[ind1][j]] - solVec[firstMonomInds[j]]*solVec[firstMonomInds[ind1]], 2);
+						errors[i] += std::pow(solVec[quadraticMonomInds[ind2][j]] - solVec[firstMonomInds[j]]*solVec[firstMonomInds[ind2]], 2);
+						errorsPerVar[ind2] += std::pow(solVec[quadraticMonomInds[ind2][j]] - solVec[firstMonomInds[j]]*solVec[firstMonomInds[ind2]], 2);
 					}
 				}
 
 				// Find the biggest error
 				double biggestError = -10000;
-				int bestInd = -1;
-				for (int i=0; i<splitOrder.size(); i++) {
-					if (errors[splitOrder[i]] > biggestError) {
-						biggestError = errors[splitOrder[i]];
-						bestInd = splitOrder[i];
+				int bestSection = -1;
+				for (int i=0; i<errors.size(); i++) {
+					if (errors[i] > biggestError) {
+						biggestError = errors[i];
+						bestSection = i;
 					}
 				}
 
@@ -5828,18 +5836,38 @@ public:
 				// If there's still space to split
 				} else {
 
-					// Split it
-					double minPoint = toProcess[0][bestInd].first;
-					double maxPoint = toProcess[0][bestInd].second;
-					double midPoint = (minPoint + maxPoint) / 2.0;
-					double mostFeasiblePoint = solVec[firstMonomInds[bestInd]];
-					double distanceBetween = mostFeasiblePoint - midPoint;
-					double splitPoint = mostFeasiblePoint;
-					//double splitPoint = midPoint;
+					// Get the vars from this cone
+					int ind1 = std::get<1>(qCones[bestSection]);
+					int ind2 = std::get<2>(qCones[bestSection]);
+
+					//std::cout << std::endl;
+
+					// Split it TODO radial
+					double minPoint = toProcess[0][bestSection].first;
+					double maxPoint = toProcess[0][bestSection].second;
+					std::pair<double,double> mostFeasiblePoint = {solVec[firstMonomInds[ind1]], solVec[firstMonomInds[ind2]]};
+					//std::cout << "most feas " << mostFeasiblePoint << std::endl;
+					double splitPoint = (maxPoint + minPoint) / 2.0;
+					//if (errorsPerVar[ind1] > errorsPerVar[ind2]) {
+						//std::pair<double,double> projectedPoint = {mostFeasiblePoint.first, std::sqrt(std::get<0>(qCones[bestSection])-std::pow(mostFeasiblePoint.first, 2))};
+						//std::cout << "projecting to " << projectedPoint << std::endl;
+						//splitPoint = toDegrees*std::atan2(projectedPoint.second, projectedPoint.first);
+					//} else {
+						//std::pair<double,double> projectedPoint = {std::sqrt(std::get<0>(qCones[bestSection])-std::pow(mostFeasiblePoint.second, 2)), mostFeasiblePoint.second};
+						//std::cout << "projecting to " << projectedPoint << std::endl;
+						//splitPoint = toDegrees*std::atan2(projectedPoint.second, projectedPoint.first);
+					//}
+					//if (splitPoint < 0) {
+						//splitPoint += 360;
+					//}
+					//std::cout << minPoint << " " << splitPoint << " " << maxPoint << std::endl;
+					//if (splitPoint < minPoint || splitPoint > maxPoint) {
+						//splitPoint = (maxPoint + minPoint) / 2.0;
+					//}
 					auto copyLeft = toProcess[0];
 					auto copyRight = toProcess[0];
-					copyLeft[bestInd].second = splitPoint;
-					copyRight[bestInd].first = splitPoint;
+					copyLeft[bestSection].second = splitPoint;
+					copyRight[bestSection].first = splitPoint;
 
 					// Add the new paths to the queue
 					toProcess.insert(toProcess.begin()+1, copyLeft);
@@ -5856,9 +5884,13 @@ public:
 			double itersRemaining = (maxArea - totalArea) / areaPerIter;
 			double secondsRemaining = itersRemaining * secondsPerIter;
 
-			// Per-iteration output
+			// Per-iteration output TODO
 			std::cout << std::defaultfloat;
-			std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << 100.0 * areaCovered / maxArea << "%             \r" << std::flush;
+			if (maxIters > 0) {
+				std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << 100.0 * areaCovered / maxArea << "%             \n" << std::flush;
+			} else {
+				std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << 100.0 * areaCovered / maxArea << "%             \r" << std::flush;
+			}
 
 			// Remove the one we just processed
 			toProcess.erase(toProcess.begin());
@@ -5873,9 +5905,9 @@ public:
 		std::cout << std::endl;
 		std::cout << representTime((iter+1) * secondsPerIter) << std::endl;
 
-		// Benchmarks
-		// d2n4 42 iterations 0.1s (6 vars)
-		// d3n5 27036 iterations 4m (18 vars)
+		// Benchmarks (radial)
+		// d2n4 43 iters 100ms
+		// d3n5 20000 iters 4m
 
 	}
 };
