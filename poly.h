@@ -3933,6 +3933,9 @@ public:
 	std::vector<Polynomial<polyType>> conZero;
 	std::vector<Polynomial<polyType>> conPositive;
 
+	// Default constructor
+	PolynomialProblem() {}
+
 	// Constructor with everything 
 	PolynomialProblem(Polynomial<polyType> obj_, std::vector<Polynomial<polyType>> conZero_, std::vector<Polynomial<polyType>> conPositive_) {
 		obj = obj_;
@@ -5277,8 +5280,32 @@ public:
 
 	}
 
+	// Choose the offset based on various data TODO
+	double getOffset(std::vector<double> params, double theta, double r) {
+		return params[0] + params[1]*theta + params[2]*r + params[3]*theta*theta + params[4]*r*r + params[5]*theta*r;
+	}
+
+	// Choose the split bound based on various data TODO
+	double getSplit(std::vector<double> params, double minPoint, double maxPoint, double theta, double r) {
+		return params[6] 
+			+ params[7]*minPoint 
+			+ params[8]*maxPoint 
+			+ params[9]*theta 
+			+ params[10]*r 
+			+ params[11]*minPoint*minPoint
+			+ params[12]*maxPoint*maxPoint 
+			+ params[13]*theta*theta
+			+ params[14]*r*r
+			+ params[15]*minPoint*r
+			+ params[16]*minPoint*maxPoint 
+			+ params[17]*minPoint*theta
+			+ params[18]*maxPoint*r
+			+ params[19]*maxPoint*theta
+			+ params[20]*theta*r;
+	}
+
 	// Attempt to find a series of constraints that show this is infeasible
-	void proveInfeasibleRadial(int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="", double testParam=0) {
+	int proveInfeasibleRadial(int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="", std::vector<double> params={}, int verbosity=1) {
 
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
@@ -5654,7 +5681,6 @@ public:
 		int numIllPosed = 0;
 		double toRadians = M_PI / 180.0;
 		double toDegrees = 180.0 / M_PI;
-		double shift = testParam;
 		while (toProcess.size() > 0) {
 
 			// The area taken up by this section
@@ -5666,28 +5692,28 @@ public:
 			// The new parameterized constraint vector and objective
 			std::vector<std::vector<double>> newD(numParamCons, std::vector<double>(varsTotal, 0));
 
+			if (verbosity >= 2) {
+				std::cout << "    region to check: " << toProcess[0] << std::endl;
+			}
+
 			// Update the linear constraints on the quadratics
 			int nextInd = 0;
 			for (int i=0; i<qCones.size(); i++) {
 
-				//shift = i*testParam;
-				//if (i % 2 == 0) {
-					//shift = 45;
-				//} else {
-					//shift = -45;
-				//}
-
 				// Get the min and max bounds from this angular cut
 				int var1Ind = std::get<1>(qCones[i]);
-				double var1FromMinAngle = bound*std::cos((toProcess[0][i].first+shift)*toRadians);
-				double var1FromMaxAngle = bound*std::cos((toProcess[0][i].second+shift)*toRadians);
+				double var1FromMinAngle = bound*std::cos((toProcess[0][i].first)*toRadians);
+				double var1FromMaxAngle = bound*std::cos((toProcess[0][i].second)*toRadians);
 				double var1Min = std::min(var1FromMinAngle, var1FromMaxAngle); 
 				double var1Max = std::max(var1FromMinAngle, var1FromMaxAngle); 
-				if (toProcess[0][i].first <= 0 && toProcess[0][i].second >= 0) {
-					var1Max = bound;
-				}
-				if (toProcess[0][i].first <= 180 && toProcess[0][i].second >= 180) {
-					var1Min = -bound;
+				int num360s = int(toProcess[0][i].first / 360.0);
+				for (int j=num360s-4; j<num360s+4; j++) {
+					if (toProcess[0][i].first <= 360*j && toProcess[0][i].second >= 360*j) {
+						var1Max = bound;
+					}
+					if (toProcess[0][i].first <= 180+360*j && toProcess[0][i].second >= 180+360*j) {
+						var1Min = -bound;
+					}
 				}
 
 				// Bound the value from above/max
@@ -5709,15 +5735,17 @@ public:
 
 				// Get the min and max bounds from this angular cut
 				int var2Ind = std::get<2>(qCones[i]);
-				double var2FromMinAngle = bound*std::sin((toProcess[0][i].first+shift)*toRadians);
-				double var2FromMaxAngle = bound*std::sin((toProcess[0][i].second+shift)*toRadians);
+				double var2FromMinAngle = bound*std::sin((toProcess[0][i].first)*toRadians);
+				double var2FromMaxAngle = bound*std::sin((toProcess[0][i].second)*toRadians);
 				double var2Min = std::min(var2FromMinAngle, var2FromMaxAngle); 
 				double var2Max = std::max(var2FromMinAngle, var2FromMaxAngle); 
-				if (toProcess[0][i].first <= 270 && toProcess[0][i].second >= 270) {
-					var2Min = -bound;
-				}
-				if (toProcess[0][i].first <= 90 && toProcess[0][i].second >= 90) {
-					var2Max = bound;
+				for (int j=num360s-4; j<num360s+4; j++) {
+					if (toProcess[0][i].first <= 270+360*j && toProcess[0][i].second >= 270+360*j) {
+						var2Min = -bound;
+					}
+					if (toProcess[0][i].first <= 90+360*j && toProcess[0][i].second >= 90+360*j) {
+						var2Max = bound;
+					}
 				}
 
 				// Bound the value from above/max
@@ -5743,6 +5771,12 @@ public:
 				newD[nextInd][firstMonomInds[var1Ind]] = coeffs3[1];
 				newD[nextInd][firstMonomInds[var2Ind]] = coeffs3[2];
 				nextInd++;
+				if (verbosity >= 2) {
+					std::cout << "    for vars " << var1Ind << " and " << var2Ind << std::endl;
+					std::cout << "        bounds for var " << var1Ind << ": " << var1Min << " -> " << var1Max << std::endl;
+					std::cout << "        bounds for var " << var2Ind << ": " << var2Min << " -> " << var2Max << std::endl;
+					std::cout << "        cutting eqn: " << coeffs3[0] << " + " << coeffs3[1] << "*{" << var1Ind << "} + " << coeffs3[2] << "*{" << var2Ind << "}" << std::endl;
+				}
 
 			}
 
@@ -5846,8 +5880,11 @@ public:
 					double minPoint = toProcess[0][bestSection].first;
 					double maxPoint = toProcess[0][bestSection].second;
 					std::pair<double,double> mostFeasiblePoint = {solVec[firstMonomInds[ind1]], solVec[firstMonomInds[ind2]]};
+					double theta = toDegrees*std::atan2(mostFeasiblePoint.second, mostFeasiblePoint.first);
+					double r = std::sqrt(std::pow(mostFeasiblePoint.second, 2) + std::pow(mostFeasiblePoint.first, 2));
+					//mostFeasibleAngle += 720;
 					//std::cout << "most feas " << mostFeasiblePoint << std::endl;
-					double splitPoint = (maxPoint + minPoint) / 2.0;
+					//double splitPoint = (maxPoint + minPoint) / 2.0;
 					//if (errorsPerVar[ind1] > errorsPerVar[ind2]) {
 						//std::pair<double,double> projectedPoint = {mostFeasiblePoint.first, std::sqrt(std::get<0>(qCones[bestSection])-std::pow(mostFeasiblePoint.first, 2))};
 						//std::cout << "projecting to " << projectedPoint << std::endl;
@@ -5864,10 +5901,46 @@ public:
 					//if (splitPoint < minPoint || splitPoint > maxPoint) {
 						//splitPoint = (maxPoint + minPoint) / 2.0;
 					//}
+					if (verbosity >= 2) {
+						std::cout << "    most feasible point: " << mostFeasiblePoint << std::endl;
+						std::cout << "    section : " << bestSection << std::endl;
+						std::cout << "    theta, r: " << theta << ", " << r << std::endl;
+					}
 					auto copyLeft = toProcess[0];
 					auto copyRight = toProcess[0];
+					if (minPoint == 0 && maxPoint == 360) {
+						//double offset = toDegrees*getOffset(params, theta*toRadians, r);
+						//double offset = toDegrees*params[bestSection];
+						//double offset = toDegrees*params[bestSection];
+						double offset = params[0];
+						copyLeft[bestSection].first = offset;
+						copyRight[bestSection].second = offset+360;
+						minPoint += offset;
+						maxPoint += offset;
+						//theta = (maxPoint + minPoint) / 2.0;
+						if (verbosity >= 2) {
+							std::cout << "    offset: " << offset << std::endl;
+						}
+					}
+					//double splitPoint = toDegrees*getSplit(params, minPoint*toRadians, maxPoint*toRadians, theta*toRadians, r);
+					//splitPoint = std::min(splitPoint, maxPoint-10);
+					//splitPoint = std::max(splitPoint, minPoint+10);
+					double splitPoint = (maxPoint + minPoint) / 2.0;
+					//double splitPoint = theta;
+					//while (splitPoint < minPoint) {
+						//splitPoint += 360;
+					//}
+					//while (splitPoint > maxPoint) {
+						//splitPoint -= 360;
+					//}
+					//if (r < 1e-5) {
+						//splitPoint = (maxPoint + minPoint) / 2.0;
+					//}
 					copyLeft[bestSection].second = splitPoint;
 					copyRight[bestSection].first = splitPoint;
+					if (verbosity >= 2) {
+						std::cout << "    split: " << minPoint << " " << splitPoint << " " << maxPoint << std::endl;
+					}
 
 					// Add the new paths to the queue
 					toProcess.insert(toProcess.begin()+1, copyLeft);
@@ -5884,12 +5957,12 @@ public:
 			double itersRemaining = (maxArea - totalArea) / areaPerIter;
 			double secondsRemaining = itersRemaining * secondsPerIter;
 
-			// Per-iteration output TODO
+			// Per-iteration output
 			std::cout << std::defaultfloat;
-			if (maxIters > 0) {
-				std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << 100.0 * areaCovered / maxArea << "%             \n" << std::flush;
-			} else {
-				std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << 100.0 * areaCovered / maxArea << "%             \r" << std::flush;
+			if (verbosity >= 2) {
+				std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << 100.0 * areaCovered / maxArea << "%\n" << std::flush;
+			} else if (verbosity >= 1) {
+				std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << 100.0 * areaCovered / maxArea << "%                  \r" << std::flush;
 			}
 
 			// Remove the one we just processed
@@ -5902,12 +5975,16 @@ public:
 			}	
 
 		}
-		std::cout << std::endl;
-		std::cout << representTime((iter+1) * secondsPerIter) << std::endl;
+		if (verbosity >= 1) {
+			std::cout << std::endl;
+			std::cout << representTime((iter+1) * secondsPerIter) << std::endl;
+		}
+
+		return iter;
 
 		// Benchmarks (radial)
 		// d2n4 43 iters 100ms
-		// d3n5 20000 iters 4m
+		// d3n5 15000 iters 2m
 
 	}
 };
