@@ -1,23 +1,5 @@
 #include "../poly.h"
 
-#define OPTIM_ENABLE_EIGEN_WRAPPERS
-#include "optim.hpp"
-
-struct dataType {
-	std::string level;
-	int d;
-	std::string fileName;
-	int verbosity;
-	int maxIters;
-	PolynomialProblem<double> prob;
-};
-
-double obj(const Eigen::VectorXd& x, Eigen::VectorXd* grad_out, void* opt_data) {
-	dataType* data = reinterpret_cast<dataType*>(opt_data);
-	std::vector<double> vec(x.data(), x.data() + x.size());
-	return data->prob.proveInfeasibleRadial(data->maxIters, data->level, 1.0/std::sqrt(data->d), data->fileName, vec, data->verbosity);
-}
-
 // Standard cpp entry point 
 int main(int argc, char ** argv) {
 
@@ -524,52 +506,10 @@ int main(int argc, char ** argv) {
 				}
 			}
 
-			// Params for the splitting functions TODO
-			//std::vector<double> params(21);
-			//std::vector<double> params = {0.098972 ,-0.301117 ,-0.679413   ,1.09274  ,0.644361 ,-0.625601   ,0.44659   ,1.03535 ,-0.183784 ,-0.169726  ,0.912884  ,0.226166 ,-0.155583 ,-0.960995 ,-0.374047  ,-1.08867 ,-0.223194 ,-0.394225   ,0.23657   ,1.37183  ,0.464803};
-			std::vector<double> params = {0};
-
 			// Try to prove infeasiblity
+			std::vector<double> params = {0};
 			int bestIters = prob.proveInfeasibleRadial(maxIters, level, 1.0/std::sqrt(d), fileName, params, verbosity);
-			return 0;
 			
-			// Optimise the parameters
-			//double maxChange = 0.1;
-			//double startTemp = 3;
-			//int itersToDo = 1000;
-			//auto testParams = params;
-			//int bestIters = prob.proveInfeasibleRadial(maxIters, level, 1.0/std::sqrt(d), fileName, params, verbosity);
-			//for (double temp=startTemp; temp>0; temp-=startTemp/itersToDo) {
-				//testParams = params;
-				//for (int i=0; i<params.size(); i++) {
-					//testParams[i] *= 1.0 + maxChange*(double(rand())/(RAND_MAX))-maxChange/2.0;
-				//}
-				//int newIters = prob.proveInfeasibleRadial(maxIters, level, 1.0/std::sqrt(d), fileName, testParams, verbosity);
-				//double ra = (double(rand())/(RAND_MAX));
-				//double prob = std::exp((bestIters-newIters)/(temp));
-				//std::cout << "temp " << temp << " |  " << bestIters << " -> " << newIters << " with prob " << prob << std::endl;
-				//if (ra < prob) {
-					//bestIters = newIters;
-					//params = testParams;
-				//}
-			//}
-			//std::cout << "params = " << params << std::endl;
-
-			dataType optData;
-			optData.level = level;
-			optData.d = d;
-			optData.fileName = fileName;
-			optData.verbosity = verbosity;
-			optData.prob = prob;
-			optData.maxIters = maxIters;
-			Eigen::VectorXd x = Eigen::VectorXd::Random(21);
-			//for (int i=0; i<x.size(); i++) {
-				//x[i] = params[i];
-			//}
-			optim::algo_settings_t settings;
-			settings.print_level = 2;
-			bool success = optim::pso(x, obj, &optData, settings);
-
 		}
 
 	}

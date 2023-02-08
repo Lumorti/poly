@@ -5280,30 +5280,6 @@ public:
 
 	}
 
-	// Choose the offset based on various data TODO
-	double getOffset(std::vector<double> params, double theta, double r) {
-		return params[0] + params[1]*theta + params[2]*r + params[3]*theta*theta + params[4]*r*r + params[5]*theta*r;
-	}
-
-	// Choose the split bound based on various data TODO
-	double getSplit(std::vector<double> params, double minPoint, double maxPoint, double theta, double r) {
-		return params[6] 
-			+ params[7]*minPoint 
-			+ params[8]*maxPoint 
-			+ params[9]*theta 
-			+ params[10]*r 
-			+ params[11]*minPoint*minPoint
-			+ params[12]*maxPoint*maxPoint 
-			+ params[13]*theta*theta
-			+ params[14]*r*r
-			+ params[15]*minPoint*r
-			+ params[16]*minPoint*maxPoint 
-			+ params[17]*minPoint*theta
-			+ params[18]*maxPoint*r
-			+ params[19]*maxPoint*theta
-			+ params[20]*theta*r;
-	}
-
 	// Attempt to find a series of constraints that show this is infeasible
 	int proveInfeasibleRadial(int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="", std::vector<double> params={}, int verbosity=1) {
 
@@ -5341,17 +5317,6 @@ public:
 			}
 		}
 
-		// Add all quartic monoms
-		if (degree >= 4) {
-			for (int i=0; i<maxVariables; i++) {
-				std::string newInd = std::to_string(i);
-				newInd.insert(0, digitsPerInd-newInd.size(), ' ');
-				if (std::find(monoms.begin(), monoms.end(), newInd+newInd+newInd+newInd) == monoms.end()) {
-					monoms.push_back(newInd+newInd+newInd+newInd);
-				}
-			}
-		}
-		
 		// Create the mapping from monomials to indices (to linearize)
 		int numOGMonoms = monoms.size();
 		std::unordered_map<std::string,std::string> mapping;
@@ -5406,6 +5371,36 @@ public:
 				currentThing = "";
 				levelsToInclude = {};
 
+			// r for a random level TODO see which we can remove
+			} else if (level[i] == 'r') {
+
+				// Add whatever numbers are left
+				levelsToInclude.push_back(std::stoi(currentThing));
+
+				// Get the list monomials that can appear on the top row
+				std::vector<std::string> possibleMonoms;
+				for (int j=0; j<levelsToInclude.size(); j++) {
+					std::vector<std::string> newMonoms;
+					addMonomsOfOrder(newMonoms, levelsToInclude[j]);
+					for (int k=0; k<newMonoms.size(); k++) {
+						if (std::find(monoms.begin(), monoms.end(), newMonoms[k]) != monoms.end() || levelsToInclude[j] == 1) {
+							possibleMonoms.push_back(newMonoms[k]);
+						}
+					}
+				}
+
+				// Add these all to the top row of a moment matrix
+				std::vector<Polynomial<double>> toAdd;
+				toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
+				for (int j=0; j<possibleMonoms.size(); j++) {
+					toAdd.push_back(Polynomial<polyType>(maxVariables, 1, possibleMonoms[j]));
+				}
+				monomProducts.push_back(toAdd);
+
+				// Reset stuff
+				currentThing = "";
+				levelsToInclude = {};
+
 			// f for a full level
 			} else if (level[i] == 'f') {
 
@@ -5435,6 +5430,12 @@ public:
 				currentThing += level[i];
 			}
 
+		}
+
+		// Output for debugging
+		if (verbosity >= 2) {
+			std::cout << monomProducts << std::endl;
+			std::cout << "num in top row of SD mat: " << monomProducts[0].size() << std::endl;
 		}
 
 		// Create the PSD matrices from this list
@@ -5870,81 +5871,92 @@ public:
 				// If there's still space to split
 				} else {
 
-					// Get the vars from this cone
+					// Get info about this feasible point
 					int ind1 = std::get<1>(qCones[bestSection]);
 					int ind2 = std::get<2>(qCones[bestSection]);
-
-					//std::cout << std::endl;
-
-					// Split it TODO radial
 					double minPoint = toProcess[0][bestSection].first;
 					double maxPoint = toProcess[0][bestSection].second;
 					std::pair<double,double> mostFeasiblePoint = {solVec[firstMonomInds[ind1]], solVec[firstMonomInds[ind2]]};
 					double theta = toDegrees*std::atan2(mostFeasiblePoint.second, mostFeasiblePoint.first);
 					double r = std::sqrt(std::pow(mostFeasiblePoint.second, 2) + std::pow(mostFeasiblePoint.first, 2));
-					//mostFeasibleAngle += 720;
-					//std::cout << "most feas " << mostFeasiblePoint << std::endl;
-					//double splitPoint = (maxPoint + minPoint) / 2.0;
-					//if (errorsPerVar[ind1] > errorsPerVar[ind2]) {
-						//std::pair<double,double> projectedPoint = {mostFeasiblePoint.first, std::sqrt(std::get<0>(qCones[bestSection])-std::pow(mostFeasiblePoint.first, 2))};
-						//std::cout << "projecting to " << projectedPoint << std::endl;
-						//splitPoint = toDegrees*std::atan2(projectedPoint.second, projectedPoint.first);
-					//} else {
-						//std::pair<double,double> projectedPoint = {std::sqrt(std::get<0>(qCones[bestSection])-std::pow(mostFeasiblePoint.second, 2)), mostFeasiblePoint.second};
-						//std::cout << "projecting to " << projectedPoint << std::endl;
-						//splitPoint = toDegrees*std::atan2(projectedPoint.second, projectedPoint.first);
-					//}
-					//if (splitPoint < 0) {
-						//splitPoint += 360;
-					//}
-					//std::cout << minPoint << " " << splitPoint << " " << maxPoint << std::endl;
-					//if (splitPoint < minPoint || splitPoint > maxPoint) {
-						//splitPoint = (maxPoint + minPoint) / 2.0;
-					//}
 					if (verbosity >= 2) {
 						std::cout << "    most feasible point: " << mostFeasiblePoint << std::endl;
 						std::cout << "    section : " << bestSection << std::endl;
 						std::cout << "    theta, r: " << theta << ", " << r << std::endl;
 					}
-					auto copyLeft = toProcess[0];
-					auto copyRight = toProcess[0];
+
+					// When splitting for the first time it's different
 					if (minPoint == 0 && maxPoint == 360) {
-						//double offset = toDegrees*getOffset(params, theta*toRadians, r);
-						//double offset = toDegrees*params[bestSection];
-						//double offset = toDegrees*params[bestSection];
+
+						// Start with copies of this region
+						std::vector<std::vector<std::pair<double,double>>> copies(3, toProcess[0]);
+
+						// Split the sections
+						double splitPoint = (maxPoint + minPoint) / 2.0;
+						copies[0][bestSection].second = splitPoint;
+						copies[2][bestSection].first = splitPoint;
+
+						// See if the feasible point we just found is in the first section
+						bool inSection0 = false;
+						for (int j=-2; j<2; j++) {
+							if (theta > copies[0][bestSection].first + j*360 && theta < copies[0][bestSection].second + j*360) {
+								inSection0 = true;
+								break;
+							}
+						}
+
+						// If so, split that section again TODO
+						if (inSection0) {
+							double extraSplitPoint = (copies[0][bestSection].first + copies[0][bestSection].second) / 2.0;
+							copies[0][bestSection].second = extraSplitPoint;
+							copies[1][bestSection].first = extraSplitPoint;
+							copies[1][bestSection].second = splitPoint;
+						} else {
+							double extraSplitPoint = (copies[2][bestSection].first + copies[2][bestSection].second) / 2.0;
+							copies[2][bestSection].first = extraSplitPoint;
+							copies[1][bestSection].first = splitPoint;
+							copies[1][bestSection].second = extraSplitPoint;
+						}
+
+						// Add a rotational offset (which is fine since we cover everything)
 						double offset = params[0];
-						copyLeft[bestSection].first = offset;
-						copyRight[bestSection].second = offset+360;
-						minPoint += offset;
-						maxPoint += offset;
-						//theta = (maxPoint + minPoint) / 2.0;
+						for (int j=0; j<copies.size(); j++) {
+							copies[j][bestSection].first += offset;
+							copies[j][bestSection].second += offset;
+						}
+
+						// Add the new paths to the queue
+						for (int j=0; j<copies.size(); j++) {
+							toProcess.insert(toProcess.begin()+1, copies[j]);
+						}
 						if (verbosity >= 2) {
 							std::cout << "    offset: " << offset << std::endl;
+							for (int j=0; j<copies.size(); j++) {
+								std::cout << "    split: " << copies[j][bestSection].first << " to " << copies[j][bestSection].second << std::endl;
+							}
 						}
-					}
-					//double splitPoint = toDegrees*getSplit(params, minPoint*toRadians, maxPoint*toRadians, theta*toRadians, r);
-					//splitPoint = std::min(splitPoint, maxPoint-10);
-					//splitPoint = std::max(splitPoint, minPoint+10);
-					double splitPoint = (maxPoint + minPoint) / 2.0;
-					//double splitPoint = theta;
-					//while (splitPoint < minPoint) {
-						//splitPoint += 360;
-					//}
-					//while (splitPoint > maxPoint) {
-						//splitPoint -= 360;
-					//}
-					//if (r < 1e-5) {
-						//splitPoint = (maxPoint + minPoint) / 2.0;
-					//}
-					copyLeft[bestSection].second = splitPoint;
-					copyRight[bestSection].first = splitPoint;
-					if (verbosity >= 2) {
-						std::cout << "    split: " << minPoint << " " << splitPoint << " " << maxPoint << std::endl;
-					}
 
-					// Add the new paths to the queue
-					toProcess.insert(toProcess.begin()+1, copyLeft);
-					toProcess.insert(toProcess.begin()+1, copyRight);
+					} else {
+
+						// Start with copies of this region
+						std::vector<std::vector<std::pair<double,double>>> copies(2, toProcess[0]);
+
+						// Split the sections
+						double splitPoint = (maxPoint + minPoint) / 2.0;
+						copies[0][bestSection].second = splitPoint;
+						copies[1][bestSection].first = splitPoint;
+
+						// Add the new paths to the queue
+						for (int j=0; j<copies.size(); j++) {
+							toProcess.insert(toProcess.begin()+1, copies[j]);
+						}
+						if (verbosity >= 2) {
+							for (int j=0; j<copies.size(); j++) {
+								std::cout << "    split: " << copies[j][bestSection].first << " to " << copies[j][bestSection].second << std::endl;
+							}
+						}
+
+					}
 
 				}
 

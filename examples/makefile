@@ -1,7 +1,7 @@
 CXX=g++
 CXXFLAGS=-Wfatal-errors -O3
 DEBUGFLAGS=-Wall -g -pg -Wfatal-errors
-LIBS=-I/usr/include/eigen3 -fopenmp -I/home/lmortimer/optim/include -L/home/lmortimer/optim/lib -loptim
+LIBS=-I/usr/include/eigen3 -fopenmp
 LIBSCS=-L${SCSHOME}/lib/ -I${SCSHOME}/include/scs/ -lscsdir
 HDIR=${MSKHOME}/h
 LIBDIR=${MSKHOME}/bin
