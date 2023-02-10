@@ -93,7 +93,7 @@ std::ostream &operator<<(std::ostream &output, const std::vector<std::vector<typ
 
 	// Used fixed precision
 	int precision = 7;
-	output << std::fixed << std::setprecision(precision);
+	output << std::showpos << std::fixed << std::setprecision(precision);
 
 	// Loop over the array
 	std::string rowText;
@@ -128,6 +128,9 @@ std::ostream &operator<<(std::ostream &output, const std::vector<std::vector<typ
 
 	// Output the final closing braces
 	output << "} } ";
+	
+	// Reset formatting
+	output << std::noshowpos << std::defaultfloat;
 	
 	return output;
 
@@ -4466,6 +4469,146 @@ public:
 		return {a, b, c};
 	}
 
+	// Given a series of points, find the plane that goes through them TODO
+	// Given an extra point, ensure that the pos con goes in that direction
+	std::vector<std::vector<double>> getHyperplaneFromPoints(std::vector<std::vector<double>> points, std::vector<double> checkPoint) {
+
+		Eigen::MatrixXd A2 = Eigen::MatrixXd::Zero(points.size(), 1+points[0].size());
+		for (int i=0; i<points.size(); i++) {
+			A2(i,0) = 1;
+			for (int j=0; j<points[i].size(); j++) {
+				A2(i,j+1) = points[i][j];
+			}
+		}
+		Eigen::FullPivLU<Eigen::MatrixXd> lu(A2);
+		Eigen::MatrixXd nullSpace = lu.kernel();
+
+		std::vector<std::vector<double>> vecs(nullSpace.cols(), std::vector<double>(nullSpace.rows()));
+		for (int i=0; i<nullSpace.rows(); i++) {
+			for (int j=0; j<nullSpace.cols(); j++) {
+				vecs[j][i] = nullSpace(i,j);
+			}
+		}
+
+		// See if the checking point is the correct side
+		for (int i=0; i<vecs.size(); i++) {
+			double res = vecs[i][0];
+			for (int j=0; j<checkPoint.size(); j++) {
+				res += checkPoint[i]*vecs[i][j+1];
+			}
+			if (res < 0) {
+				for (int j=0; j<vecs[i].size(); j++) {
+					vecs[i][j] = -vecs[i][j];
+				}
+			}
+		}
+
+		return vecs;
+
+		// Check if one of the vecs is all zero
+		//bool throughZero = false;
+		//for (int i=0; i<points.size(); i++) {
+			//double norm = 0;
+			//for (int j=0; j<points[i].size(); j++) {
+				//norm += std::abs(points[i][j]);
+			//}
+			//if (norm < 1e-8) {
+				//throughZero = true;
+				//break;
+			//}
+		//}
+
+		//// If not going through zero, setting the constant to 1
+		//if (!throughZero) {
+
+			//// Stack the points
+			//Eigen::MatrixXd A = Eigen::MatrixXd::Zero(points.size(), points[0].size());
+			//for (int i=0; i<points.size(); i++) {
+				//for (int j=0; j<points[i].size(); j++) {
+					//A(i,j) = points[i][j];
+				//}
+			//}
+
+			//// Solve this equal to one (meaning the constant coeff will be one)
+			//Eigen::VectorXd b = -Eigen::VectorXd::Ones(points.size());
+			//Eigen::VectorXd coeffs = A.colPivHouseholderQr().solve(b);
+
+			//// Convert to the std::vector form and return
+			//std::vector<double> toReturn(1+coeffs.size());
+			//toReturn[0] = 1;
+			//for (int i=0; i<coeffs.size(); i++) {
+				//toReturn[i+1] = coeffs[i];
+			//}
+
+			//// See if the checking point is the correct side
+			//double res = toReturn[0];
+			//for (int i=0; i<checkPoint.size(); i++) {
+				//res += checkPoint[i]*toReturn[i+1];
+			//}
+			//if (res < 0) {
+				//for (int i=0; i<toReturn.size(); i++) {
+					//toReturn[i] = -toReturn[i];
+				//}
+			//}
+			//return toReturn;
+
+		//// Otherwise we have to pick a coeff to be non-zero
+		//} else {
+
+			//// Find a var that changes
+			//int varInd = -1;
+			//for (int i=0; i<points[0].size(); i++) {
+				//for (int j=1; j<points.size(); j++) {
+					//if (std::abs(points[j][i] - points[0][i]) > 1e-8) {
+						//varInd = i;
+						//break;
+					//}
+				//}
+				//if (varInd >= 0) {
+					//break;
+				//}
+			//}
+
+			//// Stack the points
+			//Eigen::MatrixXd A = Eigen::MatrixXd::Zero(points.size(), points[0].size());
+			//for (int i=0; i<points.size(); i++) {
+				//for (int j=0; j<points[i].size(); j++) {
+					//A(i,j) = points[i][j];
+				//}
+			//}
+
+			//// Solve this equal to the values of this var
+			//Eigen::VectorXd b = -Eigen::VectorXd::Ones(points.size());
+			//for (int j=0; j<points.size(); j++) {
+				//b[j] = -points[j][varInd];
+				//A(j,varInd) = 0;
+			//}
+			//Eigen::VectorXd coeffs = A.colPivHouseholderQr().solve(b);
+
+			//// Convert to the std::vector form and return
+			//std::vector<double> toReturn(1+coeffs.size());
+			//toReturn[0] = 0;
+			//for (int i=0; i<coeffs.size(); i++) {
+				//toReturn[i+1] = coeffs[i];
+			//}
+			//toReturn[1+varInd] = 1;
+
+			//// See if the checking point is the correct side
+			//double res = toReturn[0];
+			//for (int i=0; i<checkPoint.size(); i++) {
+				//res += checkPoint[i]*toReturn[i+1];
+			//}
+			//if (res < 0) {
+				//for (int i=0; i<toReturn.size(); i++) {
+					//toReturn[i] = -toReturn[i];
+				//}
+			//}
+			//return toReturn;
+
+		//}
+
+	}
+
 	// Calculate the equation of a plane given 2 points
 	// In the form a + bx + cy + dz = 0
 	std::vector<double> getPlaneFromPoints(std::vector<double> A, std::vector<double> B, std::vector<double> C) {
@@ -5632,14 +5775,27 @@ public:
 			numParamCons++;
 
 			// The radial
-			sparsity.push_back(numParamCons*varsTotal + oneIndex);
-			sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var1Ind]);
-			sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var2Ind]);
-			numParamCons++;
+			//sparsity.push_back(numParamCons*varsTotal + oneIndex);
+			//sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var1Ind]);
+			//sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var2Ind]);
+			//numParamCons++;
+
+			// The SDP cutting TODO
+			//sparsity.push_back(numParamCons*varsTotal + oneIndex);
+			//sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var1Ind]);
+			//sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var2Ind]);
+			//sparsity.push_back(numParamCons*varsTotal + quadraticMonomInds[var1Ind][var1Ind]);
+			//sparsity.push_back(numParamCons*varsTotal + quadraticMonomInds[var1Ind][var2Ind]);
+			//sparsity.push_back(numParamCons*varsTotal + quadraticMonomInds[var2Ind][var2Ind]);
+			//for (int i=0; i<varsTotal; i++) {
+				//sparsity.push_back(numParamCons*varsTotal + i);
+			//}
+			numParamCons+=10;
 
 		}
 		std::sort(sparsity.begin(), sparsity.end());
-		mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
+		//mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
+		mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}));
 		M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::greaterThan(0));
 
 		// The first element of the vector should be one
@@ -5699,6 +5855,7 @@ public:
 
 			// Update the linear constraints on the quadratics
 			int nextInd = 0;
+			std::vector<std::pair<double,double>> varBounds(maxVariables);
 			for (int i=0; i<qCones.size(); i++) {
 
 				// Get the min and max bounds from this angular cut
@@ -5716,6 +5873,8 @@ public:
 						var1Min = -bound;
 					}
 				}
+				varBounds[var1Ind].first = var1Min;
+				varBounds[var1Ind].second = var1Max;
 
 				// Bound the value from above/max
 				newD[nextInd][oneIndex] = var1Max;
@@ -5728,6 +5887,7 @@ public:
 				nextInd++;
 
 				// Bound the square of this var
+				//std::vector<double> coeffs1 = getHyperplaneFromPoints({{var1Min, var1Min*var1Min}, {var1Max, var1Max*var1Max}}, {(var1Min+var1Max)/2.0, std::pow((var1Min+var1Max)/2.0, 2)});
 				std::vector<double> coeffs1 = getLineFromPoints({var1Min, var1Min*var1Min}, {var1Max, var1Max*var1Max});
 				newD[nextInd][oneIndex] = coeffs1[0];
 				newD[nextInd][firstMonomInds[var1Ind]] = coeffs1[1];
@@ -5748,18 +5908,21 @@ public:
 						var2Max = bound;
 					}
 				}
+				varBounds[var2Ind].first = var2Min;
+				varBounds[var2Ind].second = var2Max;
 
 				// Bound the value from above/max
-				newD[nextInd][oneIndex] = var2Max;
-				newD[nextInd][firstMonomInds[var2Ind]] = -1;
+				//newD[nextInd][oneIndex] = var2Max;
+				//newD[nextInd][firstMonomInds[var2Ind]] = -1;
 				nextInd++;
 
 				// Bound the value from below/min
-				newD[nextInd][oneIndex] = -var2Min;
-				newD[nextInd][firstMonomInds[var2Ind]] = 1;
+				//newD[nextInd][oneIndex] = -var2Min;
+				//newD[nextInd][firstMonomInds[var2Ind]] = 1;
 				nextInd++;
 
 				// Bound the square of this var
+				//std::vector<double> coeffs2 = getHyperplaneFromPoints({{var2Min, var2Min*var2Min}, {var2Max, var2Max*var2Max}}, {(var2Min+var2Max)/2.0, std::pow((var2Min+var2Max)/2.0, 2)});
 				std::vector<double> coeffs2 = getLineFromPoints({var2Min, var2Min*var2Min}, {var2Max, var2Max*var2Max});
 				newD[nextInd][oneIndex] = coeffs2[0];
 				newD[nextInd][firstMonomInds[var2Ind]] = coeffs2[1];
@@ -5767,16 +5930,95 @@ public:
 				nextInd++;
 
 				// Bound the space between both
-				std::vector<double> coeffs3 = getLineFromPoints({var1FromMinAngle, var2FromMinAngle}, {var1FromMaxAngle, var2FromMaxAngle});
-				newD[nextInd][oneIndex] = coeffs3[0];
-				newD[nextInd][firstMonomInds[var1Ind]] = coeffs3[1];
-				newD[nextInd][firstMonomInds[var2Ind]] = coeffs3[2];
-				nextInd++;
+				//double var1FromMidAngle = bound*std::cos((toProcess[0][i].first + toProcess[0][i].second)*0.5*toRadians);
+				//double var2FromMidAngle = bound*std::sin((toProcess[0][i].first + toProcess[0][i].second)*0.5*toRadians);
+				//std::vector<double> coeffs3 = getHyperplaneFromPoints({{var1FromMinAngle, var2FromMinAngle}, {var1FromMaxAngle, var2FromMaxAngle}}, {var1FromMidAngle, var2FromMidAngle});
+				//newD[nextInd][oneIndex] = coeffs3[0];
+				//newD[nextInd][firstMonomInds[var1Ind]] = coeffs3[1];
+				//newD[nextInd][firstMonomInds[var2Ind]] = coeffs3[2];
+				//nextInd++;
 				if (verbosity >= 2) {
 					std::cout << "    for vars " << var1Ind << " and " << var2Ind << std::endl;
 					std::cout << "        bounds for var " << var1Ind << ": " << var1Min << " -> " << var1Max << std::endl;
 					std::cout << "        bounds for var " << var2Ind << ": " << var2Min << " -> " << var2Max << std::endl;
-					std::cout << "        cutting eqn: " << coeffs3[0] << " + " << coeffs3[1] << "*{" << var1Ind << "} + " << coeffs3[2] << "*{" << var2Ind << "}" << std::endl;
+					std::cout << "        square bounding eqn: " << coeffs1[0] << " + " << coeffs1[1] << "*x + " << coeffs1[2] << "*y > 0 (y = x^2)" << std::endl;
+					std::cout << "        square bounding eqn: " << coeffs2[0] << " + " << coeffs2[1] << "*x + " << coeffs2[2] << "*y > 0 (y = x^2)" << std::endl;
+					//std::cout << "        cutting eqn: " << coeffs3[0] << " + " << coeffs3[1] << "*x + " << coeffs3[2] << "*y > 0 (x^2+y^2=0.5)" << std::endl;
+				}
+
+			}
+
+			// Try bounding a larger convex domain TODO
+			std::vector<int> varsToBound = {0, 1, 2, 3, 4, 5};
+			//std::vector<int> varsToBound = {0, 1};
+			std::vector<std::vector<double>> points = {};
+			for (int i=0; i<std::pow(2, varsToBound.size()); i++) {
+				std::vector<double> point;
+				for (int j=0; j<varsToBound.size(); j++) {
+					if ((i >> j) & 1) {
+						point.push_back(varBounds[varsToBound[j]].second);
+					} else {
+						point.push_back(varBounds[varsToBound[j]].first);
+					}
+				}
+				for (int j=0; j<varsToBound.size(); j++) {
+					for (int k=j; k<varsToBound.size(); k++) {
+						point.push_back(point[j]*point[k]);
+					}
+				}
+				points.push_back(point);
+			}
+
+			std::vector<double> pointMid = {};
+			for (int j=0; j<varsToBound.size(); j++) {
+				pointMid.push_back((varBounds[varsToBound[j]].second + varBounds[varsToBound[j]].first) / 2.0);
+			}
+			for (int j=0; j<varsToBound.size(); j++) {
+				for (int k=j; k<varsToBound.size(); k++) {
+					pointMid.push_back(pointMid[j]*pointMid[k]);
+				}
+			}
+
+			int nextCoeff = 1;
+			std::vector<std::vector<double>> coeffList = getHyperplaneFromPoints(points, pointMid);
+			for (int l=0; l<coeffList.size(); l++) {
+				std::vector<double> coeffsNew = coeffList[l];
+
+				newD[nextInd][oneIndex] = coeffsNew[0];
+				if (verbosity >= 2) {
+					std::cout << "    testing equation: " << coeffsNew[0] << " + ";
+				}
+				for (int j=0; j<varsToBound.size(); j++) {
+					newD[nextInd][firstMonomInds[varsToBound[j]]] = coeffsNew[nextCoeff];
+					if (verbosity >= 2 && std::abs(coeffsNew[nextCoeff]) > 1e-10) {
+						std::cout << coeffsNew[nextCoeff] << "*{" << varsToBound[j] << "} + ";
+					}
+					nextCoeff++;
+				}
+				for (int j=0; j<varsToBound.size(); j++) {
+					for (int k=j; k<varsToBound.size(); k++) {
+						newD[nextInd][quadraticMonomInds[varsToBound[j]][varsToBound[k]]] = coeffsNew[nextCoeff];
+						if (verbosity >= 2 && std::abs(coeffsNew[nextCoeff]) > 1e-10) {
+							std::cout << coeffsNew[nextCoeff] << "*{" << varsToBound[j] << " " << varsToBound[k] << "} + ";
+						}
+						nextCoeff++;
+					}
+				}
+				nextInd++;
+
+				if (verbosity >= 2) { 
+					std::cout << std::endl;
+					double highest = 0;
+					for (int i=0; i<points.size(); i++) {
+						double val = coeffsNew[0];
+						std::cout << "starting val " << val << std::endl;
+						for (int j=0; j<points[i].size(); j++) {
+							val += coeffsNew[j+1]*points[i][j];
+						}
+						std::cout << "ending val " << val << std::endl;
+						highest = std::max(highest, val);
+					}
+					std::cout << "    max viol = " << highest << std::endl;
 				}
 
 			}

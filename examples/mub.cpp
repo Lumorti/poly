@@ -507,7 +507,10 @@ int main(int argc, char ** argv) {
 			}
 
 			// Try to prove infeasiblity
-			std::vector<double> params = {0};
+			std::vector<double> params = {1};
+			if (d == 3) {
+				params[0] = 43;
+			}
 			int bestIters = prob.proveInfeasibleRadial(maxIters, level, 1.0/std::sqrt(d), fileName, params, verbosity);
 			
 		}
