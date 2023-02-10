@@ -5949,7 +5949,7 @@ public:
 			}
 
 			// Try bounding a larger convex domain TODO
-			std::vector<int> varsToBound = {0, 1, 2, 3, 4, 5};
+			std::vector<int> varsToBound = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17};
 			//std::vector<int> varsToBound = {0, 1};
 			std::vector<std::vector<double>> points = {};
 			for (int i=0; i<std::pow(2, varsToBound.size()); i++) {
@@ -5979,11 +5979,11 @@ public:
 				}
 			}
 
-			int nextCoeff = 1;
 			std::vector<std::vector<double>> coeffList = getHyperplaneFromPoints(points, pointMid);
 			for (int l=0; l<coeffList.size(); l++) {
 				std::vector<double> coeffsNew = coeffList[l];
 
+				int nextCoeff = 1;
 				newD[nextInd][oneIndex] = coeffsNew[0];
 				if (verbosity >= 2) {
 					std::cout << "    testing equation: " << coeffsNew[0] << " + ";
@@ -6011,11 +6011,9 @@ public:
 					double highest = 0;
 					for (int i=0; i<points.size(); i++) {
 						double val = coeffsNew[0];
-						std::cout << "starting val " << val << std::endl;
 						for (int j=0; j<points[i].size(); j++) {
 							val += coeffsNew[j+1]*points[i][j];
 						}
-						std::cout << "ending val " << val << std::endl;
 						highest = std::max(highest, val);
 					}
 					std::cout << "    max viol = " << highest << std::endl;
