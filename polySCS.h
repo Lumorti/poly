@@ -4498,7 +4498,7 @@ public:
 	}
 
 	// Attempt to find a series of constraints that show this is infeasible
-	void proveInfeasible(int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="") {
+	void proveInfeasible(int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="", int verbosity=1) {
 
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
@@ -4545,13 +4545,6 @@ public:
 			}
 		}
 		
-		// Also get the monomials as polynomials and prepare for fast eval
-		//std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
-		//for (int i=0; i<monoms.size(); i++) {
-			//monomsAsPolys[i] = Polynomial<polyType>(maxVariables, 1, monoms[i]);
-			//monomsAsPolys[i].prepareEvalMixed();
-		//}
-
 		// Create the mapping from monomials to indices (to linearize)
 		int numOGMonoms = monoms.size();
 		std::unordered_map<std::string,std::string> mapping;
@@ -4637,6 +4630,12 @@ public:
 
 		}
 
+		// Output for debugging
+		if (verbosity >= 2) {
+			std::cout << monomProducts << std::endl;
+			std::cout << "num in top row of SD mat: " << monomProducts[0].size() << std::endl;
+		}
+
 		// Start with the most general area
 		double maxArea = 1;
 		std::vector<std::vector<std::pair<double,double>>> toProcess;
@@ -4648,9 +4647,42 @@ public:
 		}
 		toProcess.push_back(varMinMax);
 
+		// TODO
+		toProcess = {};
+		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, -0.0104253}, {-0.57735, -0.0180467}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, -0.0104253}, {-0.0180467, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.0104253, 0.57735}, {0.100881, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.0104253, 0.57735}, {-0.57735, 0.100881}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+		int var1 = 10;
+		int var2 = 11;
+		for (int i=0; i<2; i++) {
+			for (int j=0; j<2; j++) {
+				auto regionCopy = varMinMax;
+				if (i == 0) {
+					regionCopy[var1].second = 0;
+				} else {
+					regionCopy[var1].first = 0;
+				}
+				if (j == 0) {
+					regionCopy[var2].second = 0;
+				} else {
+					regionCopy[var2].first = 0;
+				}
+				toProcess.push_back(regionCopy);
+			}
+		}
+		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.0}, {-0.57735, 0.0}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.0}, {0.0, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {0.0, 0.57735}, {0.0, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {0.0, 0.57735}, {-0.57735, 0.0}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+
 		// Create the PSD matrices from this list
 		std::vector<std::vector<int>> shouldBePSD;
 		std::vector<std::vector<double>> shouldBePSDCoeffs;
+		std::unordered_map<std::string,int> monomsInverted;
+		for (int j=0; j<monoms.size(); j++) {
+			monomsInverted[monoms[j]] = j;
+		}
 		for (int j=0; j<monomProducts.size(); j++) {
 
 			// Get the list of all monomial locations for the PSD matrix
@@ -4663,10 +4695,13 @@ public:
 					std::string monString = (monomProducts[j][i]*monomProducts[j][k]).getMonomials()[0];
 
 					// Find this in the monomial list
-					auto loc = std::find(monoms.begin(), monoms.end(), monString);
-					if (loc != monoms.end()) {
-						monLocs.push_back(loc - monoms.begin());
+					//auto loc = std::find(monoms.begin(), monoms.end(), monString);
+					auto loc = monomsInverted.find(monString);
+					if (loc != monomsInverted.end()) {
+						//monLocs.push_back(loc - monoms.begin());
+						monLocs.push_back(monomsInverted[monString]);
 					} else {
+						monomsInverted[monString] = monoms.size();
 						monLocs.push_back(monoms.size());
 						monoms.push_back(monString);
 					}
@@ -4698,35 +4733,6 @@ public:
 				int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
 				quadraticMonomInds[ind1][ind2] = i;
 				quadraticMonomInds[ind2][ind1] = i;
-			}
-		}
-
-		// Add second order cone for x^2+y^2=1/d
-		std::vector<std::tuple<double,int,int>> qCones;
-		for (int i=0; i<conZero.size(); i++) {
-
-			// First make sure we have a constant and 3 terms total
-			if (conZero[i][""] < 0 && conZero[i].size() == 3) {
-
-				// Get vars and monoms from this
-				auto varsInThisPoly = conZero[i].getVariables();
-				auto monomsInThisPoly = conZero[i].getMonomials();
-
-				// Check to make sure all vars are squares
-				bool allSquares = true;
-				for (int j=0; j<monomsInThisPoly.size(); j++) {
-					if (monomsInThisPoly[j].size() >= 2*digitsPerInd) {
-						if (monomsInThisPoly[j].substr(0,digitsPerInd) != monomsInThisPoly[j].substr(digitsPerInd,digitsPerInd)) {
-							allSquares = false;
-						}
-					}
-				}
-
-				// If all valid, add to the quadratic cones list
-				if (allSquares) {
-					qCones.push_back({-conZero[i][""], varsInThisPoly[0], varsInThisPoly[1]});
-				}
-
 			}
 		}
 
@@ -4906,14 +4912,14 @@ public:
 		int numConsSCS = nextI;
 
 		// The b vector for SCS
-		double b[numConsSCS];
+		double* b = new double[numConsSCS];
 		for (int i=0; i<numConsSCS; i++) {
 			b[i] = 0;
 		}
 		b[oneIndex] = -1;
 
 		// The c vector for SCS
-		double c[numVarsSCS];
+		double* c = new double[numVarsSCS];
 		for (int i=0; i<numVarsSCS; i++) {
 			c[i] = 0;
 		}
@@ -4942,26 +4948,16 @@ public:
 
 		// Solver parameters TODO
 		scs_set_default_settings(stgs);
-		stgs->verbose = false;
+		stgs->verbose = true;
 		//stgs->max_iters = 1000;
 		//stgs->normalize = false;
-		//stgs->acceleration_lookback = 100;
+		//stgs->acceleration_lookback = 0;
 		//stgs->adaptive_scale = false;
 		//stgs->scale = 0.01;
 		//stgs->rho_x = 1e-8;
-		stgs->eps_abs = 1e-8;
-		stgs->eps_rel = 0;
+		stgs->eps_abs = 1e-5;
+		stgs->eps_rel = stgs->eps_abs;
 		//stgs->eps_infeas = 0.5;
-
-		// The order in which to branch
-		std::vector<int> splitOrder;
-		for (int i=0; i<maxVariables; i++) {
-			splitOrder.push_back(i);
-		}
-		//std::random_device rd;
-		//auto rng = std::default_random_engine {rd()};
-		//std::shuffle(std::begin(splitOrder), std::end(splitOrder), rng);
-		//std::cout << splitOrder << std::endl;
 
 		// Open a file if told to record the points
 		std::ofstream logFile;
@@ -5009,68 +5005,11 @@ public:
 
 			}
 
-			// Update the box constraints
-			for (int i=1; i<monoms.size(); i++) {
-
-				// Get the indices from this monomial
-				std::vector<int> varIndices;
-				for (int j=0; j<monoms[i].size(); j+=digitsPerInd) {
-					varIndices.push_back(std::stoi(monoms[i].substr(j, digitsPerInd)));
-				}
-
-				// Check if the monom is a power of a single var
-				bool allSame = true;
-				for (int j=1; j<varIndices.size(); j++) {
-					if (varIndices[j] != varIndices[j-1]) {
-						allSame = false;
-						break;
-					}
-				}
-
-				// 2 if no idea, 0 if mixed, 1 if pos, -1 if neg 
-				int fixedSign = 2;
-				for (int j=0; j<varIndices.size(); j++) {
-					if (toProcess[0][varIndices[j]].first >= 0) {
-						if (fixedSign == 2) {
-							fixedSign = 1;
-						}
-					} else if (toProcess[0][varIndices[j]].second <= 0) {
-						if (fixedSign == 2) {
-							fixedSign = -1;
-						} else {
-							fixedSign *= -1;
-						}
-					} else if (j+1 < varIndices.size() && varIndices[j] == varIndices[j+1]) {
-						if (fixedSign == 2) {
-							fixedSign = 1;
-						}
-						j++;
-					} else {
-						fixedSign = 0;
-						break;
-					}
-				}
-
-				// Get the max magnitude this could take
-				double maxMag = 1;
-				for (int j=0; j<varIndices.size(); j++) {
-					maxMag *= std::max(std::abs(toProcess[0][varIndices[j]].first), std::abs(toProcess[0][varIndices[j]].second));
-				}
-
-				// Maybe one of the bounds can be tighter
-				coneSCS->bl[i-1] = -maxMag;
-				coneSCS->bu[i-1] = maxMag;
-				if (fixedSign == 1) {
-					coneSCS->bl[i-1] = 0;
-				} else if (fixedSign == -1) {
-					coneSCS->bu[i-1] = 0;
-				}
-				//std::cout << monoms[i] << " from " << coneSCS->bl[i] << " to " << coneSCS->bu[i] << std::endl;
-
-			}
+			std::cout << "here 1 " << std::endl;
 
 			// Solve the SDP and then free memory
 			ScsWork *scs_work = scs_init(dataSCS, coneSCS, stgs);
+			std::cout << "here 2 " << std::endl;
 			int exitFlag = scs_solve(scs_work, sol, info, 0);
 			double objPrimal = info->pobj;
 			double objDual = info->dobj;
@@ -5082,7 +5021,10 @@ public:
 			scs_finish(scs_work);
 
 			// If infeasible, good
-			if (exitFlag <= 0 || std::min(objDual, objPrimal) > gap*100) {
+			if (verbosity >= 2) {
+				std::cout << "    primal: " << objPrimal << ", dual: " << objDual << std::endl;
+			}
+			if (exitFlag <= 0 || std::min(objDual, objPrimal) > 0.0) {
 
 				// Stop if we ctrl-c'd
 				if (exitFlag == -5) {
@@ -5118,22 +5060,12 @@ public:
 				// Find the biggest error
 				double biggestError = -10000;
 				int bestInd = -1;
-				for (int i=0; i<splitOrder.size(); i++) {
-					if (errors[splitOrder[i]] > biggestError) {
-						biggestError = errors[splitOrder[i]];
-						bestInd = splitOrder[i];
+				for (int i=0; i<maxVariables; i++) {
+					if (errors[i] > biggestError) {
+						biggestError = errors[i];
+						bestInd = i;
 					}
 				}
-
-				// Find the biggest error
-				//double biggestDiff = -10000;
-				//for (int i=0; i<toProcess[0].size(); i++) {
-					//double diff = toProcess[0][i].second - toProcess[0][i].first;
-					//if (diff > biggestDiff) {
-						//biggestDiff = diff;
-						//bestInd = i;
-					//}
-				//}
 
 				// If we've converged
 				if (biggestError < 1e-6) {
@@ -5163,15 +5095,14 @@ public:
 					double mostFeasiblePoint = solVec[firstMonomInds[bestInd]];
 					double distanceBetween = mostFeasiblePoint - midPoint;
 					double splitPoint = mostFeasiblePoint;
-					//double splitPoint = midPoint;
 					auto copyLeft = toProcess[0];
 					auto copyRight = toProcess[0];
 					copyLeft[bestInd].second = splitPoint;
 					copyRight[bestInd].first = splitPoint;
 
-					// Add the new paths to the queue
-					toProcess.insert(toProcess.begin()+1, copyLeft);
-					toProcess.insert(toProcess.begin()+1, copyRight);
+					// Add the new paths to the queue TODO
+					//toProcess.insert(toProcess.begin()+1, copyLeft);
+					//toProcess.insert(toProcess.begin()+1, copyRight);
 
 				}
 
@@ -5187,9 +5118,13 @@ public:
 			}
 			double secondsRemaining = itersRemaining * secondsPerIter;
 
-			// Per-iteration output TODO
+			// Per-iteration output
 			std::cout << std::defaultfloat;
-			std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << "  " << representTime(secondsRemaining) << " " << std::min(objPrimal, objDual) << " " << gap << "         \n" << std::flush;
+			if (verbosity >= 2) {
+				std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << 100.0 * areaCovered / maxArea << "%\n" << std::flush;
+			} else if (verbosity >= 1) {
+				std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << 100.0 * areaCovered / maxArea << "%                  \r" << std::flush;
+			}
 
 			// Remove the one we just processed
 			toProcess.erase(toProcess.begin());

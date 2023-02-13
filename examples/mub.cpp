@@ -511,7 +511,8 @@ int main(int argc, char ** argv) {
 			if (d == 3) {
 				params[0] = 43;
 			}
-			int bestIters = prob.proveInfeasibleRadial(maxIters, level, 1.0/std::sqrt(d), fileName, params, verbosity);
+			prob.proveInfeasible(maxIters, level, 1.0/std::sqrt(d), fileName, verbosity);
+			//prob.proveInfeasibleRadial(maxIters, level, 1.0/std::sqrt(d), fileName, params, verbosity);
 			
 		}
 

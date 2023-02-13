@@ -4639,7 +4639,7 @@ public:
 	}
 
 	// Attempt to find a series of constraints that show this is infeasible
-	void proveInfeasible(int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="") {
+	void proveInfeasible(int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="", int verbosity=1) {
 
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
@@ -4781,6 +4781,17 @@ public:
 			maxArea *= 2*bound;
 		}
 		toProcess.push_back(varMinMax);
+
+		// TODO
+		toProcess = {};
+		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, -0.0104253}, {-0.57735, -0.0180467}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, -0.0104253}, {-0.0180467, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.0104253, 0.57735}, {0.100881, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.0104253, 0.57735}, {-0.57735, 0.100881}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+		toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.0}, {-0.57735, 0.0}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+		toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.0}, {0.0, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+		toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {0.0, 0.57735}, {0.0, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+		toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {0.0, 0.57735}, {-0.57735, 0.0}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
 
 		// Create the PSD matrices from this list
 		std::vector<std::shared_ptr<monty::ndarray<int,1>>> shouldBePSD;
@@ -4950,16 +4961,12 @@ public:
 		mosek::fusion::Variable::t lambda = M->variable();
 
 		// Parameterized linear positivity constraints
-		int numParamCons = 3*maxVariables;
+		int numParamCons = maxVariables;
 		std::vector<long> sparsity;
 		for (int i=0; i<toProcess[0].size(); i++) {
-			sparsity.push_back((i)*varsTotal + firstMonomInds[i]);
-			sparsity.push_back((i)*varsTotal + quadraticMonomInds[i][i]);
-			sparsity.push_back((i)*varsTotal + oneIndex);
-			sparsity.push_back((i+maxVariables)*varsTotal + firstMonomInds[i]);
-			sparsity.push_back((i+maxVariables)*varsTotal + oneIndex);
-			sparsity.push_back((i+2*maxVariables)*varsTotal + firstMonomInds[i]);
-			sparsity.push_back((i+2*maxVariables)*varsTotal + oneIndex);
+			sparsity.push_back(i*varsTotal + firstMonomInds[i]);
+			sparsity.push_back(i*varsTotal + quadraticMonomInds[i][i]);
+			sparsity.push_back(i*varsTotal + oneIndex);
 		}
 		std::sort(sparsity.begin(), sparsity.end());
 		mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
@@ -4981,11 +4988,6 @@ public:
 		for (int i=0; i<shouldBePSD.size(); i++) {
 			M->constraint(mosek::fusion::Expr::add(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Expr::mul(lambda, identityAsSVec[i])), mosek::fusion::Domain::inSVecPSDCone());
 		}
-
-		// Quadratic cones
-		//for (int i=0; i<qCones.size(); i++) {
-			//M->constraint(mosek::fusion::Expr::vstack(std::sqrt(std::get<0>(qCones[i])), xM->index(firstMonomInds[std::get<1>(qCones[i])]), xM->index(firstMonomInds[std::get<2>(qCones[i])])), mosek::fusion::Domain::inQCone(3));
-		//}
 
 		// The order in which to branch
 		std::vector<int> splitOrder;
@@ -5016,6 +5018,11 @@ public:
 		int numIllPosed = 0;
 		while (toProcess.size() > 0) {
 
+			// Debug output
+			if (verbosity >= 2) {
+				std::cout << "    checking region: " << toProcess[0] << std::endl;
+			}
+
 			// The area taken up by this section
 			areaCovered = 1;
 			for (int k=0; k<toProcess[0].size(); k++) {
@@ -5040,20 +5047,6 @@ public:
 				newD[nextInd][quadraticMonomInds[i][i]] = coeffs[2];
 				nextInd++;
 
-			}
-
-			// max - x > 0
-			for (int i=0; i<toProcess[0].size(); i++) {
-				newD[nextInd][oneIndex] = toProcess[0][i].second;
-				newD[nextInd][firstMonomInds[i]] = -1;
-				nextInd++;
-			}
-
-			// x - min > 0
-			for (int i=0; i<toProcess[0].size(); i++) {
-				newD[nextInd][oneIndex] = -toProcess[0][i].first;
-				newD[nextInd][firstMonomInds[i]] = 1;
-				nextInd++;
 			}
 
 			// Solve the problem
@@ -5150,7 +5143,9 @@ public:
 					double mostFeasiblePoint = solVec[firstMonomInds[bestInd]];
 					double distanceBetween = mostFeasiblePoint - midPoint;
 					double splitPoint = mostFeasiblePoint;
-					//double splitPoint = midPoint;
+					if (verbosity >= 2) {
+						std::cout << "    splitting var " << bestInd << " at " << splitPoint << std::endl;
+					}
 					auto copyLeft = toProcess[0];
 					auto copyRight = toProcess[0];
 					copyLeft[bestInd].second = splitPoint;
@@ -5173,7 +5168,12 @@ public:
 
 			// Per-iteration output
 			std::cout << std::defaultfloat;
-			std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << 100.0 * areaCovered / maxArea << "%             \r" << std::flush;
+			if (verbosity >= 2) {
+				std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << 100.0 * areaCovered / maxArea << "%\n" << std::flush;
+			} else if (verbosity >= 1) {
+				std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << 100.0 * areaCovered / maxArea << "%                  \r" << std::flush;
+			}
+
 
 			// Remove the one we just processed
 			toProcess.erase(toProcess.begin());
@@ -5185,8 +5185,10 @@ public:
 			}	
 
 		}
-		std::cout << std::endl;
-		std::cout << representTime(iter * secondsPerIter) << std::endl;
+		if (verbosity >= 1) { 
+			std::cout << std::endl;
+			std::cout << representTime(iter * secondsPerIter) << std::endl;
+		}
 
 		// Benchmarks
 		// d2n4 42 iterations 0.1s (6 vars)
@@ -5742,60 +5744,21 @@ public:
 			int var1Ind = std::get<1>(qCones[i]);
 			int var2Ind = std::get<2>(qCones[i]);
 
-			// The min 1
-			sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var1Ind]);
-			sparsity.push_back(numParamCons*varsTotal + oneIndex);
-			numParamCons++;
-
-			// The max 1
-			sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var1Ind]);
-			sparsity.push_back(numParamCons*varsTotal + oneIndex);
-			numParamCons++;
-
-			// The square 1
+			// Bound the first square
 			sparsity.push_back(numParamCons*varsTotal + oneIndex);
 			sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var1Ind]);
 			sparsity.push_back(numParamCons*varsTotal + quadraticMonomInds[var1Ind][var1Ind]);
 			numParamCons++;
 
-			// The min 2
-			sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var2Ind]);
-			sparsity.push_back(numParamCons*varsTotal + oneIndex);
-			numParamCons++;
-
-			// The max 2
-			sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var2Ind]);
-			sparsity.push_back(numParamCons*varsTotal + oneIndex);
-			numParamCons++;
-
-			// The square 2
+			// Bound the second score
 			sparsity.push_back(numParamCons*varsTotal + oneIndex);
 			sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var2Ind]);
 			sparsity.push_back(numParamCons*varsTotal + quadraticMonomInds[var2Ind][var2Ind]);
 			numParamCons++;
 
-			// The radial
-			//sparsity.push_back(numParamCons*varsTotal + oneIndex);
-			//sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var1Ind]);
-			//sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var2Ind]);
-			//numParamCons++;
-
-			// The SDP cutting TODO
-			//sparsity.push_back(numParamCons*varsTotal + oneIndex);
-			//sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var1Ind]);
-			//sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var2Ind]);
-			//sparsity.push_back(numParamCons*varsTotal + quadraticMonomInds[var1Ind][var1Ind]);
-			//sparsity.push_back(numParamCons*varsTotal + quadraticMonomInds[var1Ind][var2Ind]);
-			//sparsity.push_back(numParamCons*varsTotal + quadraticMonomInds[var2Ind][var2Ind]);
-			//for (int i=0; i<varsTotal; i++) {
-				//sparsity.push_back(numParamCons*varsTotal + i);
-			//}
-			numParamCons+=10;
-
 		}
 		std::sort(sparsity.begin(), sparsity.end());
-		//mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
-		mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}));
+		mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
 		M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::greaterThan(0));
 
 		// The first element of the vector should be one
@@ -5855,7 +5818,6 @@ public:
 
 			// Update the linear constraints on the quadratics
 			int nextInd = 0;
-			std::vector<std::pair<double,double>> varBounds(maxVariables);
 			for (int i=0; i<qCones.size(); i++) {
 
 				// Get the min and max bounds from this angular cut
@@ -5873,21 +5835,8 @@ public:
 						var1Min = -bound;
 					}
 				}
-				varBounds[var1Ind].first = var1Min;
-				varBounds[var1Ind].second = var1Max;
-
-				// Bound the value from above/max
-				newD[nextInd][oneIndex] = var1Max;
-				newD[nextInd][firstMonomInds[var1Ind]] = -1;
-				nextInd++;
-
-				// Bound the value from below/min
-				newD[nextInd][oneIndex] = -var1Min;
-				newD[nextInd][firstMonomInds[var1Ind]] = 1;
-				nextInd++;
 
 				// Bound the square of this var
-				//std::vector<double> coeffs1 = getHyperplaneFromPoints({{var1Min, var1Min*var1Min}, {var1Max, var1Max*var1Max}}, {(var1Min+var1Max)/2.0, std::pow((var1Min+var1Max)/2.0, 2)});
 				std::vector<double> coeffs1 = getLineFromPoints({var1Min, var1Min*var1Min}, {var1Max, var1Max*var1Max});
 				newD[nextInd][oneIndex] = coeffs1[0];
 				newD[nextInd][firstMonomInds[var1Ind]] = coeffs1[1];
@@ -5908,115 +5857,21 @@ public:
 						var2Max = bound;
 					}
 				}
-				varBounds[var2Ind].first = var2Min;
-				varBounds[var2Ind].second = var2Max;
-
-				// Bound the value from above/max
-				//newD[nextInd][oneIndex] = var2Max;
-				//newD[nextInd][firstMonomInds[var2Ind]] = -1;
-				nextInd++;
-
-				// Bound the value from below/min
-				//newD[nextInd][oneIndex] = -var2Min;
-				//newD[nextInd][firstMonomInds[var2Ind]] = 1;
-				nextInd++;
 
 				// Bound the square of this var
-				//std::vector<double> coeffs2 = getHyperplaneFromPoints({{var2Min, var2Min*var2Min}, {var2Max, var2Max*var2Max}}, {(var2Min+var2Max)/2.0, std::pow((var2Min+var2Max)/2.0, 2)});
 				std::vector<double> coeffs2 = getLineFromPoints({var2Min, var2Min*var2Min}, {var2Max, var2Max*var2Max});
 				newD[nextInd][oneIndex] = coeffs2[0];
 				newD[nextInd][firstMonomInds[var2Ind]] = coeffs2[1];
 				newD[nextInd][quadraticMonomInds[var2Ind][var2Ind]] = coeffs2[2];
 				nextInd++;
 
-				// Bound the space between both
-				//double var1FromMidAngle = bound*std::cos((toProcess[0][i].first + toProcess[0][i].second)*0.5*toRadians);
-				//double var2FromMidAngle = bound*std::sin((toProcess[0][i].first + toProcess[0][i].second)*0.5*toRadians);
-				//std::vector<double> coeffs3 = getHyperplaneFromPoints({{var1FromMinAngle, var2FromMinAngle}, {var1FromMaxAngle, var2FromMaxAngle}}, {var1FromMidAngle, var2FromMidAngle});
-				//newD[nextInd][oneIndex] = coeffs3[0];
-				//newD[nextInd][firstMonomInds[var1Ind]] = coeffs3[1];
-				//newD[nextInd][firstMonomInds[var2Ind]] = coeffs3[2];
-				//nextInd++;
+				// Debugging output
 				if (verbosity >= 2) {
 					std::cout << "    for vars " << var1Ind << " and " << var2Ind << std::endl;
 					std::cout << "        bounds for var " << var1Ind << ": " << var1Min << " -> " << var1Max << std::endl;
-					std::cout << "        bounds for var " << var2Ind << ": " << var2Min << " -> " << var2Max << std::endl;
 					std::cout << "        square bounding eqn: " << coeffs1[0] << " + " << coeffs1[1] << "*x + " << coeffs1[2] << "*y > 0 (y = x^2)" << std::endl;
+					std::cout << "        bounds for var " << var2Ind << ": " << var2Min << " -> " << var2Max << std::endl;
 					std::cout << "        square bounding eqn: " << coeffs2[0] << " + " << coeffs2[1] << "*x + " << coeffs2[2] << "*y > 0 (y = x^2)" << std::endl;
-					//std::cout << "        cutting eqn: " << coeffs3[0] << " + " << coeffs3[1] << "*x + " << coeffs3[2] << "*y > 0 (x^2+y^2=0.5)" << std::endl;
-				}
-
-			}
-
-			// Try bounding a larger convex domain TODO
-			std::vector<int> varsToBound = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17};
-			//std::vector<int> varsToBound = {0, 1};
-			std::vector<std::vector<double>> points = {};
-			for (int i=0; i<std::pow(2, varsToBound.size()); i++) {
-				std::vector<double> point;
-				for (int j=0; j<varsToBound.size(); j++) {
-					if ((i >> j) & 1) {
-						point.push_back(varBounds[varsToBound[j]].second);
-					} else {
-						point.push_back(varBounds[varsToBound[j]].first);
-					}
-				}
-				for (int j=0; j<varsToBound.size(); j++) {
-					for (int k=j; k<varsToBound.size(); k++) {
-						point.push_back(point[j]*point[k]);
-					}
-				}
-				points.push_back(point);
-			}
-
-			std::vector<double> pointMid = {};
-			for (int j=0; j<varsToBound.size(); j++) {
-				pointMid.push_back((varBounds[varsToBound[j]].second + varBounds[varsToBound[j]].first) / 2.0);
-			}
-			for (int j=0; j<varsToBound.size(); j++) {
-				for (int k=j; k<varsToBound.size(); k++) {
-					pointMid.push_back(pointMid[j]*pointMid[k]);
-				}
-			}
-
-			std::vector<std::vector<double>> coeffList = getHyperplaneFromPoints(points, pointMid);
-			for (int l=0; l<coeffList.size(); l++) {
-				std::vector<double> coeffsNew = coeffList[l];
-
-				int nextCoeff = 1;
-				newD[nextInd][oneIndex] = coeffsNew[0];
-				if (verbosity >= 2) {
-					std::cout << "    testing equation: " << coeffsNew[0] << " + ";
-				}
-				for (int j=0; j<varsToBound.size(); j++) {
-					newD[nextInd][firstMonomInds[varsToBound[j]]] = coeffsNew[nextCoeff];
-					if (verbosity >= 2 && std::abs(coeffsNew[nextCoeff]) > 1e-10) {
-						std::cout << coeffsNew[nextCoeff] << "*{" << varsToBound[j] << "} + ";
-					}
-					nextCoeff++;
-				}
-				for (int j=0; j<varsToBound.size(); j++) {
-					for (int k=j; k<varsToBound.size(); k++) {
-						newD[nextInd][quadraticMonomInds[varsToBound[j]][varsToBound[k]]] = coeffsNew[nextCoeff];
-						if (verbosity >= 2 && std::abs(coeffsNew[nextCoeff]) > 1e-10) {
-							std::cout << coeffsNew[nextCoeff] << "*{" << varsToBound[j] << " " << varsToBound[k] << "} + ";
-						}
-						nextCoeff++;
-					}
-				}
-				nextInd++;
-
-				if (verbosity >= 2) { 
-					std::cout << std::endl;
-					double highest = 0;
-					for (int i=0; i<points.size(); i++) {
-						double val = coeffsNew[0];
-						for (int j=0; j<points[i].size(); j++) {
-							val += coeffsNew[j+1]*points[i][j];
-						}
-						highest = std::max(highest, val);
-					}
-					std::cout << "    max viol = " << highest << std::endl;
 				}
 
 			}
@@ -6125,77 +5980,22 @@ public:
 						std::cout << "    theta, r: " << theta << ", " << r << std::endl;
 					}
 
-					// When splitting for the first time it's different
-					if (minPoint == 0 && maxPoint == 360) {
+					// Start with copies of this region
+					std::vector<std::vector<std::pair<double,double>>> copies(2, toProcess[0]);
 
-						// Start with copies of this region
-						std::vector<std::vector<std::pair<double,double>>> copies(3, toProcess[0]);
+					// Split the sections
+					double splitPoint = (maxPoint + minPoint) / 2.0;
+					copies[0][bestSection].second = splitPoint;
+					copies[1][bestSection].first = splitPoint;
 
-						// Split the sections
-						double splitPoint = (maxPoint + minPoint) / 2.0;
-						copies[0][bestSection].second = splitPoint;
-						copies[2][bestSection].first = splitPoint;
-
-						// See if the feasible point we just found is in the first section
-						bool inSection0 = false;
-						for (int j=-2; j<2; j++) {
-							if (theta > copies[0][bestSection].first + j*360 && theta < copies[0][bestSection].second + j*360) {
-								inSection0 = true;
-								break;
-							}
-						}
-
-						// If so, split that section again TODO
-						if (inSection0) {
-							double extraSplitPoint = (copies[0][bestSection].first + copies[0][bestSection].second) / 2.0;
-							copies[0][bestSection].second = extraSplitPoint;
-							copies[1][bestSection].first = extraSplitPoint;
-							copies[1][bestSection].second = splitPoint;
-						} else {
-							double extraSplitPoint = (copies[2][bestSection].first + copies[2][bestSection].second) / 2.0;
-							copies[2][bestSection].first = extraSplitPoint;
-							copies[1][bestSection].first = splitPoint;
-							copies[1][bestSection].second = extraSplitPoint;
-						}
-
-						// Add a rotational offset (which is fine since we cover everything)
-						double offset = params[0];
+					// Add the new paths to the queue
+					for (int j=0; j<copies.size(); j++) {
+						toProcess.insert(toProcess.begin()+1, copies[j]);
+					}
+					if (verbosity >= 2) {
 						for (int j=0; j<copies.size(); j++) {
-							copies[j][bestSection].first += offset;
-							copies[j][bestSection].second += offset;
+							std::cout << "    split: " << copies[j][bestSection].first << " to " << copies[j][bestSection].second << std::endl;
 						}
-
-						// Add the new paths to the queue
-						for (int j=0; j<copies.size(); j++) {
-							toProcess.insert(toProcess.begin()+1, copies[j]);
-						}
-						if (verbosity >= 2) {
-							std::cout << "    offset: " << offset << std::endl;
-							for (int j=0; j<copies.size(); j++) {
-								std::cout << "    split: " << copies[j][bestSection].first << " to " << copies[j][bestSection].second << std::endl;
-							}
-						}
-
-					} else {
-
-						// Start with copies of this region
-						std::vector<std::vector<std::pair<double,double>>> copies(2, toProcess[0]);
-
-						// Split the sections
-						double splitPoint = (maxPoint + minPoint) / 2.0;
-						copies[0][bestSection].second = splitPoint;
-						copies[1][bestSection].first = splitPoint;
-
-						// Add the new paths to the queue
-						for (int j=0; j<copies.size(); j++) {
-							toProcess.insert(toProcess.begin()+1, copies[j]);
-						}
-						if (verbosity >= 2) {
-							for (int j=0; j<copies.size(); j++) {
-								std::cout << "    split: " << copies[j][bestSection].first << " to " << copies[j][bestSection].second << std::endl;
-							}
-						}
-
 					}
 
 				}
