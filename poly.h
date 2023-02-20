@@ -3935,15 +3935,33 @@ public:
 	Polynomial<polyType> obj;
 	std::vector<Polynomial<polyType>> conZero;
 	std::vector<Polynomial<polyType>> conPositive;
+	std::vector<std::vector<Polynomial<polyType>>> conPSD;
 
 	// Default constructor
 	PolynomialProblem() {}
 
-	// Constructor with everything 
+	// Constructor with just obj
+	PolynomialProblem(Polynomial<polyType> obj_) {
+		obj = obj_;
+		maxVariables = obj.maxVariables;
+		digitsPerInd = obj.digitsPerInd;
+	}
+
+	// Constructor with just obj, zero and positivity 
 	PolynomialProblem(Polynomial<polyType> obj_, std::vector<Polynomial<polyType>> conZero_, std::vector<Polynomial<polyType>> conPositive_) {
 		obj = obj_;
 		conZero = conZero_;
 		conPositive = conPositive_;
+		maxVariables = obj.maxVariables;
+		digitsPerInd = obj.digitsPerInd;
+	}
+
+	// Constructor with everything 
+	PolynomialProblem(Polynomial<polyType> obj_, std::vector<Polynomial<polyType>> conZero_, std::vector<Polynomial<polyType>> conPositive_, std::vector<std::vector<Polynomial<polyType>>> conPSD_) {
+		obj = obj_;
+		conZero = conZero_;
+		conPositive = conPositive_;
+		conPSD = conPSD_;
 		maxVariables = obj.maxVariables;
 		digitsPerInd = obj.digitsPerInd;
 	}
@@ -3962,6 +3980,12 @@ public:
 		for (int i=0; i<conPositive.size(); i++) {
 			tempList = conPositive[i].getMonomials();
 			monoms.insert(tempList.begin(), tempList.end());
+		}
+		for (int i=0; i<conPSD.size(); i++) {
+			for (int j=0; j<conPSD[i].size(); j++) {
+				tempList = conPSD[i][j].getMonomials();
+				monoms.insert(tempList.begin(), tempList.end());
+			}
 		}
 
 		// Turn this into a vector
@@ -3985,7 +4009,7 @@ public:
 		}
 
 		// Start with a blank poly system
-		PolynomialProblem newPolyProblem({}, {}, {});
+		PolynomialProblem newPolyProblem();
 
 		// Copy each equation, substituting
 		newPolyProblem.obj = obj.replaceWithValue(indsToReplace, convertedList);
@@ -3995,6 +4019,14 @@ public:
 		for (int i=0; i<conPositive.size(); i++) {
 			newPolyProblem.conPositive.push_back(conPositive[i].replaceWithValue(indsToReplace, convertedList));
 		}
+		for (int i=0; i<conPSD.size(); i++) {
+			newPolyProblem.conPSD.push_back({});
+			for (int j=0; j<conPSD[i].size(); i++) {
+				newPolyProblem.conPSD[i].push_back(conPSD[i][j].replaceWithValue(indsToReplace, convertedList));
+			}
+		}
+		newPolyProblem.maxVariables = newPolyProblem.obj.maxVariables;
+		newPolyProblem.digitsPerInd = newPolyProblem.obj.digitsPerInd;
 
 		return newPolyProblem;
 
@@ -4020,6 +4052,9 @@ public:
 				for (int i=0; i<other.conPositive.size(); i++) {
 					output << std::endl << other.conPositive[i] << " > 0 " << std::endl;
 				}
+				if (other.conPSD.size() > 0) {
+					output << other.conPSD << " >= 0" << std::endl;
+				}
 			}
 
 		// If it's constraint satisfaction
@@ -4034,6 +4069,9 @@ public:
 				}
 				for (int i=0; i<other.conPositive.size(); i++) {
 					output << std::endl << other.conPositive[i] << " > 0 " << std::endl;
+				}
+				if (other.conPSD.size() > 0) {
+					output << other.conPSD << " >= 0" << std::endl;
 				}
 			}
 
@@ -4051,6 +4089,11 @@ public:
 		}
 		for (auto const &eqn : conPositive) {
 			maxDegree = std::max(maxDegree, eqn.getDegree());
+		}
+		for (auto const &eqn1 : conPSD) {
+			for (auto const &eqn2 : eqn1) {
+				maxDegree = std::max(maxDegree, eqn2.getDegree());
+			}
 		}
 		return maxDegree;
 	}
@@ -4315,6 +4358,19 @@ public:
 				}
 			}
 
+			// Check the PSD cons if still not found
+			if (indMap.find(i) == indMap.end()) {
+				for (int j=0; j<conPSD.size(); j++) {
+					for (int k=0; k<conPSD[j].size(); k++) {
+						if (conPSD[j][j].contains(i)) {
+							indMap[i] = nextInd;
+							nextInd++;
+							break;
+						}
+					}
+				}
+			}
+
 		}
 
 		return indMap;
@@ -4346,75 +4402,20 @@ public:
 			}
 		}
 
+		// Replace the PSD cons
+		std::vector<std::vector<Polynomial<polyType>>> newConPSD;
+		for (int i=0; i<conPSD.size(); i++) {
+			newConPSD.push_back({});
+			for (int j=0; j<conPSD.size(); j++) {
+				Polynomial<polyType> newPoly = conPSD[i][j].replaceWithVariable(indMap).changeMaxVariables(newNumVars);
+				newConPSD[i].push_back(newPoly);
+			}
+		}
+
 		// Create the new poly problem and return
-		return PolynomialProblem<polyType>(newObj, newConZero, newConPositive);
+		return PolynomialProblem<polyType>(newObj, newConZero, newConPositive, newConPSD);
 
 	}
-
-	// Collapse to the minimum number of variables
-	//PolynomialProblem<polyType> collapse() {
-
-		//// The map from old indices to new (minified) indices
-		//std::unordered_map<int,int> indMap;
-		//int nextInd = 0;
-		//for (int i=0; i<maxVariables; i++) {
-
-			//// Check the objective
-			//if (obj.contains(i)) {
-				//indMap[i] = nextInd;
-				//nextInd++;
-			//}
-
-			//// Check the equality cons if still not found
-			//if (indMap.find(i) == indMap.end()) {
-				//for (int j=0; j<conZero.size(); j++) {
-					//if (conZero[j].contains(i)) {
-						//indMap[i] = nextInd;
-						//nextInd++;
-						//break;
-					//}
-				//}
-			//}
-
-			//// Check the inequality cons if still not found
-			//if (indMap.find(i) == indMap.end()) {
-				//for (int j=0; j<conPositive.size(); j++) {
-					//if (conPositive[j].contains(i)) {
-						//indMap[i] = nextInd;
-						//nextInd++;
-						//break;
-					//}
-				//}
-			//}
-
-		//}
-
-		//// Replace the objective
-		//int newNumVars = nextInd;
-		//Polynomial<polyType> newObj = obj.replaceWithVariable(indMap).changeMaxVariables(newNumVars);
-		//std::vector<Polynomial<polyType>> newConZero;
-
-		//// Replace the equality cons
-		//for (int i=0; i<conZero.size(); i++) {
-			//Polynomial<polyType> newPoly = conZero[i].replaceWithVariable(indMap).changeMaxVariables(newNumVars);
-			//if (newPoly.size() > 0) { 
-				//newConZero.push_back(newPoly);
-			//}
-		//}
-
-		//// Replace the inequality cons
-		//std::vector<Polynomial<polyType>> newConPositive;
-		//for (int i=0; i<conPositive.size(); i++) {
-			//Polynomial<polyType> newPoly = conPositive[i].replaceWithVariable(indMap).changeMaxVariables(newNumVars);
-			//if (newPoly.size() > 0) { 
-				//newConPositive.push_back(newPoly);
-			//}
-		//}
-
-		//// Create the new poly problem and return
-		//return PolynomialProblem<polyType>(newObj, newConZero, newConPositive);
-
-	//}
 
 	// Attempt find a feasible point of this problem
 	std::vector<polyType> findFeasiblePoint(int zeroInd=-1, double alpha=0.1, double tolerance=1e-10, int maxIters=10000000, int threads=4, bool verbose=false, double maxMag=1) {
@@ -4467,175 +4468,6 @@ public:
 		double c = point1[0]-point2[0];
 		double a = -b*point1[0]-c*point1[1];
 		return {a, b, c};
-	}
-
-	// Given a series of points, find the plane that goes through them TODO
-	// Given an extra point, ensure that the pos con goes in that direction
-	std::vector<std::vector<double>> getHyperplaneFromPoints(std::vector<std::vector<double>> points, std::vector<double> checkPoint) {
-
-		Eigen::MatrixXd A2 = Eigen::MatrixXd::Zero(points.size(), 1+points[0].size());
-		for (int i=0; i<points.size(); i++) {
-			A2(i,0) = 1;
-			for (int j=0; j<points[i].size(); j++) {
-				A2(i,j+1) = points[i][j];
-			}
-		}
-		Eigen::FullPivLU<Eigen::MatrixXd> lu(A2);
-		Eigen::MatrixXd nullSpace = lu.kernel();
-
-		std::vector<std::vector<double>> vecs(nullSpace.cols(), std::vector<double>(nullSpace.rows()));
-		for (int i=0; i<nullSpace.rows(); i++) {
-			for (int j=0; j<nullSpace.cols(); j++) {
-				vecs[j][i] = nullSpace(i,j);
-			}
-		}
-
-		// See if the checking point is the correct side
-		for (int i=0; i<vecs.size(); i++) {
-			double res = vecs[i][0];
-			for (int j=0; j<checkPoint.size(); j++) {
-				res += checkPoint[i]*vecs[i][j+1];
-			}
-			if (res < 0) {
-				for (int j=0; j<vecs[i].size(); j++) {
-					vecs[i][j] = -vecs[i][j];
-				}
-			}
-		}
-
-		return vecs;
-
-		// Check if one of the vecs is all zero
-		//bool throughZero = false;
-		//for (int i=0; i<points.size(); i++) {
-			//double norm = 0;
-			//for (int j=0; j<points[i].size(); j++) {
-				//norm += std::abs(points[i][j]);
-			//}
-			//if (norm < 1e-8) {
-				//throughZero = true;
-				//break;
-			//}
-		//}
-
-		//// If not going through zero, setting the constant to 1
-		//if (!throughZero) {
-
-			//// Stack the points
-			//Eigen::MatrixXd A = Eigen::MatrixXd::Zero(points.size(), points[0].size());
-			//for (int i=0; i<points.size(); i++) {
-				//for (int j=0; j<points[i].size(); j++) {
-					//A(i,j) = points[i][j];
-				//}
-			//}
-
-			//// Solve this equal to one (meaning the constant coeff will be one)
-			//Eigen::VectorXd b = -Eigen::VectorXd::Ones(points.size());
-			//Eigen::VectorXd coeffs = A.colPivHouseholderQr().solve(b);
-
-			//// Convert to the std::vector form and return
-			//std::vector<double> toReturn(1+coeffs.size());
-			//toReturn[0] = 1;
-			//for (int i=0; i<coeffs.size(); i++) {
-				//toReturn[i+1] = coeffs[i];
-			//}
-
-			//// See if the checking point is the correct side
-			//double res = toReturn[0];
-			//for (int i=0; i<checkPoint.size(); i++) {
-				//res += checkPoint[i]*toReturn[i+1];
-			//}
-			//if (res < 0) {
-				//for (int i=0; i<toReturn.size(); i++) {
-					//toReturn[i] = -toReturn[i];
-				//}
-			//}
-			//return toReturn;
-
-		//// Otherwise we have to pick a coeff to be non-zero
-		//} else {
-
-			//// Find a var that changes
-			//int varInd = -1;
-			//for (int i=0; i<points[0].size(); i++) {
-				//for (int j=1; j<points.size(); j++) {
-					//if (std::abs(points[j][i] - points[0][i]) > 1e-8) {
-						//varInd = i;
-						//break;
-					//}
-				//}
-				//if (varInd >= 0) {
-					//break;
-				//}
-			//}
-
-			//// Stack the points
-			//Eigen::MatrixXd A = Eigen::MatrixXd::Zero(points.size(), points[0].size());
-			//for (int i=0; i<points.size(); i++) {
-				//for (int j=0; j<points[i].size(); j++) {
-					//A(i,j) = points[i][j];
-				//}
-			//}
-
-			//// Solve this equal to the values of this var
-			//Eigen::VectorXd b = -Eigen::VectorXd::Ones(points.size());
-			//for (int j=0; j<points.size(); j++) {
-				//b[j] = -points[j][varInd];
-				//A(j,varInd) = 0;
-			//}
-			//Eigen::VectorXd coeffs = A.colPivHouseholderQr().solve(b);
-
-			//// Convert to the std::vector form and return
-			//std::vector<double> toReturn(1+coeffs.size());
-			//toReturn[0] = 0;
-			//for (int i=0; i<coeffs.size(); i++) {
-				//toReturn[i+1] = coeffs[i];
-			//}
-			//toReturn[1+varInd] = 1;
-
-			//// See if the checking point is the correct side
-			//double res = toReturn[0];
-			//for (int i=0; i<checkPoint.size(); i++) {
-				//res += checkPoint[i]*toReturn[i+1];
-			//}
-			//if (res < 0) {
-				//for (int i=0; i<toReturn.size(); i++) {
-					//toReturn[i] = -toReturn[i];
-				//}
-			//}
-			//return toReturn;
-
-		//}
-
-	}
-
-	// Calculate the equation of a plane given 2 points
-	// In the form a + bx + cy + dz = 0
-	std::vector<double> getPlaneFromPoints(std::vector<double> A, std::vector<double> B, std::vector<double> C) {
-
-		// Get two vectors in the plane
-		std::vector<double> AC(3);
-		std::vector<double> AB(3);
-		for (int i=0; i<3; i++) {
-			AC[i] = C[i] - A[i];
-			AB[i] = B[i] - A[i];
-		}
-
-		// Calculate the normal to these vectors
-		std::vector<double> n(3);
-		n[0] = AC[1]*AB[2] - AC[2]*AB[1];
-		n[1] = AC[2]*AB[0] - AC[0]*AB[2];
-		n[2] = AC[0]*AB[1] - AC[1]*AB[0];
-
-		// Calculate the constant term
-		double d = 0;
-		for (int i=0; i<3; i++) {
-			d += n[i]*A[i];
-		}
-
-		// This is then everything we need to define the plane
-		return {d, n[0], n[1], n[2]};
-
 	}
 
 	// Attempt to find a series of constraints that show this is infeasible
@@ -4705,6 +4537,13 @@ public:
 		std::vector<Polynomial<polyType>> conPositiveLinear(conPositive.size());
 		for (int i=0; i<conPositive.size(); i++) {
 			conPositiveLinear[i] = conPositive[i].replaceWithVariable(mapping);
+		}
+		std::vector<std::vector<Polynomial<polyType>>> conPSDLinear;
+		for (int i=0; i<conPSD.size(); i++) {
+			conPSDLinear.push_back({});
+			for (int j=0; j<conPSD[i].size(); j++) {
+				conPSDLinear[i].push_back(conPSD[i][j].replaceWithVariable(mapping));
+			}
 		}
 
 		// Process the level string e.g. "1+2f,3p"
@@ -4783,15 +4622,15 @@ public:
 		toProcess.push_back(varMinMax);
 
 		// TODO
-		toProcess = {};
+		//toProcess = {};
 		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, -0.0104253}, {-0.57735, -0.0180467}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
 		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, -0.0104253}, {-0.0180467, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
 		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.0104253, 0.57735}, {0.100881, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
 		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.0104253, 0.57735}, {-0.57735, 0.100881}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
-		toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.0}, {-0.57735, 0.0}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
-		toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.0}, {0.0, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
-		toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {0.0, 0.57735}, {0.0, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
-		toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {0.0, 0.57735}, {-0.57735, 0.0}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.0}, {-0.57735, 0.0}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.0}, {0.0, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {0.0, 0.57735}, {0.0, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {0.0, 0.57735}, {-0.57735, 0.0}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
 
 		// Create the PSD matrices from this list
 		std::vector<std::shared_ptr<monty::ndarray<int,1>>> shouldBePSD;
@@ -4858,35 +4697,6 @@ public:
 			}
 		}
 
-		// Add second order cone for x^2+y^2=1/d
-		std::vector<std::tuple<double,int,int>> qCones;
-		for (int i=0; i<conZero.size(); i++) {
-
-			// First make sure we have a constant and 3 terms total
-			if (conZero[i][""] < 0 && conZero[i].size() == 3) {
-
-				// Get vars and monoms from this
-				auto varsInThisPoly = conZero[i].getVariables();
-				auto monomsInThisPoly = conZero[i].getMonomials();
-
-				// Check to make sure all vars are squares
-				bool allSquares = true;
-				for (int j=0; j<monomsInThisPoly.size(); j++) {
-					if (monomsInThisPoly[j].size() >= 2*digitsPerInd) {
-						if (monomsInThisPoly[j].substr(0,digitsPerInd) != monomsInThisPoly[j].substr(digitsPerInd,digitsPerInd)) {
-							allSquares = false;
-						}
-					}
-				}
-
-				// If all valid, add to the quadratic cones list
-				if (allSquares) {
-					qCones.push_back({-conZero[i][""], varsInThisPoly[0], varsInThisPoly[1]});
-				}
-
-			}
-		}
-
 		// Set some vars
 		int oneIndex = 0;
 		int varsTotal = monoms.size();
@@ -4924,6 +4734,8 @@ public:
 			}
 		}
 		auto BM = mosek::fusion::Matrix::sparse(conPositiveLinear.size(), varsTotal, monty::new_array_ptr<int>(BRows), monty::new_array_ptr<int>(BCols), monty::new_array_ptr<polyType>(BVals));
+
+		// Convert the linear PSD constraints to MOSEK form TODO
 		
 		// The box constraints, given our box
 		std::vector<double> mins(monoms.size(), -1);
@@ -4987,12 +4799,6 @@ public:
 		// SDP constraints
 		for (int i=0; i<shouldBePSD.size(); i++) {
 			M->constraint(mosek::fusion::Expr::add(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Expr::mul(lambda, identityAsSVec[i])), mosek::fusion::Domain::inSVecPSDCone());
-		}
-
-		// The order in which to branch
-		std::vector<int> splitOrder;
-		for (int i=0; i<maxVariables; i++) {
-			splitOrder.push_back(i);
 		}
 
 		// Open a file if told to record the points
@@ -5108,10 +4914,10 @@ public:
 				// Find the biggest error
 				double biggestError = -10000;
 				int bestInd = -1;
-				for (int i=0; i<splitOrder.size(); i++) {
-					if (errors[splitOrder[i]] > biggestError) {
-						biggestError = errors[splitOrder[i]];
-						bestInd = splitOrder[i];
+				for (int i=0; i<maxVariables; i++) {
+					if (errors[i] > biggestError) {
+						biggestError = errors[i];
+						bestInd = i;
 					}
 				}
 
@@ -5424,621 +5230,7 @@ public:
 		}
 
 	}
-
-	// Attempt to find a series of constraints that show this is infeasible
-	int proveInfeasibleRadial(int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="", std::vector<double> params={}, int verbosity=1) {
-
-		// Get the monomial list and sort it
-		std::vector<std::string> monoms = getMonomials();
-		std::sort(monoms.begin(), monoms.end(), [](const std::string& first, const std::string& second){return first.size() < second.size();});
-
-		// List of semdefinite matrices
-		std::vector<std::vector<Polynomial<polyType>>> monomProducts;
-
-		// Random seed
-		std::srand(time(0));
-
-		// Get the order of the set of equations
-		int degree = getDegree();
-
-		// Make sure we have all first order moments
-		addMonomsOfOrder(monoms, 1);
-
-		// First monom should always be 1
-		auto loc = std::find(monoms.begin(), monoms.end(), "");
-		if (loc != monoms.end()) {
-			monoms.erase(loc);
-		}
-		monoms.insert(monoms.begin(), "");
-
-		// Add all square monoms
-		if (degree >= 2) {
-			for (int i=0; i<maxVariables; i++) {
-				std::string newInd = std::to_string(i);
-				newInd.insert(0, digitsPerInd-newInd.size(), ' ');
-				if (std::find(monoms.begin(), monoms.end(), newInd+newInd) == monoms.end()) {
-					monoms.push_back(newInd+newInd);
-				}
-			}
-		}
-
-		// Create the mapping from monomials to indices (to linearize)
-		int numOGMonoms = monoms.size();
-		std::unordered_map<std::string,std::string> mapping;
-		int digitsPerIndAfterLinear = std::ceil(std::log10(monoms.size()+1));
-		for (int i=1; i<monoms.size(); i++) {
-			std::string newInd = std::to_string(i);
-			newInd.insert(0, digitsPerIndAfterLinear-newInd.size(), ' ');
-			mapping[monoms[i]] = newInd;
-		}
-
-		// Linearize the problem
-		Polynomial<polyType> objLinear = obj.replaceWithVariable(mapping);
-		std::vector<Polynomial<polyType>> conZeroLinear(conZero.size());
-		for (int i=0; i<conZero.size(); i++) {
-			conZeroLinear[i] = conZero[i].replaceWithVariable(mapping);
-		}
-		std::vector<Polynomial<polyType>> conPositiveLinear(conPositive.size());
-		for (int i=0; i<conPositive.size(); i++) {
-			conPositiveLinear[i] = conPositive[i].replaceWithVariable(mapping);
-		}
-
-		// Process the level string e.g. "1+2f,3p"
-		std::vector<int> levelsToInclude = {};
-		std::string currentThing = "";
-		for (int i=0; i<level.size(); i++) {
-
-			// For multiple levels e.g. 1+2
-			if (level[i] == '+') {
-				levelsToInclude.push_back(std::stoi(currentThing));
-				currentThing = "";
-
-			// p for a partial level
-			} else if (level[i] == 'p') {
-
-				// Add whatever numbers are left
-				levelsToInclude.push_back(std::stoi(currentThing));
-
-				// Get the list monomials that can appear on the top row
-				std::vector<std::string> possibleMonoms;
-				for (int j=0; j<levelsToInclude.size(); j++) {
-					addMonomsOfOrder(possibleMonoms, levelsToInclude[j]);
-				}
-
-				// Get all combinations of 3x3 moment matrices
-				for (int j=0; j<possibleMonoms.size(); j++) {
-					for (int k=j+1; k<possibleMonoms.size(); k++) {
-						monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, possibleMonoms[j]), Polynomial<polyType>(maxVariables, 1, possibleMonoms[k])});
-					}
-				}
-
-				// Reset stuff
-				currentThing = "";
-				levelsToInclude = {};
-
-			// r for a random level TODO see which we can remove
-			} else if (level[i] == 'r') {
-
-				// Add whatever numbers are left
-				levelsToInclude.push_back(std::stoi(currentThing));
-
-				// Get the list monomials that can appear on the top row
-				std::vector<std::string> possibleMonoms;
-				for (int j=0; j<levelsToInclude.size(); j++) {
-					std::vector<std::string> newMonoms;
-					addMonomsOfOrder(newMonoms, levelsToInclude[j]);
-					for (int k=0; k<newMonoms.size(); k++) {
-						if (std::find(monoms.begin(), monoms.end(), newMonoms[k]) != monoms.end() || levelsToInclude[j] == 1) {
-							possibleMonoms.push_back(newMonoms[k]);
-						}
-					}
-				}
-
-				// Add these all to the top row of a moment matrix
-				std::vector<Polynomial<double>> toAdd;
-				toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
-				for (int j=0; j<possibleMonoms.size(); j++) {
-					toAdd.push_back(Polynomial<polyType>(maxVariables, 1, possibleMonoms[j]));
-				}
-				monomProducts.push_back(toAdd);
-
-				// Reset stuff
-				currentThing = "";
-				levelsToInclude = {};
-
-			// f for a full level
-			} else if (level[i] == 'f') {
-
-				// Add whatever numbers are left
-				levelsToInclude.push_back(std::stoi(currentThing));
-
-				// Get the list monomials that can appear on the top row
-				std::vector<std::string> possibleMonoms;
-				for (int j=0; j<levelsToInclude.size(); j++) {
-					addMonomsOfOrder(possibleMonoms, levelsToInclude[j]);
-				}
-
-				// Add these all to the top row of a moment matrix
-				std::vector<Polynomial<double>> toAdd;
-				toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
-				for (int j=0; j<possibleMonoms.size(); j++) {
-					toAdd.push_back(Polynomial<polyType>(maxVariables, 1, possibleMonoms[j]));
-				}
-				monomProducts.push_back(toAdd);
-
-				// Reset stuff
-				currentThing = "";
-				levelsToInclude = {};
-
-			// Otherwise add this (probably digit) to the string to process
-			} else if (level[i] != ',' && level[i] != ' ') {
-				currentThing += level[i];
-			}
-
-		}
-
-		// Output for debugging
-		if (verbosity >= 2) {
-			std::cout << monomProducts << std::endl;
-			std::cout << "num in top row of SD mat: " << monomProducts[0].size() << std::endl;
-		}
-
-		// Create the PSD matrices from this list
-		std::vector<std::shared_ptr<monty::ndarray<int,1>>> shouldBePSD;
-		std::vector<std::shared_ptr<monty::ndarray<double,1>>> shouldBePSDCoeffs;
-		std::vector<std::shared_ptr<monty::ndarray<double,1>>> identityAsSVec;
-		std::vector<double> idenCoeffs;
-		std::vector<double> monCoeffs;
-		std::vector<int> monLocs;
-		for (int j=0; j<monomProducts.size(); j++) {
-
-			// Get the list of all monomial locations for the PSD matrix
-			monLocs = {};
-			monCoeffs = {};
-			idenCoeffs = {};
-			for (int i=0; i<monomProducts[j].size(); i++) {
-				for (int k=i; k<monomProducts[j].size(); k++) {
-
-					// Calculate the product
-					std::string monString = (monomProducts[j][i]*monomProducts[j][k]).getMonomials()[0];
-
-					// Find this in the monomial list
-					auto loc = std::find(monoms.begin(), monoms.end(), monString);
-					if (loc != monoms.end()) {
-						monLocs.push_back(loc - monoms.begin());
-					} else {
-						monLocs.push_back(monoms.size());
-						monoms.push_back(monString);
-					}
-
-					// The coeff for mosek's svec
-					if (i != k) {
-						monCoeffs.push_back(std::sqrt(2.0));
-						idenCoeffs.push_back(0.0);
-					} else {
-						monCoeffs.push_back(1.0);
-						idenCoeffs.push_back(1.0);
-					}
-
-				}
-			}
-
-			// This (when reformatted) should be positive-semidefinite
-			shouldBePSD.push_back(monty::new_array_ptr<int>(monLocs));
-			shouldBePSDCoeffs.push_back(monty::new_array_ptr<double>(monCoeffs));
-			identityAsSVec.push_back(monty::new_array_ptr<double>(idenCoeffs));
-
-			// Clear some memory
-			monomProducts.erase(monomProducts.begin());
-			j--;
-
-		}
-
-		// Get the inds of the first order monomials and their squares
-		std::vector<int> firstMonomInds(maxVariables, -1);
-		std::vector<std::vector<int>> quadraticMonomInds(maxVariables, std::vector<int>(maxVariables, 1));
-		for (int i=0; i<monoms.size(); i++) {
-			if (monoms[i].size() == digitsPerInd) {
-				firstMonomInds[std::stoi(monoms[i])] = i;
-			} else if (monoms[i].size() == 2*digitsPerInd) {
-				int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
-				quadraticMonomInds[ind1][ind2] = i;
-				quadraticMonomInds[ind2][ind1] = i;
-			}
-		}
-
-		// Add second order cone for x^2+y^2=1/d
-		std::vector<std::tuple<double,int,int>> qCones;
-		for (int i=0; i<conZero.size(); i++) {
-
-			// First make sure we have a constant and 3 terms total
-			if (conZero[i][""] < 0 && conZero[i].size() == 3) {
-
-				// Get vars and monoms from this
-				auto varsInThisPoly = conZero[i].getVariables();
-				auto monomsInThisPoly = conZero[i].getMonomials();
-
-				// Check to make sure all vars are squares
-				bool allSquares = true;
-				for (int j=0; j<monomsInThisPoly.size(); j++) {
-					if (monomsInThisPoly[j].size() >= 2*digitsPerInd) {
-						if (monomsInThisPoly[j].substr(0,digitsPerInd) != monomsInThisPoly[j].substr(digitsPerInd,digitsPerInd)) {
-							allSquares = false;
-						}
-					}
-				}
-
-				// If all valid, add to the quadratic cones list
-				if (allSquares) {
-					qCones.push_back({-conZero[i][""], varsInThisPoly[0], varsInThisPoly[1]});
-				}
-
-			}
-		}
-
-		// Start with the most general area 
-		double maxArea = 1;
-		std::vector<std::vector<std::pair<double,double>>> toProcess;
-		std::vector<std::pair<double,double>> varMinMax(qCones.size());
-		for (int i=0; i<qCones.size(); i++) {
-			varMinMax[i].first = 0;
-			varMinMax[i].second = 360;
-			maxArea *= M_PI*bound*bound;
-		}
-		toProcess.push_back(varMinMax);
-
-		// Set some vars
-		int oneIndex = 0;
-		int varsTotal = monoms.size();
-
-		// Convert the linear equality constraints to MOSEK form
-		std::vector<int> ARows;
-		std::vector<int> ACols;
-		std::vector<polyType> AVals;
-		for (int i=0; i<conZeroLinear.size(); i++) {
-			for (auto const &pair: conZeroLinear[i].coeffs) {
-				ARows.push_back(i);
-				if (pair.first == "") {
-					ACols.push_back(oneIndex);
-				} else {
-					ACols.push_back(std::stoi(pair.first));
-				}
-				AVals.push_back(pair.second);
-			}
-		}
-		auto AM = mosek::fusion::Matrix::sparse(conZeroLinear.size(), varsTotal, monty::new_array_ptr<int>(ARows), monty::new_array_ptr<int>(ACols), monty::new_array_ptr<polyType>(AVals));
-
-		// Convert the linear positivity constraints to MOSEK form
-		std::vector<int> BRows;
-		std::vector<int> BCols;
-		std::vector<polyType> BVals;
-		for (int i=0; i<conPositiveLinear.size(); i++) {
-			for (auto const &pair: conPositiveLinear[i].coeffs) {
-				BRows.push_back(i);
-				if (pair.first == "") {
-					BCols.push_back(oneIndex);
-				} else {
-					BCols.push_back(std::stoi(pair.first));
-				}
-				BVals.push_back(pair.second);
-			}
-		}
-		auto BM = mosek::fusion::Matrix::sparse(conPositiveLinear.size(), varsTotal, monty::new_array_ptr<int>(BRows), monty::new_array_ptr<int>(BCols), monty::new_array_ptr<polyType>(BVals));
-		
-		// Create a model
-		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
-
-		// Create the variable
-		mosek::fusion::Variable::t xM = M->variable(varsTotal);
-
-		// Use an extra variable to minimize violation of SD
-		mosek::fusion::Variable::t lambda = M->variable();
-
-		// Parameterized linear positivity constraints 
-		int numParamCons = 0;
-		std::vector<long> sparsity;
-		for (int i=0; i<qCones.size(); i++) {
-
-			// The var indices
-			int var1Ind = std::get<1>(qCones[i]);
-			int var2Ind = std::get<2>(qCones[i]);
-
-			// Bound the first square
-			sparsity.push_back(numParamCons*varsTotal + oneIndex);
-			sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var1Ind]);
-			sparsity.push_back(numParamCons*varsTotal + quadraticMonomInds[var1Ind][var1Ind]);
-			numParamCons++;
-
-			// Bound the second score
-			sparsity.push_back(numParamCons*varsTotal + oneIndex);
-			sparsity.push_back(numParamCons*varsTotal + firstMonomInds[var2Ind]);
-			sparsity.push_back(numParamCons*varsTotal + quadraticMonomInds[var2Ind][var2Ind]);
-			numParamCons++;
-
-		}
-		std::sort(sparsity.begin(), sparsity.end());
-		mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
-		M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::greaterThan(0));
-
-		// The first element of the vector should be one
-		M->constraint(xM->index(oneIndex), mosek::fusion::Domain::equalsTo(1.0));
-
-		// Linear equality constraints
-		M->constraint(mosek::fusion::Expr::mul(AM, xM), mosek::fusion::Domain::equalsTo(0.0));
-
-		// Linear positivity constraints
-		M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(0));
-
-		// Try to violate the SDP constraints the least
-		M->objective(mosek::fusion::ObjectiveSense::Minimize, lambda);
-
-		// SDP constraints
-		for (int i=0; i<shouldBePSD.size(); i++) {
-			M->constraint(mosek::fusion::Expr::add(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Expr::mul(lambda, identityAsSVec[i])), mosek::fusion::Domain::inSVecPSDCone());
-		}
-
-		// Open a file if told to record the points
-		std::ofstream logFile;
-		if (logFileName.size() > 0) {
-			logFile.open(logFileName);
-			for (int i=0; i<toProcess[0].size(); i++) {
-				logFile << i << ", ";
-			}
-			logFile << "feasibility";
-			logFile << std::endl;
-		}
-
-		// Keep splitting until all fail
-		int iter = 1;
-		auto toProcessBackup = toProcess;
-		toProcess = toProcessBackup;
-		double totalArea = 0;
-		double areaCovered = 1;
-		auto begin = std::chrono::steady_clock::now();
-		auto end = std::chrono::steady_clock::now();
-		double secondsPerIter = 0;
-		int numIllPosed = 0;
-		double toRadians = M_PI / 180.0;
-		double toDegrees = 180.0 / M_PI;
-		while (toProcess.size() > 0) {
-
-			// The area taken up by this section
-			areaCovered = 1;
-			for (int k=0; k<toProcess[0].size(); k++) {
-				areaCovered *= M_PI*bound*bound*(toProcess[0][k].second - toProcess[0][k].first) / 360.0;
-			}
-
-			// The new parameterized constraint vector and objective
-			std::vector<std::vector<double>> newD(numParamCons, std::vector<double>(varsTotal, 0));
-
-			if (verbosity >= 2) {
-				std::cout << "    region to check: " << toProcess[0] << std::endl;
-			}
-
-			// Update the linear constraints on the quadratics
-			int nextInd = 0;
-			for (int i=0; i<qCones.size(); i++) {
-
-				// Get the min and max bounds from this angular cut
-				int var1Ind = std::get<1>(qCones[i]);
-				double var1FromMinAngle = bound*std::cos((toProcess[0][i].first)*toRadians);
-				double var1FromMaxAngle = bound*std::cos((toProcess[0][i].second)*toRadians);
-				double var1Min = std::min(var1FromMinAngle, var1FromMaxAngle); 
-				double var1Max = std::max(var1FromMinAngle, var1FromMaxAngle); 
-				int num360s = int(toProcess[0][i].first / 360.0);
-				for (int j=num360s-4; j<num360s+4; j++) {
-					if (toProcess[0][i].first <= 360*j && toProcess[0][i].second >= 360*j) {
-						var1Max = bound;
-					}
-					if (toProcess[0][i].first <= 180+360*j && toProcess[0][i].second >= 180+360*j) {
-						var1Min = -bound;
-					}
-				}
-
-				// Bound the square of this var
-				std::vector<double> coeffs1 = getLineFromPoints({var1Min, var1Min*var1Min}, {var1Max, var1Max*var1Max});
-				newD[nextInd][oneIndex] = coeffs1[0];
-				newD[nextInd][firstMonomInds[var1Ind]] = coeffs1[1];
-				newD[nextInd][quadraticMonomInds[var1Ind][var1Ind]] = coeffs1[2];
-				nextInd++;
-
-				// Get the min and max bounds from this angular cut
-				int var2Ind = std::get<2>(qCones[i]);
-				double var2FromMinAngle = bound*std::sin((toProcess[0][i].first)*toRadians);
-				double var2FromMaxAngle = bound*std::sin((toProcess[0][i].second)*toRadians);
-				double var2Min = std::min(var2FromMinAngle, var2FromMaxAngle); 
-				double var2Max = std::max(var2FromMinAngle, var2FromMaxAngle); 
-				for (int j=num360s-4; j<num360s+4; j++) {
-					if (toProcess[0][i].first <= 270+360*j && toProcess[0][i].second >= 270+360*j) {
-						var2Min = -bound;
-					}
-					if (toProcess[0][i].first <= 90+360*j && toProcess[0][i].second >= 90+360*j) {
-						var2Max = bound;
-					}
-				}
-
-				// Bound the square of this var
-				std::vector<double> coeffs2 = getLineFromPoints({var2Min, var2Min*var2Min}, {var2Max, var2Max*var2Max});
-				newD[nextInd][oneIndex] = coeffs2[0];
-				newD[nextInd][firstMonomInds[var2Ind]] = coeffs2[1];
-				newD[nextInd][quadraticMonomInds[var2Ind][var2Ind]] = coeffs2[2];
-				nextInd++;
-
-				// Debugging output
-				if (verbosity >= 2) {
-					std::cout << "    for vars " << var1Ind << " and " << var2Ind << std::endl;
-					std::cout << "        bounds for var " << var1Ind << ": " << var1Min << " -> " << var1Max << std::endl;
-					std::cout << "        square bounding eqn: " << coeffs1[0] << " + " << coeffs1[1] << "*x + " << coeffs1[2] << "*y > 0 (y = x^2)" << std::endl;
-					std::cout << "        bounds for var " << var2Ind << ": " << var2Min << " -> " << var2Max << std::endl;
-					std::cout << "        square bounding eqn: " << coeffs2[0] << " + " << coeffs2[1] << "*x + " << coeffs2[2] << "*y > 0 (y = x^2)" << std::endl;
-				}
-
-			}
-
-			// Solve the problem
-			DM->setValue(monty::new_array_ptr<double>(newD));
-			M->solve();
-			auto statProb = M->getProblemStatus();
-			auto statSol = M->getPrimalSolutionStatus();
-
-			// If infeasible, good
-			if (statProb == mosek::fusion::ProblemStatus::PrimalInfeasible || statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown || M->dualObjValue() > 1e-7) {
-
-				// Keep track of how many were ill-posed
-				if (statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown) {
-					numIllPosed++;
-				}
-
-				// Write to a file if told to
-				if (logFileName.size() > 0 && statSol != mosek::fusion::SolutionStatus::Undefined && statSol != mosek::fusion::SolutionStatus::Unknown && statProb != mosek::fusion::ProblemStatus::PrimalInfeasible) {
-					auto sol = *(xM->level());
-					std::vector<polyType> solVec(xM->getSize());
-					for (int i=0; i<solVec.size(); i++) {
-						solVec[i] = sol[i];
-					}
-					for (int i=0; i<toProcess[0].size(); i++) {
-						logFile << solVec[firstMonomInds[i]] << ", ";
-					}
-					logFile << "no";
-					logFile << std::endl;
-				}
-
-				// Update the total area count
-				totalArea += areaCovered;
-
-			// Otherwise, extract the result and figure out where to split
-			} else {
-
-				// Get the solution values
-				auto sol = *(xM->level());
-				polyType objPrimal = M->primalObjValue();
-				polyType objDual = M->dualObjValue();
-
-				// Output the relevant moments
-				std::vector<polyType> solVec(xM->getSize());
-				for (int i=0; i<solVec.size(); i++) {
-					solVec[i] = sol[i];
-				}
-
-				// See which variable has the worst error
-				std::vector<double> errorsPerVar(maxVariables);
-				std::vector<double> errors(qCones.size());
-				for (int i=0; i<qCones.size(); i++) {
-					int ind1 = std::get<1>(qCones[i]);
-					int ind2 = std::get<2>(qCones[i]);
-					for (int j=0; j<maxVariables; j++) {
-						errors[i] += std::pow(solVec[quadraticMonomInds[ind1][j]] - solVec[firstMonomInds[j]]*solVec[firstMonomInds[ind1]], 2);
-						errorsPerVar[ind1] += std::pow(solVec[quadraticMonomInds[ind1][j]] - solVec[firstMonomInds[j]]*solVec[firstMonomInds[ind1]], 2);
-						errors[i] += std::pow(solVec[quadraticMonomInds[ind2][j]] - solVec[firstMonomInds[j]]*solVec[firstMonomInds[ind2]], 2);
-						errorsPerVar[ind2] += std::pow(solVec[quadraticMonomInds[ind2][j]] - solVec[firstMonomInds[j]]*solVec[firstMonomInds[ind2]], 2);
-					}
-				}
-
-				// Find the biggest error
-				double biggestError = -10000;
-				int bestSection = -1;
-				for (int i=0; i<errors.size(); i++) {
-					if (errors[i] > biggestError) {
-						biggestError = errors[i];
-						bestSection = i;
-					}
-				}
-
-				// If we've converged
-				if (biggestError < 1e-6) {
-
-					// If logging, write to file and continue
-					if (logFileName.size() > 0) {
-						for (int i=0; i<toProcess[0].size(); i++) {
-							logFile << solVec[firstMonomInds[i]] << ", ";
-						}
-						logFile << "yes";
-						logFile << std::endl;
-
-					// Otheriwse write to std::out and stop
-					} else {
-						std::cout << std::endl;
-						std::cout << "converged in " << iter << " iters to region " << toProcess[0] << std::endl;
-						break;
-					}
-
-				// If there's still space to split
-				} else {
-
-					// Get info about this feasible point
-					int ind1 = std::get<1>(qCones[bestSection]);
-					int ind2 = std::get<2>(qCones[bestSection]);
-					double minPoint = toProcess[0][bestSection].first;
-					double maxPoint = toProcess[0][bestSection].second;
-					std::pair<double,double> mostFeasiblePoint = {solVec[firstMonomInds[ind1]], solVec[firstMonomInds[ind2]]};
-					double theta = toDegrees*std::atan2(mostFeasiblePoint.second, mostFeasiblePoint.first);
-					double r = std::sqrt(std::pow(mostFeasiblePoint.second, 2) + std::pow(mostFeasiblePoint.first, 2));
-					if (verbosity >= 2) {
-						std::cout << "    most feasible point: " << mostFeasiblePoint << std::endl;
-						std::cout << "    section : " << bestSection << std::endl;
-						std::cout << "    theta, r: " << theta << ", " << r << std::endl;
-					}
-
-					// Start with copies of this region
-					std::vector<std::vector<std::pair<double,double>>> copies(2, toProcess[0]);
-
-					// Split the sections
-					double splitPoint = (maxPoint + minPoint) / 2.0;
-					copies[0][bestSection].second = splitPoint;
-					copies[1][bestSection].first = splitPoint;
-
-					// Add the new paths to the queue
-					for (int j=0; j<copies.size(); j++) {
-						toProcess.insert(toProcess.begin()+1, copies[j]);
-					}
-					if (verbosity >= 2) {
-						for (int j=0; j<copies.size(); j++) {
-							std::cout << "    split: " << copies[j][bestSection].first << " to " << copies[j][bestSection].second << std::endl;
-						}
-					}
-
-				}
-
-			}
-
-			// Time estimation
-			end = std::chrono::steady_clock::now();
-			secondsPerIter = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / ((iter+1) * 1.0e6);
-			double areaPerIter = totalArea / (iter+1);
-			double itersRemaining = (maxArea - totalArea) / areaPerIter;
-			double secondsRemaining = itersRemaining * secondsPerIter;
-
-			// Per-iteration output
-			std::cout << std::defaultfloat;
-			if (verbosity >= 2) {
-				std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << 100.0 * areaCovered / maxArea << "%\n" << std::flush;
-			} else if (verbosity >= 1) {
-				std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << 100.0 * areaCovered / maxArea << "%                  \r" << std::flush;
-			}
-
-			// Remove the one we just processed
-			toProcess.erase(toProcess.begin());
-
-			// Keep track of the iteration number
-			iter++;
-			if (maxIters >= 0 && iter > maxIters) {
-				break;
-			}	
-
-		}
-		if (verbosity >= 1) {
-			std::cout << std::endl;
-			std::cout << representTime((iter+1) * secondsPerIter) << std::endl;
-		}
-
-		return iter;
-
-		// Benchmarks (radial)
-		// d2n4 43 iters 100ms
-		// d3n5 15000 iters 2m
-
-	}
+	
 };
 
 #endif

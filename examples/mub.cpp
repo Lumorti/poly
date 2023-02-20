@@ -10,6 +10,7 @@ int main(int argc, char ** argv) {
 	std::string task = "infeasible";
 	bool useFull = false;
 	bool useQuadratic = true;
+	bool usePSD = false;
 	bool removeLinear = true;
 	int maxIters = -1;
 	int verbosity = 1;
@@ -25,6 +26,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -i [int]    set max iterations (-1 for no limit)" << std::endl;
 			std::cout << " -t [dbl]    set the test parameter" << std::endl;
 			std::cout << " -v [int]    set the verbosity level (0,1,2)" << std::endl;
+			std::cout << " -p          use PSD equations" << std::endl;
 			std::cout << " -2          use quadratic equations" << std::endl;
 			std::cout << " -4          use quartic equations" << std::endl;
 			std::cout << " -w          use whole bases, not partial" << std::endl;
@@ -53,6 +55,8 @@ int main(int argc, char ** argv) {
 		} else if (arg == "-o" && i+1 < argc) {
 			fileName = argv[i+1];
 			i++;
+		} else if (arg == "-p") {
+			usePSD = true;
 		} else if (arg == "-4") {
 			useQuadratic = false;
 		} else if (arg == "-2") {
@@ -141,6 +145,23 @@ int main(int argc, char ** argv) {
 			}
 			std::cout << std::endl << std::endl;
 		}
+
+		// The PSD matrices TODO
+		// a = 1 / sqrt(3)
+		// x = the real comps
+		// y = the imag comps
+		// xi^2 + yi^2 = 1 / 3
+		// z1 = a*(1+x0+x1)
+		// z2 = a*(1+x2+x3)
+		// z3 = a*(1+x4+x5)
+		// 1  0  0  a  a  a  a  0  0  0  0  0  0  0
+		//    1  0  a x0 x2 x4  0  0  0  0 y0 y2 y4
+		//       1  a x1 x3 x5  0  0  0  0 y1 y3 y5
+		//          1 z1 z2 z3  0  0  0  0 z4 z5 z6
+		//             1 x6 x7  0  0  0  0  0 y6 y7
+		//                1 x8  0  0  0  0  0  0 y8
+		//                   1  0  0  0  0  0  0  0
+		std::vector<std::vector<Polynomial<double>>> eqnPSD;
 
 		// The list of equations to fill
 		std::vector<Polynomial<double>> eqns;
@@ -328,7 +349,7 @@ int main(int argc, char ** argv) {
 			syms.push_back(newSym);
 		}
 
-		// Convert these symmetries into constraints with break them TODO
+		// Convert these symmetries into constraints with break them
 		std::vector<Polynomial<double>> orderingCons;
 		for (int i=0; i<syms.size(); i++) {
 			Polynomial<double> newCon(numVars);
@@ -341,8 +362,14 @@ int main(int argc, char ** argv) {
 			orderingCons.push_back(newCon);
 		}
 
+		// TODO
+		if (usePSD) {
+			eqns = {};
+			orderingCons = {};
+		}
+
 		// Combine these equations into a single object
-		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, orderingCons);
+		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, orderingCons, eqnPSD);
 
 		// Remove variables using linear equalities if possible
 		if (removeLinear) {
@@ -507,12 +534,7 @@ int main(int argc, char ** argv) {
 			}
 
 			// Try to prove infeasiblity
-			std::vector<double> params = {1};
-			if (d == 3) {
-				params[0] = 43;
-			}
 			prob.proveInfeasible(maxIters, level, 1.0/std::sqrt(d), fileName, verbosity);
-			//prob.proveInfeasibleRadial(maxIters, level, 1.0/std::sqrt(d), fileName, params, verbosity);
 			
 		}
 
