@@ -146,22 +146,71 @@ int main(int argc, char ** argv) {
 			std::cout << std::endl << std::endl;
 		}
 
-		// The PSD matrices TODO
-		// a = 1 / sqrt(3)
-		// x = the real comps
-		// y = the imag comps
-		// xi^2 + yi^2 = 1 / 3
-		// z1 = a*(1+x0+x1)
-		// z2 = a*(1+x2+x3)
-		// z3 = a*(1+x4+x5)
-		// 1  0  0  a  a  a  a  0  0  0  0  0  0  0
-		//    1  0  a x0 x2 x4  0  0  0  0 y0 y2 y4
-		//       1  a x1 x3 x5  0  0  0  0 y1 y3 y5
-		//          1 z1 z2 z3  0  0  0  0 z4 z5 z6
-		//             1 x6 x7  0  0  0  0  0 y6 y7
-		//                1 x8  0  0  0  0  0  0 y8
-		//                   1  0  0  0  0  0  0  0
+		// Create the blank PSD matrix, which is as wide as there are vectors (x2 for imag)
+		int psdMatWidth = 0;
+		for (int i=0; i<n; i++) {
+			psdMatWidth += dLimits[i2][i];
+		}
+		int imagDelta = psdMatWidth;
+		psdMatWidth *= 2;
+		int nextVar = 0;
 		std::vector<std::vector<Polynomial<double>>> eqnPSD;
+
+		// Fill this matrix
+		if (usePSD) {
+			eqnPSD = std::vector<std::vector<Polynomial<double>>>(psdMatWidth, std::vector<Polynomial<double>>(psdMatWidth, Polynomial<double>(numVars)));
+			int ind1 = 0;
+			for (int i=0; i<n; i++) {
+				for (int k=0; k<dLimits[i2][i]; k++) {
+					int ind2 = 0;
+					for (int j=0; j<n; j++) {
+						for (int l=0; l<dLimits[i2][j]; l++) {
+
+							// For the diagonals we always have 1
+							if (i == j && k == l) {
+								eqnPSD[ind1][ind2] = Polynomial<double>(numVars, 1);
+								eqnPSD[ind1+imagDelta][ind2+imagDelta] = Polynomial<double>(numVars, 1);
+
+							// Can assume the element of any basis is 1/sqrt(d)
+							} else if ((i == 0 && k == 0 && j != 0) || (j == 0 && l == 0 && i != 0)) {
+								eqnPSD[ind1][ind2] = Polynomial<double>(numVars, 1/std::sqrt(d));
+								eqnPSD[ind2][ind1] = Polynomial<double>(numVars, 1/std::sqrt(d));
+								eqnPSD[ind1+imagDelta][ind2+imagDelta] = Polynomial<double>(numVars, 1/std::sqrt(d));
+								eqnPSD[ind2+imagDelta][ind1+imagDelta] = Polynomial<double>(numVars, 1/std::sqrt(d));
+
+							// Can assume the first vector of the first basis is uniform
+							} else if ((i == 1 && k == 0 && j == 0) || (j == 1 && l == 0 && i == 0)) {
+								eqnPSD[ind1][ind2] = Polynomial<double>(numVars, 1/std::sqrt(d));
+								eqnPSD[ind2][ind1] = Polynomial<double>(numVars, 1/std::sqrt(d));
+								eqnPSD[ind1+imagDelta][ind2+imagDelta] = Polynomial<double>(numVars, 1/std::sqrt(d));
+								eqnPSD[ind2+imagDelta][ind1+imagDelta] = Polynomial<double>(numVars, 1/std::sqrt(d));
+
+							// For everything else, add a new var
+							} else if (i != j && j >= i && k >= l) {
+								eqnPSD[ind1][ind2] = Polynomial<double>(numVars, 1, {nextVar});
+								eqnPSD[ind1+imagDelta][ind2+imagDelta] = Polynomial<double>(numVars, 1, {nextVar});
+								eqnPSD[ind2][ind1] = Polynomial<double>(numVars, 1, {nextVar});
+								eqnPSD[ind2+imagDelta][ind1+imagDelta] = Polynomial<double>(numVars, 1, {nextVar});
+								eqnPSD[ind1][ind2+imagDelta] = Polynomial<double>(numVars, 1, {nextVar+1});
+								eqnPSD[ind1+imagDelta][ind2] = Polynomial<double>(numVars, -1, {nextVar+1});
+								eqnPSD[ind2][ind1+imagDelta] = Polynomial<double>(numVars, -1, {nextVar+1});
+								eqnPSD[ind2+imagDelta][ind1] = Polynomial<double>(numVars, 1, {nextVar+1});
+								nextVar += 2;
+
+							}
+
+							// Update the y index
+							ind2++;
+
+						}
+					}
+
+					// Update the x index
+					ind1++;
+
+				}
+			}
+		}
 
 		// The list of equations to fill
 		std::vector<Polynomial<double>> eqns;
@@ -362,10 +411,17 @@ int main(int argc, char ** argv) {
 			orderingCons.push_back(newCon);
 		}
 
-		// TODO
+		// Add the circular cons for the PSD system
 		if (usePSD) {
 			eqns = {};
 			orderingCons = {};
+			for (int i=0; i<nextVar; i+=2) {
+				Polynomial<double> newCon(numVars);
+				newCon.addTerm(1, {i,i});
+				newCon.addTerm(1, {i+1,i+1});
+				newCon.addTerm(-1.0/d);
+				eqns.push_back(newCon);
+			}
 		}
 
 		// Combine these equations into a single object
@@ -375,7 +431,7 @@ int main(int argc, char ** argv) {
 		if (removeLinear) {
 			prob = prob.removeLinear();
 		}
-		
+
 		// Try to simplify the equations a bit
 		for (int i=0; i<prob.conZero.size(); i++) {
 
@@ -424,13 +480,13 @@ int main(int argc, char ** argv) {
 
 		// Use as few indices as possible
 		std::unordered_map<int,int> reducedMap = prob.getMinimalMap();
-		prob = prob.replaceWithVariable(reducedMap);
 		std::cout << "---------------------" << std::endl;
 		std::cout << "Index Mapping: " << std::endl;
 		std::cout << "---------------------" << std::endl;
 		std::cout << std::endl;
 		std::cout << reducedMap << std::endl;
 		std::cout << std::endl;
+		prob = prob.replaceWithVariable(reducedMap);
 		std::cout << "---------------------" << std::endl;
 		std::cout << "Final Problem: " << std::endl;
 		std::cout << "---------------------" << std::endl;
@@ -510,8 +566,8 @@ int main(int argc, char ** argv) {
 		} else if (task == "infeasible") {
 
 			// If we're using a higher level mat, add higher-order cons
+			int ogCons = prob.conZero.size();
 			if (level.find("2") != std::string::npos) {
-				int ogCons = prob.conZero.size();
 				for (int i=0; i<ogCons; i++) {
 					prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]);
 				}
@@ -519,7 +575,6 @@ int main(int argc, char ** argv) {
 
 			// If we're using a higher level mat, add higher-order cons
 			if (level.find("3") != std::string::npos) {
-				int ogCons = prob.conZero.size();
 				for (int i=0; i<ogCons; i++) {
 					prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
 				}
@@ -527,11 +582,30 @@ int main(int argc, char ** argv) {
 
 			// If we're using a higher level mat, add higher-order cons
 			if (level.find("4") != std::string::npos) {
-				int ogCons = prob.conZero.size();
 				for (int i=0; i<ogCons; i++) {
 					prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
 				}
 			}
+
+			// TODO
+			//for (int i=0; i<ogCons; i++) {
+				//int var1 = 2*i;
+				//int var2 = 2*i+1;
+				//prob.conZero.push_back(prob.conZero[i]*Polynomial<double>(prob.maxVariables, 1, {var1}));
+				//prob.conZero.push_back(prob.conZero[i]*Polynomial<double>(prob.maxVariables, 1, {var2}));
+				//prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]);
+				//prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*Polynomial<double>(prob.maxVariables, 1, {var1}));
+				//prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*Polynomial<double>(prob.maxVariables, 1, {var2}));
+				//prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
+				//prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
+				//prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
+			//}
+
+			//std::cout << std::endl;
+			//std::cout << std::endl;
+			//std::cout << prob << std::endl;
+			//std::cout << std::endl;
+			//std::cout << std::endl;
 
 			// Try to prove infeasiblity
 			prob.proveInfeasible(maxIters, level, 1.0/std::sqrt(d), fileName, verbosity);

@@ -623,7 +623,6 @@ public:
 
 		// For each term
 		for (auto const &pair: coeffs) {
-
 			std::string newInd = "";
 			polyType coeff = pair.second;
 
@@ -4008,27 +4007,25 @@ public:
 			convertedList[i] = polyType(valsToReplace[i]);
 		}
 
-		// Start with a blank poly system
-		PolynomialProblem newPolyProblem();
-
 		// Copy each equation, substituting
-		newPolyProblem.obj = obj.replaceWithValue(indsToReplace, convertedList);
+		Polynomial<polyType> newObj = obj.replaceWithValue(indsToReplace, convertedList);
+		std::vector<Polynomial<polyType>> newConsZero;
 		for (int i=0; i<conZero.size(); i++) {
-			newPolyProblem.conZero.push_back(conZero[i].replaceWithValue(indsToReplace, convertedList));
+			newConsZero.push_back(conZero[i].replaceWithValue(indsToReplace, convertedList));
 		}
+		std::vector<Polynomial<polyType>> newConsPositive;
 		for (int i=0; i<conPositive.size(); i++) {
-			newPolyProblem.conPositive.push_back(conPositive[i].replaceWithValue(indsToReplace, convertedList));
+			newConsPositive.push_back(conPositive[i].replaceWithValue(indsToReplace, convertedList));
 		}
+		std::vector<std::vector<Polynomial<polyType>>> newConsPSD;
 		for (int i=0; i<conPSD.size(); i++) {
-			newPolyProblem.conPSD.push_back({});
-			for (int j=0; j<conPSD[i].size(); i++) {
-				newPolyProblem.conPSD[i].push_back(conPSD[i][j].replaceWithValue(indsToReplace, convertedList));
+			newConsPSD.push_back({});
+			for (int j=0; j<conPSD[i].size(); j++) {
+				newConsPSD[i].push_back(conPSD[i][j].replaceWithValue(indsToReplace, convertedList));
 			}
 		}
-		newPolyProblem.maxVariables = newPolyProblem.obj.maxVariables;
-		newPolyProblem.digitsPerInd = newPolyProblem.obj.digitsPerInd;
 
-		return newPolyProblem;
+		return PolynomialProblem<polyType>(newObj, newConsZero, newConsPositive, newConsPSD);
 
 	}
 
@@ -4053,7 +4050,7 @@ public:
 					output << std::endl << other.conPositive[i] << " > 0 " << std::endl;
 				}
 				if (other.conPSD.size() > 0) {
-					output << other.conPSD << " >= 0" << std::endl;
+					output << std::endl << other.conPSD << " >= 0" << std::endl;
 				}
 			}
 
@@ -4071,7 +4068,7 @@ public:
 					output << std::endl << other.conPositive[i] << " > 0 " << std::endl;
 				}
 				if (other.conPSD.size() > 0) {
-					output << other.conPSD << " >= 0" << std::endl;
+					output << std::endl << other.conPSD << " >= 0" << std::endl;
 				}
 			}
 
@@ -4096,131 +4093,6 @@ public:
 			}
 		}
 		return maxDegree;
-	}
-
-	// Solve a SDP program given an objective and zero/positive constraints
-	std::pair<polyType,std::vector<polyType>> solveSDP(Polynomial<polyType>& objLinear, std::vector<Polynomial<polyType>>& conZeroLinear, std::vector<Polynomial<polyType>> conPositiveLinear, std::vector<std::string>& monoms, std::vector<std::vector<Polynomial<polyType>>>& monomProducts) {
-
-		// Create the PSD matrices from this list
-		std::vector<std::shared_ptr<monty::ndarray<int,1>>> shouldBePSD;
-		for (int j=0; j<monomProducts.size(); j++) {
-
-			// Get the list of all monomial locations for the PSD matrix
-			std::vector<int> monLocs;
-			for (int i=0; i<monomProducts[j].size(); i++) {
-				for (int k=0; k<monomProducts[j].size(); k++) {
-
-					// Calculate the product
-					std::string monString = (monomProducts[j][i]*monomProducts[j][k]).getMonomials()[0];
-
-					// Find this in the monomial list
-					auto loc = std::find(monoms.begin(), monoms.end(), monString);
-					if (loc != monoms.end()) {
-						monLocs.push_back(loc - monoms.begin());
-					} else {
-						monLocs.push_back(monoms.size());
-						monoms.push_back(monString);
-					}
-
-				}
-			}
-
-			// This (when reformatted) should be positive-semidefinite
-			shouldBePSD.push_back(monty::new_array_ptr<int>(monLocs));
-
-		}
-
-		// Set some vars
-		int oneIndex = 0;
-		int varsTotal = monoms.size();
-
-		// Convert the objective to MOSEK form
-		std::vector<polyType> c(varsTotal);
-		for (auto const &pair: objLinear.coeffs) {
-			int ind = oneIndex;
-			if (pair.first != "") {
-				ind = std::stoi(pair.first);
-			}
-			c[ind] = pair.second;
-		}
-		auto cM = monty::new_array_ptr<polyType>(c);
-
-		// Convert the linear equality constraints to MOSEK form
-		std::vector<int> ARows;
-		std::vector<int> ACols;
-		std::vector<polyType> AVals;
-		for (int i=0; i<conZeroLinear.size(); i++) {
-			for (auto const &pair: conZeroLinear[i].coeffs) {
-				ARows.push_back(i);
-				if (pair.first == "") {
-					ACols.push_back(oneIndex);
-				} else {
-					ACols.push_back(std::stoi(pair.first));
-				}
-				AVals.push_back(pair.second);
-			}
-		}
-		auto AM = mosek::fusion::Matrix::sparse(conZeroLinear.size(), varsTotal, monty::new_array_ptr<int>(ARows), monty::new_array_ptr<int>(ACols), monty::new_array_ptr<polyType>(AVals));
-
-		// Convert the linear positivity constraints to MOSEK form
-		std::vector<int> BRows;
-		std::vector<int> BCols;
-		std::vector<polyType> BVals;
-		for (int i=0; i<conPositiveLinear.size(); i++) {
-			for (auto const &pair: conPositiveLinear[i].coeffs) {
-				BRows.push_back(i);
-				if (pair.first == "") {
-					BCols.push_back(oneIndex);
-				} else {
-					BCols.push_back(std::stoi(pair.first));
-				}
-				BVals.push_back(pair.second);
-			}
-		}
-		auto BM = mosek::fusion::Matrix::sparse(conPositiveLinear.size(), varsTotal, monty::new_array_ptr<int>(BRows), monty::new_array_ptr<int>(BCols), monty::new_array_ptr<polyType>(BVals));
-
-		// Create a model
-		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
-
-		// DEBUG
-		//M->setLogHandler([=](const std::string & msg){std::cout << msg << std::flush;});
-
-		// Create the variable
-		mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(-1, 1));
-
-		// The first element of the vector should be one
-		M->constraint(xM->index(oneIndex), mosek::fusion::Domain::equalsTo(1.0));
-
-		// Linear equality constraints
-		M->constraint(mosek::fusion::Expr::mul(AM, xM), mosek::fusion::Domain::equalsTo(0.0));
-
-		// Linear positivity constraints
-		M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(0));
-
-		// SDP constraints
-		for (int i=0; i<shouldBePSD.size(); i++) {
-			int matDim = std::sqrt(shouldBePSD[i]->size());
-			M->constraint(xM->pick(shouldBePSD[i])->reshape(matDim, matDim), mosek::fusion::Domain::inPSDCone(matDim));
-		}
-
-		// Objective is to minimize the sum of the original linear terms
-		M->objective(mosek::fusion::ObjectiveSense::Minimize, mosek::fusion::Expr::dot(cM, xM));
-
-		// Solve the problem
-		M->solve();
-
-		// Get the solution values
-		auto sol = *(xM->level());
-		polyType outer = M->primalObjValue();
-
-		// Output the relevent moments
-		std::vector<polyType> solVec(xM->getSize());
-		for (int i=0; i<solVec.size(); i++) {
-			solVec[i] = sol[i];
-		}
-
-		return std::pair<polyType,std::vector<polyType>>(outer, solVec);
-
 	}
 
 	// Return combinations 
@@ -4406,7 +4278,7 @@ public:
 		std::vector<std::vector<Polynomial<polyType>>> newConPSD;
 		for (int i=0; i<conPSD.size(); i++) {
 			newConPSD.push_back({});
-			for (int j=0; j<conPSD.size(); j++) {
+			for (int j=0; j<conPSD[i].size(); j++) {
 				Polynomial<polyType> newPoly = conPSD[i][j].replaceWithVariable(indMap).changeMaxVariables(newNumVars);
 				newConPSD[i].push_back(newPoly);
 			}
@@ -4623,14 +4495,39 @@ public:
 
 		// TODO
 		//toProcess = {};
-		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, -0.0104253}, {-0.57735, -0.0180467}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
-		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, -0.0104253}, {-0.0180467, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
-		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.0104253, 0.57735}, {0.100881, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
-		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.0104253, 0.57735}, {-0.57735, 0.100881}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
 		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.0}, {-0.57735, 0.0}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
 		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.0}, {0.0, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
 		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {0.0, 0.57735}, {0.0, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
 		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {0.0, 0.57735}, {-0.57735, 0.0}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+
+		//monomProducts = {};
+		//monomProducts.push_back({Polynomial<double>(maxVariables, 1), Polynomial<double>(maxVariables, 1, {0}), Polynomial<double>(maxVariables, 1, {1})});
+		//monomProducts.push_back({Polynomial<double>(maxVariables, 1), Polynomial<double>(maxVariables, 1, {2}), Polynomial<double>(maxVariables, 1, {3})});
+		//monomProducts.push_back({Polynomial<double>(maxVariables, 1), Polynomial<double>(maxVariables, 1, {4}), Polynomial<double>(maxVariables, 1, {5})});
+		//monomProducts.push_back({Polynomial<double>(maxVariables, 1), Polynomial<double>(maxVariables, 1, {6}), Polynomial<double>(maxVariables, 1, {7})});
+		//monomProducts.push_back({Polynomial<double>(maxVariables, 1), Polynomial<double>(maxVariables, 1, {8}), Polynomial<double>(maxVariables, 1, {9})});
+		//for (int i=0; i<maxVariables; i+=2) {
+			//std::vector<Polynomial<double>> newProd = {Polynomial<double>(maxVariables, 1)};
+			//newProd.push_back(Polynomial<double>(maxVariables, 1, {i}));
+			//newProd.push_back(Polynomial<double>(maxVariables, 1, {i+1}));
+			//newProd.push_back(Polynomial<double>(maxVariables, 1, {i,i}));
+			//newProd.push_back(Polynomial<double>(maxVariables, 1, {i+1,i+1}));
+			//newProd.push_back(Polynomial<double>(maxVariables, 1, {i,i,i}));
+			//newProd.push_back(Polynomial<double>(maxVariables, 1, {i+1,i+1,i+1}));
+			//newProd.push_back(Polynomial<double>(maxVariables, 1, {i,i,i,i}));
+			//newProd.push_back(Polynomial<double>(maxVariables, 1, {i+1,i+1,i+1,i+1}));
+			//newProd.push_back(Polynomial<double>(maxVariables, 1, {i,i,i,i,i}));
+			//newProd.push_back(Polynomial<double>(maxVariables, 1, {i+1,i+1,i+1,i+1,i+1}));
+			//monomProducts.push_back(newProd);
+		//}
+
+		// Verbose output
+		if (verbosity >= 2) {
+			std::cout << "extra PSD matrices: " << std::endl;
+			for (int i=0; i<monomProducts.size(); i++) {
+				std::cout << monomProducts[i] << std::endl;
+			}
+		}
 
 		// Create the PSD matrices from this list
 		std::vector<std::shared_ptr<monty::ndarray<int,1>>> shouldBePSD;
@@ -4736,7 +4633,32 @@ public:
 		auto BM = mosek::fusion::Matrix::sparse(conPositiveLinear.size(), varsTotal, monty::new_array_ptr<int>(BRows), monty::new_array_ptr<int>(BCols), monty::new_array_ptr<polyType>(BVals));
 
 		// Convert the linear PSD constraints to MOSEK form TODO
-		
+		std::vector<int> psdLocs;
+		std::vector<double> psdCoeffs;
+		for (int i=0; i<conPSDLinear.size(); i++) {
+			for (int j=i; j<conPSDLinear[i].size(); j++) {
+				if (conPSDLinear[i][j].coeffs.size() > 0) {
+					for (auto const &pair: conPSDLinear[i][j].coeffs) {
+						if (pair.first == "") {
+							psdLocs.push_back(oneIndex);
+						} else {
+							psdLocs.push_back(std::stoi(pair.first));
+						}
+						if (i == j) {
+							psdCoeffs.push_back(pair.second);
+						} else {
+							psdCoeffs.push_back(std::sqrt(2.0)*pair.second);
+						}
+					}
+				} else {
+					psdLocs.push_back(oneIndex);
+					psdCoeffs.push_back(0);
+				}
+			}
+		}
+		auto psdLocsM = monty::new_array_ptr<int>(psdLocs);
+		auto psdCoeffsM = monty::new_array_ptr<double>(psdCoeffs);
+
 		// The box constraints, given our box
 		std::vector<double> mins(monoms.size(), -1);
 		std::vector<double> maxs(monoms.size(), 1);
@@ -4766,7 +4688,6 @@ public:
 		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
 
 		// Create the variable
-		//mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(monty::new_array_ptr<double>(mins), monty::new_array_ptr<double>(maxs)));
 		mosek::fusion::Variable::t xM = M->variable(varsTotal);
 
 		// Use an extra variable to minimize violation of SD
@@ -4799,6 +4720,11 @@ public:
 		// SDP constraints
 		for (int i=0; i<shouldBePSD.size(); i++) {
 			M->constraint(mosek::fusion::Expr::add(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Expr::mul(lambda, identityAsSVec[i])), mosek::fusion::Domain::inSVecPSDCone());
+		}
+
+		// Original PSD cons TODO
+		if (conPSDLinear.size() > 0) {
+			M->constraint(mosek::fusion::Expr::mulElm(psdCoeffsM, xM->pick(psdLocsM)), mosek::fusion::Domain::inSVecPSDCone());
 		}
 
 		// Open a file if told to record the points
@@ -4979,7 +4905,6 @@ public:
 			} else if (verbosity >= 1) {
 				std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * areaPerIter / maxArea << "%/i  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << 100.0 * areaCovered / maxArea << "%                  \r" << std::flush;
 			}
-
 
 			// Remove the one we just processed
 			toProcess.erase(toProcess.begin());
