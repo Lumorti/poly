@@ -153,7 +153,6 @@ int main(int argc, char ** argv) {
 		}
 		int imagDelta = psdMatWidth;
 		psdMatWidth *= 2;
-		int nextVar = 0;
 		std::vector<std::vector<Polynomial<double>>> eqnPSD;
 
 		// Fill this matrix
@@ -185,17 +184,36 @@ int main(int argc, char ** argv) {
 								eqnPSD[ind1+imagDelta][ind2+imagDelta] = Polynomial<double>(numVars, 1/std::sqrt(d));
 								eqnPSD[ind2+imagDelta][ind1+imagDelta] = Polynomial<double>(numVars, 1/std::sqrt(d));
 
-							// For everything else, add a new var
-							} else if (i != j && j >= i && k >= l) {
+							// If it's multiplying with one of the first basis
+							} else if (i == 0 && j != i) {
+								int nextVar = j*d*d + l*d + k;
 								eqnPSD[ind1][ind2] = Polynomial<double>(numVars, 1, {nextVar});
 								eqnPSD[ind1+imagDelta][ind2+imagDelta] = Polynomial<double>(numVars, 1, {nextVar});
 								eqnPSD[ind2][ind1] = Polynomial<double>(numVars, 1, {nextVar});
 								eqnPSD[ind2+imagDelta][ind1+imagDelta] = Polynomial<double>(numVars, 1, {nextVar});
-								eqnPSD[ind1][ind2+imagDelta] = Polynomial<double>(numVars, 1, {nextVar+1});
-								eqnPSD[ind1+imagDelta][ind2] = Polynomial<double>(numVars, -1, {nextVar+1});
-								eqnPSD[ind2][ind1+imagDelta] = Polynomial<double>(numVars, -1, {nextVar+1});
-								eqnPSD[ind2+imagDelta][ind1] = Polynomial<double>(numVars, 1, {nextVar+1});
-								nextVar += 2;
+								eqnPSD[ind1][ind2+imagDelta] = Polynomial<double>(numVars, 1, {nextVar+conjDelta});
+								eqnPSD[ind1+imagDelta][ind2] = Polynomial<double>(numVars, -1, {nextVar+conjDelta});
+								eqnPSD[ind2][ind1+imagDelta] = Polynomial<double>(numVars, -1, {nextVar+conjDelta});
+								eqnPSD[ind2+imagDelta][ind1] = Polynomial<double>(numVars, 1, {nextVar+conjDelta});
+
+							// If it's multiplying with another basis
+							} else if (i != 0 && j != i && j >= i) {
+								Polynomial<double> prodReal(numVars);
+								Polynomial<double> prodImag(numVars);
+								for (int m=0; m<d; m++) {
+									prodReal += eqnPSD[ind1][m]*eqnPSD[ind2][m];
+									prodReal += eqnPSD[ind1+imagDelta][m]*eqnPSD[ind2+imagDelta][m];
+									prodImag += eqnPSD[ind1][m]*eqnPSD[ind2+imagDelta][m];
+									prodImag -= eqnPSD[ind1+imagDelta][m]*eqnPSD[ind2][m];
+								}
+								eqnPSD[ind1][ind2] = prodReal;
+								eqnPSD[ind2][ind1] = prodReal;
+								eqnPSD[ind1+imagDelta][ind2+imagDelta] = prodReal;
+								eqnPSD[ind2+imagDelta][ind1+imagDelta] = prodReal;
+								eqnPSD[ind1][ind2+imagDelta] = prodImag;
+								eqnPSD[ind1+imagDelta][ind2] = -prodImag;
+								eqnPSD[ind2][ind1+imagDelta] = -prodImag;
+								eqnPSD[ind2+imagDelta][ind1] = prodImag;
 
 							}
 
@@ -415,13 +433,26 @@ int main(int argc, char ** argv) {
 		if (usePSD) {
 			eqns = {};
 			orderingCons = {};
-			for (int i=0; i<nextVar; i+=2) {
-				Polynomial<double> newCon(numVars);
-				newCon.addTerm(1, {i,i});
-				newCon.addTerm(1, {i+1,i+1});
-				newCon.addTerm(-1.0/d);
-				eqns.push_back(newCon);
+			for (int i=d*d; i<numVarsNonConj; i++) {
+				bool found = false;
+				for (int j=0; j<eqnPSD.size(); j++) {
+					for (int k=j; k<eqnPSD[j].size(); k++) {
+						if (eqnPSD[j][k].contains(i)) {
+							Polynomial<double> extraEqn(numVars);
+							extraEqn.addTerm(1, {i,i});
+							extraEqn.addTerm(1, {i+conjDelta,i+conjDelta});
+							extraEqn.addTerm(-1.0/d, {});
+							eqns.push_back(extraEqn);
+							found = true;
+							break;
+						}
+					}
+					if (found) {
+						break;
+					}
+				}
 			}
+
 		}
 
 		// Combine these equations into a single object
@@ -586,26 +617,6 @@ int main(int argc, char ** argv) {
 					prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
 				}
 			}
-
-			// TODO
-			//for (int i=0; i<ogCons; i++) {
-				//int var1 = 2*i;
-				//int var2 = 2*i+1;
-				//prob.conZero.push_back(prob.conZero[i]*Polynomial<double>(prob.maxVariables, 1, {var1}));
-				//prob.conZero.push_back(prob.conZero[i]*Polynomial<double>(prob.maxVariables, 1, {var2}));
-				//prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]);
-				//prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*Polynomial<double>(prob.maxVariables, 1, {var1}));
-				//prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*Polynomial<double>(prob.maxVariables, 1, {var2}));
-				//prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
-				//prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
-				//prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
-			//}
-
-			//std::cout << std::endl;
-			//std::cout << std::endl;
-			//std::cout << prob << std::endl;
-			//std::cout << std::endl;
-			//std::cout << std::endl;
 
 			// Try to prove infeasiblity
 			prob.proveInfeasible(maxIters, level, 1.0/std::sqrt(d), fileName, verbosity);

@@ -91,7 +91,7 @@ std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
 template <typename type> 
 std::ostream &operator<<(std::ostream &output, const std::vector<std::vector<type>> &arr) {
 
-	// Used fixed precision
+	// Use fixed precision
 	int precision = 7;
 	output << std::showpos << std::fixed << std::setprecision(precision);
 
@@ -382,35 +382,17 @@ public:
 	// Get the output width of the polynomial
 	int getOutputWidth() const {
 
-		// If poly is empty
-		if (coeffs.size() == 0) {
-			return 4;
-		}
+		// Create a copy of the output stream
+		std::ostringstream streamCopy;
+		streamCopy.copyfmt(std::cout);
+		auto startLoc = streamCopy.tellp();
 
-		// For each element in this polynomial
-		int w = 0;
-		for (auto const &pair: coeffs) {
+		// Write the poly to the new stream
+		streamCopy << *this;
 
-			// The fixed width elements "*", "{" and "}"
-			w += 3;
-
-			// The width of the coefficient
-			w += 1+std::floor(std::log10(std::abs(pair.second)));
-
-			// An extra if it's negative
-			if (pair.second < 0) {
-				w += 1;
-			}
-			
-			// The width of the variable list
-			w += pair.first.size();
-
-		}
-
-		// We have (size-1) of " + "
-		w += (coeffs.size()-1)*3;
-
-		return w;
+		// The output width is the change in length of this
+		auto length = streamCopy.tellp() - startLoc;
+		return length;
 
 	}
 
@@ -1638,291 +1620,6 @@ public:
 	}
 
 };
-
-// For manipulating matrices of polynomials
-template <class polyType>
-class PolynomialMatrix {
-public:
-
-	// Contains the list of polynomials
-	std::vector<std::vector<Polynomial<polyType>>> system;
-
-	// Matrix info
-	int columns = 1;
-	int rows = 1;
-	int maxVariables = 1;
-
-	// Default constructor
-	PolynomialMatrix(int maxVariables_=1, int rows_=1, int columns_=1) {
-		rows = rows_;
-		columns = columns_;
-		maxVariables = maxVariables_;
-		system = std::vector<std::vector<Polynomial<polyType>>>(rows, std::vector<Polynomial<polyType>>(columns, Polynomial<polyType>(maxVariables)));
-	}
-
-	// Constructor from brace-enclosed list
-	PolynomialMatrix(std::vector<polyType> vec) {
-		rows = vec.size();
-		columns = 1;
-		maxVariables = 1;
-		system = std::vector<std::vector<Polynomial<polyType>>>(rows, std::vector<Polynomial<polyType>>(columns, Polynomial<polyType>(maxVariables)));
-		for (int i=0; i<rows; i++) {
-			system[i][0].addTerm(vec[i], {});
-		}
-	}
-
-	// Constructor from an Eigen matrix
-	PolynomialMatrix(Eigen::MatrixXd other) {
-		rows = other.rows();
-		columns = other.cols();
-		maxVariables = 1;
-		system = std::vector<std::vector<Polynomial<polyType>>>(rows, std::vector<Polynomial<polyType>>(columns, Polynomial<polyType>(maxVariables)));
-		for (int i=0; i<rows; i++) {
-			for (int j=0; j<rows; j++) {
-				if (other(i,j) > 0) {
-					system[i][j].addTerm(other(i,j), {});
-				}
-			}
-		}
-	}
-
-	// Constructor from a PolynomialMatrix
-	PolynomialMatrix(const PolynomialMatrix &other) {
-		rows = other.rows;
-		columns = other.columns;
-		maxVariables = other.maxVariables;
-		system = std::vector<std::vector<Polynomial<polyType>>>(rows, std::vector<Polynomial<polyType>>(columns, Polynomial<polyType>(maxVariables)));
-		for (int i=0; i<rows; i++) {
-			for (int j=0; j<columns; j++) {
-				system[i][j] = other.system[i][j];
-			}
-		}
-	}
-
-	// Assignment from a PolynomialMatrix
-	PolynomialMatrix& operator=(const PolynomialMatrix& other) {
-		rows = other.rows;
-		columns = other.columns;
-		maxVariables = other.maxVariables;
-		system = std::vector<std::vector<Polynomial<polyType>>>(rows, std::vector<Polynomial<polyType>>(columns, Polynomial<polyType>(maxVariables)));
-		for (int i=0; i<rows; i++) {
-			for (int j=0; j<columns; j++) {
-				system[i][j] = other.system[i][j];
-			}
-		}
-		return *this;
-	}
-
-	// Overload index operator
-	std::vector<Polynomial<polyType>>& operator[](int index) {
-		return system[index];
-	}
-
-	// Get the max output width of the polynomial matrix
-	std::vector<int> getOutputWidths() const {
-
-		// For each column, figure out the output widths
-		std::vector<int> columnWidths(columns, 0);
-		for (int j=0; j<columns; j++) {
-			for (int i=0; i<rows; i++) {
-
-				// Each column should be the max width of any element
-				columnWidths[j] = std::max(columnWidths[j], system[i][j].getOutputWidth()+2);
-
-			}
-		}
-
-		return columnWidths;
-
-	}
-
-	// When doing std::cout << PolynomialMatrix
-	friend std::ostream &operator<<(std::ostream &output, const PolynomialMatrix &other) {
-
-		// Get the widths of each column
-		std::vector<int> columnWidths = other.getOutputWidths();
-
-		// For each row
-		for (int i=0; i<other.rows; i++) {
-
-			// Start the row with a symbol
-			output << "(  ";
-
-			// Output each column
-			for (int j=0; j<other.columns; j++) {
-				output << other.system[i][j];
-
-				// Add padding if needed
-				int paddingNeeded = columnWidths[j]-other.system[i][j].getOutputWidth();
-				output << std::string(paddingNeeded, ' ');
-
-			}
-
-			// Then a newline
-			output << ")" << std::endl;
-
-		}
-
-		return output;
-
-	}
-
-	// Overload the multiplication operator with another matrix
-	PolynomialMatrix operator*(const PolynomialMatrix& other) {
-
-		// (n x m) * (m x l) = (n x l)
-		PolynomialMatrix result(maxVariables, rows, other.columns);
-
-		// For each element of the new matrix
-		for (int i=0; i<result.rows; i++) {
-			for (int j=0; j<result.columns; j++) {
-
-				// For each element in the multiplication
-				for (int k=0; k<columns; k++) {
-					result[i][j] += (system[i][k]*other.system[k][j]);
-				}
-
-			}
-		}
-
-		return result;
-
-	}
-
-	// Overload the addition operator
-	PolynomialMatrix operator+(const PolynomialMatrix& other) {
-
-		// Same size as the original
-		PolynomialMatrix result(std::max(maxVariables, other.maxVariables), rows, columns);
-
-		// For each element of the new matrix
-		for (int i=0; i<rows; i++) {
-			for (int j=0; j<columns; j++) {
-
-				// Perform the operation
-				result[i][j] = system[i][j] + other.system[i][j];
-
-			}
-		}
-
-		return result;
-
-	}
-
-	// Overload the addition operator
-	PolynomialMatrix operator-(const PolynomialMatrix& other) {
-
-		// Same size as the original
-		PolynomialMatrix result(std::max(maxVariables, other.maxVariables), rows, columns);
-
-		// For each element of the new matrix
-		for (int i=0; i<rows; i++) {
-			for (int j=0; j<columns; j++) {
-
-				// Perform the operation
-				result[i][j] = system[i][j] - other.system[i][j];
-
-			}
-		}
-
-		return result;
-
-	}
-
-	// Return the identity as a PolynomialMatrix
-	static PolynomialMatrix identity(int matSize) {
-		PolynomialMatrix iden(1, matSize, matSize);
-		for (int i=0; i<matSize; i++) {
-			iden[i][i].addTerm(1, {});
-		}
-		return iden;
-	}
-
-	// Get a list of all the monomials
-	std::vector<std::string> getMonomials() {
-
-		// Use an unordered set to get the unique monomial list
-		std::unordered_set<std::string> monoms;
-		for (int i=0; i<rows; i++) {
-			for (int j=0; j<columns; j++) {
-				std::vector<std::string> tempList = system[i][j].getMonomials();
-				monoms.insert(tempList.begin(), tempList.end());
-			}
-		}
-
-		// Turn this into a vector
-		std::vector<std::string> monomList;
-		for (const std::string& mon: monoms) {
-			monomList.push_back(mon);
-		}
-
-		return monomList;
-
-	}
-
-	// Set each to a new variable
-	PolynomialMatrix replaceWithVariable(std::unordered_map<std::string,std::string> mapping) {
-		
-		// The new matrix may have more variables
-		PolynomialMatrix newMat(mapping.size(), rows, columns);
-
-		// For each element
-		for (int i=0; i<rows; i++) {
-			for (int j=0; j<columns; j++) {
-
-				// Apply the mapping
-				newMat[i][j] = system[i][j].replaceWithVariable(mapping);
-
-			}
-		}
-
-		return newMat;
-
-	}
-
-};
-
-// Overload the multiplication operator with a polynomial
-template <class polyType>
-PolynomialMatrix<polyType> operator*(const PolynomialMatrix<polyType>& mat, const Polynomial<polyType>& poly) {
-
-	// Matrix doesn't change shape
-	PolynomialMatrix<polyType> result(mat.maxVariables, mat.rows, mat.columns);
-
-	// Needed because otherwise const Poly * const Poly apparently isn't valid
-	Polynomial<polyType> polyCopy = poly;
-
-	// For each element
-	for (int i=0; i<mat.rows; i++) {
-		for (int j=0; j<mat.columns; j++) {
-			result[i][j] = mat[i][j] * polyCopy;
-		}
-	}
-
-	return result;
-
-}
-
-// Overload the multiplication operator with a polynomial
-template <class polyType>
-PolynomialMatrix<polyType> operator*(const Polynomial<polyType>& poly, const PolynomialMatrix<polyType>& mat) {
-
-	// Matrix doesn't change shape
-	PolynomialMatrix<polyType> result(mat.maxVariables, mat.rows, mat.columns);
-
-	// Needed because otherwise const Poly * const Poly apparently isn't valid
-	Polynomial<polyType> polyCopy = poly;
-
-	// For each element
-	for (int i=0; i<mat.rows; i++) {
-		for (int j=0; j<mat.columns; j++) {
-			result[i][j] = polyCopy*mat.system[i][j];
-		}
-	}
-
-	return result;
-
-}
 
 // Switch the order
 template <typename polyType, typename otherType>
@@ -4342,6 +4039,32 @@ public:
 		return {a, b, c};
 	}
 
+	// Get the eigenvalues of the PSD equation (assuming that everything is constant)
+	std::vector<std::complex<double>> eigenvalues() {
+
+		// Just in case
+		if (conPSD.size() == 0) {
+			return {};
+		}
+
+		// Convert to an Eigen array
+		Eigen::MatrixXd A = Eigen::MatrixXd::Zero(conPSD.size(), conPSD[0].size());
+		for (int i=0; i<conPSD.size(); i++) {
+			for (int j=0; j<conPSD[i].size(); j++) {
+				A(i,j) = conPSD[i][j][""];
+			}
+		}
+
+		// Get the eigenvalues
+		Eigen::VectorXcd vals = A.eigenvalues();
+		std::vector<std::complex<double>> eigenvals(vals.size());
+		for (int i=0; i<vals.size(); i++) {
+			eigenvals[i] = vals[i];
+		}
+		return eigenvals;
+
+	}
+
 	// Attempt to find a series of constraints that show this is infeasible
 	void proveInfeasible(int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="", int verbosity=1) {
 
@@ -4632,56 +4355,50 @@ public:
 		}
 		auto BM = mosek::fusion::Matrix::sparse(conPositiveLinear.size(), varsTotal, monty::new_array_ptr<int>(BRows), monty::new_array_ptr<int>(BCols), monty::new_array_ptr<polyType>(BVals));
 
-		// Convert the linear PSD constraints to MOSEK form TODO
-		std::vector<int> psdLocs;
-		std::vector<double> psdCoeffs;
+		// Determine the largest amount of terms per element of the PSD matrix
+		int numMatsToSum = 1;
 		for (int i=0; i<conPSDLinear.size(); i++) {
 			for (int j=i; j<conPSDLinear[i].size(); j++) {
+				numMatsToSum = std::max(numMatsToSum, int(conPSDLinear[i][j].coeffs.size()));
+			}
+		}
+
+		// Convert the linear PSD constraints to MOSEK form TODO
+		int upperTriangSize = (conPSDLinear.size()*(conPSDLinear.size()+1)) / 2;
+		std::vector<std::vector<int>> psdLocs(numMatsToSum, std::vector<int>(upperTriangSize, oneIndex));
+		std::vector<std::vector<double>> psdCoeffs(numMatsToSum, std::vector<double>(upperTriangSize, 0.0));
+		int whichEl = 0;
+		for (int i=0; i<conPSDLinear.size(); i++) {
+			for (int j=i; j<conPSDLinear[i].size(); j++) {
+				int whichMat = 0;
 				if (conPSDLinear[i][j].coeffs.size() > 0) {
 					for (auto const &pair: conPSDLinear[i][j].coeffs) {
 						if (pair.first == "") {
-							psdLocs.push_back(oneIndex);
+							psdLocs[whichMat][whichEl] = oneIndex;
 						} else {
-							psdLocs.push_back(std::stoi(pair.first));
+							psdLocs[whichMat][whichEl] = std::stoi(pair.first);
 						}
 						if (i == j) {
-							psdCoeffs.push_back(pair.second);
+							psdCoeffs[whichMat][whichEl] = pair.second;
 						} else {
-							psdCoeffs.push_back(std::sqrt(2.0)*pair.second);
+							psdCoeffs[whichMat][whichEl] = std::sqrt(2.0)*pair.second;
 						}
+						whichMat++;
 					}
 				} else {
-					psdLocs.push_back(oneIndex);
-					psdCoeffs.push_back(0);
+					psdLocs[whichMat][whichEl] = oneIndex;
+					psdCoeffs[whichMat][whichEl] = 0;
 				}
+				whichEl++;
 			}
 		}
-		auto psdLocsM = monty::new_array_ptr<int>(psdLocs);
-		auto psdCoeffsM = monty::new_array_ptr<double>(psdCoeffs);
-
-		// The box constraints, given our box
-		std::vector<double> mins(monoms.size(), -1);
-		std::vector<double> maxs(monoms.size(), 1);
-		for (int i=0; i<monoms.size(); i++) {
-
-			// Check if the monom is a power of a single var
-			bool allSame = true;
-			int monomDegree = monoms[i].size() / digitsPerInd;
-			for (int j=1; j<monomDegree; j++) {
-				if (monoms[i].substr(j*digitsPerInd, digitsPerInd) != monoms[i].substr(0, digitsPerInd)) {
-					allSame = false;
-					break;
-				}
-			}
-
-			// If it's an even power, it's positive
-			if (allSame && monomDegree % 2 == 0) {
-				mins[i] = 0;
-			} else {
-				mins[i] = -std::pow(bound, monomDegree);
-			}
-			maxs[i] = std::pow(bound, monomDegree);
-
+		std::vector<std::shared_ptr<monty::ndarray<int,1>>> psdLocsM(numMatsToSum);
+		std::vector<std::shared_ptr<monty::ndarray<double,1>>> psdCoeffsM(numMatsToSum);
+		for (int i=0; i<numMatsToSum; i++) {
+			psdLocsM[i] = monty::new_array_ptr<int>(psdLocs[i]);
+			psdCoeffsM[i] = monty::new_array_ptr<double>(psdCoeffs[i]);
+			std::cout << psdLocs[i] << std::endl;
+			std::cout << psdCoeffs[i] << std::endl;
 		}
 
 		// Create a model
@@ -4724,7 +4441,11 @@ public:
 
 		// Original PSD cons TODO
 		if (conPSDLinear.size() > 0) {
-			M->constraint(mosek::fusion::Expr::mulElm(psdCoeffsM, xM->pick(psdLocsM)), mosek::fusion::Domain::inSVecPSDCone());
+			mosek::fusion::Expression::t matSum = mosek::fusion::Expr::mulElm(psdCoeffsM[0], xM->pick(psdLocsM[0]));
+			for (int i=1; i<numMatsToSum; i++) {
+				matSum = mosek::fusion::Expr::add(matSum, mosek::fusion::Expr::mulElm(psdCoeffsM[i], xM->pick(psdLocsM[i])));
+			}
+			M->constraint(matSum, mosek::fusion::Domain::inSVecPSDCone());
 		}
 
 		// Open a file if told to record the points
@@ -4848,7 +4569,7 @@ public:
 				}
 
 				// If we've converged
-				if (biggestError < 1e-6) {
+				if (biggestError < 1e-8) {
 
 					// If logging, write to file and continue
 					if (logFileName.size() > 0) {
@@ -4861,7 +4582,11 @@ public:
 					// Otheriwse write to std::out and stop
 					} else {
 						std::cout << std::endl;
-						std::cout << "converged in " << iter << " iters to region " << toProcess[0] << std::endl;
+						std::vector<double> vals(maxVariables);
+						for (int i=0; i<maxVariables; i++) {
+							vals[i] = solVec[firstMonomInds[i]];
+						}
+						std::cout << "converged in " << iter << " iters to: " << vals << std::endl;
 						break;
 					}
 
@@ -5157,6 +4882,69 @@ public:
 	}
 	
 };
+
+// Generic overload for outputting vector of vector
+template <typename type> 
+std::ostream &operator<<(std::ostream &output, const std::vector<std::vector<Polynomial<type>>> &arr) {
+
+	// Use fixed precision
+	int precision = 7;
+	output << std::showpos << std::fixed << std::setprecision(precision);
+
+	// For each column, figure out the output widths
+	int columns = 0;
+	if (arr.size() > 0) {
+		columns = arr[0].size();
+	}
+	std::vector<int> columnWidths(columns, 0);
+	for (int i=0; i<arr.size(); i++) {
+		for (int j=0; j<arr[i].size(); j++) {
+			columnWidths[j] = std::max(columnWidths[j], arr[i][j].getOutputWidth()+1);
+		}
+	}
+
+	// Loop over the array
+	std::string rowText;
+	for (int y=0; y<arr.size(); y++) {
+
+		// For the first line, add the pre text
+		if (y == 0) {
+			rowText = " {";
+
+		// Otherwise pad accordingly
+		} else {
+			rowText = "  ";
+		}
+
+		// Spacing
+		output << rowText << " { ";
+
+		// For the x values, combine them all on one line
+		for (int x=0; x<arr[y].size(); x++) {
+			int paddingNeeded = columnWidths[x]-arr[y][x].getOutputWidth();
+			output << std::string(paddingNeeded, ' ');
+			output << arr[y][x];
+			if (x < arr[y].size()-1) {
+				output << ", ";
+			}
+		}
+
+		// Output the row
+		if (y < arr.size() - 1) {
+			output << "}, " << std::endl;
+		}
+
+	}
+
+	// Output the final closing braces
+	output << "} } ";
+	
+	// Reset formatting
+	output << std::noshowpos << std::defaultfloat;
+	
+	return output;
+
+}
 
 #endif
 	
