@@ -10,11 +10,11 @@ int main(int argc, char ** argv) {
 	std::string task = "infeasible";
 	bool useFull = false;
 	bool useQuadratic = true;
-	bool usePSD = false;
 	bool removeLinear = true;
 	int maxIters = -1;
 	int verbosity = 1;
 	double testParam = 43;
+	std::string solver = "mosek";
 	std::string level = "1f";
 	std::string fileName = "";
 	for (int i=0; i<argc; i++) {
@@ -26,13 +26,12 @@ int main(int argc, char ** argv) {
 			std::cout << " -i [int]    set max iterations (-1 for no limit)" << std::endl;
 			std::cout << " -t [dbl]    set the test parameter" << std::endl;
 			std::cout << " -v [int]    set the verbosity level (0,1,2)" << std::endl;
-			std::cout << " -p          use PSD equations" << std::endl;
-			std::cout << " -2          use quadratic equations" << std::endl;
-			std::cout << " -4          use quartic equations" << std::endl;
-			std::cout << " -w          use whole bases, not partial" << std::endl;
-			std::cout << " -f          try to find a feasible point" << std::endl;
-			std::cout << " -r          don't use linear reductions" << std::endl;
 			std::cout << " -o [str]    log points to a csv file" << std::endl;
+			std::cout << " -s          use scs as the SDP solver insead of mosek" << std::endl;
+			std::cout << " -4          use quartic equations instead of quadratic" << std::endl;
+			std::cout << " -w          use whole bases, not partial" << std::endl;
+			std::cout << " -f          try to find a feasible point instead of proving infeasiblity" << std::endl;
+			std::cout << " -r          don't use linear reductions" << std::endl;
 			return 0;
 		} else if (arg == "-d" && i+1 < argc) {
 			d = std::stoi(argv[i+1]);
@@ -55,12 +54,10 @@ int main(int argc, char ** argv) {
 		} else if (arg == "-o" && i+1 < argc) {
 			fileName = argv[i+1];
 			i++;
-		} else if (arg == "-p") {
-			usePSD = true;
+		} else if (arg == "-s") {
+			solver = "scs";
 		} else if (arg == "-4") {
 			useQuadratic = false;
-		} else if (arg == "-2") {
-			useQuadratic = true;
 		} else if (arg == "-w") {
 			useFull = true;
 		} else if (arg == "-f") {
@@ -144,90 +141,6 @@ int main(int argc, char ** argv) {
 				}
 			}
 			std::cout << std::endl << std::endl;
-		}
-
-		// Create the blank PSD matrix, which is as wide as there are vectors (x2 for imag)
-		int psdMatWidth = 0;
-		for (int i=0; i<n; i++) {
-			psdMatWidth += dLimits[i2][i];
-		}
-		int imagDelta = psdMatWidth;
-		psdMatWidth *= 2;
-		std::vector<std::vector<Polynomial<double>>> eqnPSD;
-
-		// Fill this matrix
-		if (usePSD) {
-			eqnPSD = std::vector<std::vector<Polynomial<double>>>(psdMatWidth, std::vector<Polynomial<double>>(psdMatWidth, Polynomial<double>(numVars)));
-			int ind1 = 0;
-			for (int i=0; i<n; i++) {
-				for (int k=0; k<dLimits[i2][i]; k++) {
-					int ind2 = 0;
-					for (int j=0; j<n; j++) {
-						for (int l=0; l<dLimits[i2][j]; l++) {
-
-							// For the diagonals we always have 1
-							if (i == j && k == l) {
-								eqnPSD[ind1][ind2] = Polynomial<double>(numVars, 1);
-								eqnPSD[ind1+imagDelta][ind2+imagDelta] = Polynomial<double>(numVars, 1);
-
-							// Can assume the element of any basis is 1/sqrt(d)
-							} else if ((i == 0 && k == 0 && j != 0) || (j == 0 && l == 0 && i != 0)) {
-								eqnPSD[ind1][ind2] = Polynomial<double>(numVars, 1/std::sqrt(d));
-								eqnPSD[ind2][ind1] = Polynomial<double>(numVars, 1/std::sqrt(d));
-								eqnPSD[ind1+imagDelta][ind2+imagDelta] = Polynomial<double>(numVars, 1/std::sqrt(d));
-								eqnPSD[ind2+imagDelta][ind1+imagDelta] = Polynomial<double>(numVars, 1/std::sqrt(d));
-
-							// Can assume the first vector of the first basis is uniform
-							} else if ((i == 1 && k == 0 && j == 0) || (j == 1 && l == 0 && i == 0)) {
-								eqnPSD[ind1][ind2] = Polynomial<double>(numVars, 1/std::sqrt(d));
-								eqnPSD[ind2][ind1] = Polynomial<double>(numVars, 1/std::sqrt(d));
-								eqnPSD[ind1+imagDelta][ind2+imagDelta] = Polynomial<double>(numVars, 1/std::sqrt(d));
-								eqnPSD[ind2+imagDelta][ind1+imagDelta] = Polynomial<double>(numVars, 1/std::sqrt(d));
-
-							// If it's multiplying with one of the first basis
-							} else if (i == 0 && j != i) {
-								int nextVar = j*d*d + l*d + k;
-								eqnPSD[ind1][ind2] = Polynomial<double>(numVars, 1, {nextVar});
-								eqnPSD[ind1+imagDelta][ind2+imagDelta] = Polynomial<double>(numVars, 1, {nextVar});
-								eqnPSD[ind2][ind1] = Polynomial<double>(numVars, 1, {nextVar});
-								eqnPSD[ind2+imagDelta][ind1+imagDelta] = Polynomial<double>(numVars, 1, {nextVar});
-								eqnPSD[ind1][ind2+imagDelta] = Polynomial<double>(numVars, 1, {nextVar+conjDelta});
-								eqnPSD[ind1+imagDelta][ind2] = Polynomial<double>(numVars, -1, {nextVar+conjDelta});
-								eqnPSD[ind2][ind1+imagDelta] = Polynomial<double>(numVars, -1, {nextVar+conjDelta});
-								eqnPSD[ind2+imagDelta][ind1] = Polynomial<double>(numVars, 1, {nextVar+conjDelta});
-
-							// If it's multiplying with another basis
-							} else if (i != 0 && j != i && j >= i) {
-								Polynomial<double> prodReal(numVars);
-								Polynomial<double> prodImag(numVars);
-								for (int m=0; m<d; m++) {
-									prodReal += eqnPSD[ind1][m]*eqnPSD[ind2][m];
-									prodReal += eqnPSD[ind1+imagDelta][m]*eqnPSD[ind2+imagDelta][m];
-									prodImag += eqnPSD[ind1][m]*eqnPSD[ind2+imagDelta][m];
-									prodImag -= eqnPSD[ind1+imagDelta][m]*eqnPSD[ind2][m];
-								}
-								eqnPSD[ind1][ind2] = prodReal;
-								eqnPSD[ind2][ind1] = prodReal;
-								eqnPSD[ind1+imagDelta][ind2+imagDelta] = prodReal;
-								eqnPSD[ind2+imagDelta][ind1+imagDelta] = prodReal;
-								eqnPSD[ind1][ind2+imagDelta] = prodImag;
-								eqnPSD[ind1+imagDelta][ind2] = -prodImag;
-								eqnPSD[ind2][ind1+imagDelta] = -prodImag;
-								eqnPSD[ind2+imagDelta][ind1] = prodImag;
-
-							}
-
-							// Update the y index
-							ind2++;
-
-						}
-					}
-
-					// Update the x index
-					ind1++;
-
-				}
-			}
 		}
 
 		// The list of equations to fill
@@ -429,34 +342,8 @@ int main(int argc, char ** argv) {
 			orderingCons.push_back(newCon);
 		}
 
-		// Add the circular cons for the PSD system
-		if (usePSD) {
-			eqns = {};
-			orderingCons = {};
-			for (int i=d*d; i<numVarsNonConj; i++) {
-				bool found = false;
-				for (int j=0; j<eqnPSD.size(); j++) {
-					for (int k=j; k<eqnPSD[j].size(); k++) {
-						if (eqnPSD[j][k].contains(i)) {
-							Polynomial<double> extraEqn(numVars);
-							extraEqn.addTerm(1, {i,i});
-							extraEqn.addTerm(1, {i+conjDelta,i+conjDelta});
-							extraEqn.addTerm(-1.0/d, {});
-							eqns.push_back(extraEqn);
-							found = true;
-							break;
-						}
-					}
-					if (found) {
-						break;
-					}
-				}
-			}
-
-		}
-
 		// Combine these equations into a single object
-		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, orderingCons, eqnPSD);
+		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, orderingCons);
 
 		// Remove variables using linear equalities if possible
 		if (removeLinear) {
@@ -619,7 +506,11 @@ int main(int argc, char ** argv) {
 			}
 
 			// Try to prove infeasiblity
-			prob.proveInfeasible(maxIters, level, 1.0/std::sqrt(d), fileName, verbosity);
+			if (solver == "mosek") {
+				prob.proveInfeasible(maxIters, level, 1.0/std::sqrt(d), fileName, verbosity);
+			} else if (solver == "scs") {
+				prob.proveInfeasibleSCS(maxIters, level, 1.0/std::sqrt(d), fileName, verbosity);
+			}
 			
 		}
 

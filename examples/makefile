@@ -13,10 +13,7 @@ mubdebug:
 	$(CXX) $(DEBUGFLAGS) -o mub mub.cpp $(LIBS) $(LDLIBSMOSEK)
 
 mub:
-	$(CXX) $(CXXFLAGS) -o mub mub.cpp $(LIBS) $(LDLIBSMOSEK)
-
-mubSCS:
-	$(CXX) $(CXXFLAGS) -o mubSCS mubSCS.cpp $(LIBS) $(LDLIBSMOSEK) $(LIBSCS)
+	$(CXX) $(CXXFLAGS) -o mub mub.cpp $(LIBS) $(LDLIBSMOSEK) $(LIBSCS)
 
 mubComplex:
 	$(CXX) $(CXXFLAGS) -o mubComplex mubComplex.cpp $(LIBS) $(LDLIBSMOSEK)
