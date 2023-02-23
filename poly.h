@@ -5034,32 +5034,20 @@ public:
 
 		// TODO
 		toProcess = {};
-		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, -0.0104253}, {-0.57735, -0.0180467}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
-		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, -0.0104253}, {-0.0180467, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
-		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.0104253, 0.57735}, {0.100881, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
-		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.0104253, 0.57735}, {-0.57735, 0.100881}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
-		int var1 = 0;
-		int var2 = 6;
-		for (int i=0; i<2; i++) {
-			for (int j=0; j<2; j++) {
-				auto regionCopy = varMinMax;
-				if (i == 0) {
-					regionCopy[var1].second = 0;
+		//std::vector<int> varsToSplit = {maxVariables-1, maxVariables-2, maxVariables-3, maxVariables-4};
+		std::vector<int> varsToSplit = {maxVariables-1, maxVariables-2, maxVariables-3, maxVariables-4, maxVariables-5, maxVariables-6};
+		for (int i=0; i<std::pow(2, varsToSplit.size()); i++) {
+			auto regionCopy = varMinMax;
+			for (int j=0; j<varsToSplit.size(); j++) {
+				if (i >> j & 1) {
+					regionCopy[varsToSplit[j]].second = 0;
 				} else {
-					regionCopy[var1].first = 0;
+					regionCopy[varsToSplit[j]].first = 0;
 				}
-				if (j == 0) {
-					regionCopy[var2].second = 0;
-				} else {
-					regionCopy[var2].first = 0;
-				}
-				toProcess.push_back(regionCopy);
 			}
+			toProcess.push_back(regionCopy);
+			std::cout << regionCopy << std::endl;
 		}
-		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.0}, {-0.57735, 0.0}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
-		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.0}, {0.0, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
-		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {0.0, 0.57735}, {0.0, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
-		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {0.0, 0.57735}, {-0.57735, 0.0}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
 
 		// Create the PSD matrices from this list
 		std::vector<std::vector<int>> shouldBePSD;
@@ -5239,7 +5227,7 @@ public:
 		}
 		std::sort(AOrdering.begin(), AOrdering.end(),
 			[&](const int& a, const int& b) {
-				return (AColsSCS[a]*nextI + ARowsSCS[a] < AColsSCS[b]*nextI + ARowsSCS[b]);
+				return (AColsSCS[a]*ARowsSCS.size() + ARowsSCS[a] < AColsSCS[b]*ARowsSCS.size() + ARowsSCS[b]);
 			}
 		);
 
@@ -5273,14 +5261,21 @@ public:
 			A_p[i] = -1;
 		}
 		A_p[varsTotal] = AValsSCS.size();
-		int maxRow = 0;
 		for (int i=0; i<AOrdering.size(); i++) {
 			A_i[i] = ARowsSCS[AOrdering[i]];
-			maxRow = std::max(A_i[i], maxRow);
 			if (A_p[AColsSCS[AOrdering[i]]] == -1) {
 				A_p[AColsSCS[AOrdering[i]]] = i;
 			}
 		}
+
+		int countTest = 0;
+		for (int j = 0; j < varsTotal; j++) { /* column */
+			for (int h = A_p[j]; h < A_p[j + 1]; h++) {
+				countTest++;
+			}
+		}
+		std::cout << AValsSCS.size() << std::endl;
+		std::cout << countTest << std::endl;
 
 		// Params needed for SCS
 		int* SDPSizes = new int[monomProducts.size()];
@@ -5290,8 +5285,8 @@ public:
 		double* boxConsMin = new double[monoms.size()-1];
 		double* boxConsMax = new double[monoms.size()-1];
 		for (int i=0; i<monoms.size()-1; i++) {
-			boxConsMin[i] = -bound;
-			boxConsMax[i] = bound;
+			boxConsMin[i] = mins[i]; // TODO tighter
+			boxConsMax[i] = maxs[i];
 		}
 		int numVarsSCS = varsTotal;
 		int numConsSCS = nextI;
@@ -5340,11 +5335,11 @@ public:
 		}
 		//stgs->max_iters = 1000;
 		//stgs->normalize = false;
-		//stgs->acceleration_lookback = 0;
+		stgs->acceleration_lookback = 0;
 		//stgs->adaptive_scale = false;
 		//stgs->scale = 0.01;
 		//stgs->rho_x = 1e-8;
-		stgs->eps_abs = 1e-5;
+		stgs->eps_abs = 1e-4;
 		stgs->eps_rel = stgs->eps_abs;
 		//stgs->eps_infeas = 0.5;
 
@@ -5394,11 +5389,8 @@ public:
 
 			}
 
-			std::cout << "here 1 " << std::endl;
-
 			// Solve the SDP and then free memory
 			ScsWork *scs_work = scs_init(dataSCS, coneSCS, stgs);
-			std::cout << "here 2 " << std::endl;
 			int exitFlag = scs_solve(scs_work, sol, info, 0);
 			double objPrimal = info->pobj;
 			double objDual = info->dobj;
