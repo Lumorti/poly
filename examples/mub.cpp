@@ -13,6 +13,7 @@ int main(int argc, char ** argv) {
 	bool removeLinear = true;
 	int maxIters = -1;
 	int verbosity = 1;
+	int numToSplit = 0;
 	double testParam = 43;
 	std::string solver = "mosek";
 	std::string level = "1f";
@@ -26,6 +27,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -i [int]    set max iterations (-1 for no limit)" << std::endl;
 			std::cout << " -t [dbl]    set the test parameter" << std::endl;
 			std::cout << " -v [int]    set the verbosity level (0,1,2)" << std::endl;
+			std::cout << " -p [int]    set the number of vars to split initially" << std::endl;
 			std::cout << " -o [str]    log points to a csv file" << std::endl;
 			std::cout << " -s          use scs as the SDP solver insead of mosek" << std::endl;
 			std::cout << " -4          use quartic equations instead of quadratic" << std::endl;
@@ -41,6 +43,9 @@ int main(int argc, char ** argv) {
 			i++;
 		} else if (arg == "-i" && i+1 < argc) {
 			maxIters = std::stoi(argv[i+1]);
+			i++;
+		} else if (arg == "-p" && i+1 < argc) {
+			numToSplit = std::stoi(argv[i+1]);
 			i++;
 		} else if (arg == "-t" && i+1 < argc) {
 			testParam = std::stod(argv[i+1]);
@@ -67,6 +72,7 @@ int main(int argc, char ** argv) {
 		} else if (arg == "-r") {
 			removeLinear = false;
 		}
+
 	}
 
 	// Useful quantities
@@ -80,27 +86,22 @@ int main(int argc, char ** argv) {
 		dLimits.push_back(std::vector<int>(n, d));
 	} else {
 		if (d == 2) {
-			dLimits.push_back({2, 1, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({2, 1, 1, 1});
 		} else if (d == 3) {
-			dLimits.push_back({3, 1, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({3, 1, 1, 1, 1});
 		} else if (d == 4) {
-			//dLimits.push_back({4, 4, 3, 3, 3, 3});
-			//dLimits.push_back({4, 4, 4, 3, 3, 3});
-			//dLimits.push_back({4, 4, 4, 4, 3, 3});
-			//dLimits.push_back({4, 4, 4, 4, 4, 3});
 			dLimits.push_back({4, 2, 1, 1, 1, 1});
 		} else if (d == 5) {
 			dLimits.push_back({5, 2, 2, 1, 1, 1, 1});
 		} else if (d == 6) {
-			//dLimits.push_back({6, 2, 2, 2, 2, 1, 1, 1});
 			dLimits.push_back({6, 5, 3, 1}); 
-			//dLimits.push_back({6, 3, 3, 3}); 
+			dLimits.push_back({6, 3, 3, 3}); 
 		} else if (d == 7) {
 			dLimits.push_back({7, 2, 2, 2, 2, 2, 1, 1, 1});
 		} else if (d == 8) {
-			dLimits.push_back({8, 2, 2, 2, 2, 2, 2, 1, 1});
+			dLimits.push_back({8, 2, 2, 2, 2, 2, 2, 1, 1, 1});
 		} else if (d == 9) {
-			dLimits.push_back({9, 2, 2, 2, 2, 2, 2, 2, 1});
+			dLimits.push_back({9, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1});
 		} else if (d == 10) {
 			dLimits.push_back({10, 7, 3, 1});
 			dLimits.push_back({10, 8, 3, 1});
@@ -108,6 +109,12 @@ int main(int argc, char ** argv) {
 		} else {
 			dLimits.push_back(std::vector<int>(n, d));
 		}
+
+		// If going past infeasibility, pad with zeros
+		while (dLimits[0].size() < n) {
+			dLimits[0].push_back(0);
+		}
+
 	}
 
 	// For each different restriction
@@ -329,17 +336,48 @@ int main(int argc, char ** argv) {
 			syms.push_back(newSym);
 		}
 
-		// Convert these symmetries into constraints with break them
+		// Could also take the conjugate of everything
+		std::unordered_map<int,int> newSym;
+		for (int i=1; i<n; i++) {
+			for (int j=0; j<dLimits[i2][i]; j++) {
+				if (i == 1 && j == 0) {
+					continue;
+				}
+				for (int k=1; k<d; k++) {
+					int indLeft = i*d*d+j*d+k;
+					newSym[indLeft+conjDelta] = indLeft+conjDelta;
+				}
+			}
+		}
+		syms.push_back(newSym);
+
+		// Convert these symmetries into constraints with break them TODO
 		std::vector<Polynomial<double>> orderingCons;
 		for (int i=0; i<syms.size(); i++) {
-			Polynomial<double> newCon(numVars);
-			int pow = 0;
-			for (auto const &pair: syms[i]) {
-				newCon.addTerm(std::pow(2, pow), {pair.first});
-				newCon.addTerm(-std::pow(2, pow), {pair.second});
-				pow++;
+
+			// If the indices are the same, this means the sum should be positive
+			if (syms[i].begin()->first == syms[i].begin()->second) {
+				Polynomial<double> newCon(numVars);
+				int pow = 0;
+				for (auto const &pair: syms[i]) {
+					newCon.addTerm(1, {pair.first});
+					pow++;
+					break;
+				}
+				orderingCons.push_back(newCon);
+
+			// Otherwise we're comparing the two sums
+			} else {
+				Polynomial<double> newCon(numVars);
+				int pow = 0;
+				for (auto const &pair: syms[i]) {
+					newCon.addTerm(std::pow(2, pow), {pair.first});
+					newCon.addTerm(-std::pow(2, pow), {pair.second});
+					pow++;
+				}
+				orderingCons.push_back(newCon);
 			}
-			orderingCons.push_back(newCon);
+
 		}
 
 		// Combine these equations into a single object
@@ -507,9 +545,9 @@ int main(int argc, char ** argv) {
 
 			// Try to prove infeasiblity
 			if (solver == "mosek") {
-				prob.proveInfeasible(maxIters, level, 1.0/std::sqrt(d), fileName, verbosity);
+				prob.proveInfeasible(maxIters, level, 1.0/std::sqrt(d), fileName, verbosity, numToSplit);
 			} else if (solver == "scs") {
-				prob.proveInfeasibleSCS(maxIters, level, 1.0/std::sqrt(d), fileName, verbosity);
+				prob.proveInfeasibleSCS(maxIters, level, 1.0/std::sqrt(d), fileName, verbosity, numToSplit);
 			}
 			
 		}

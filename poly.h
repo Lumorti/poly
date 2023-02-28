@@ -4069,7 +4069,7 @@ public:
 	}
 
 	// Attempt to find a series of constraints that show this is infeasible
-	void proveInfeasible(int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="", int verbosity=1) {
+	void proveInfeasible(int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="", int verbosity=1, int numVarsToSplit=0) {
 
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
@@ -4219,12 +4219,30 @@ public:
 		}
 		toProcess.push_back(varMinMax);
 
-		// TODO
-		//toProcess = {};
-		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.0}, {-0.57735, 0.0}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
-		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.0}, {0.0, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
-		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {0.0, 0.57735}, {0.0, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
-		//toProcess.push_back({{-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {0.0, 0.57735}, {-0.57735, 0.0}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}, {-0.57735, 0.57735}});
+		// If told to start by splitting at various vars TODO MOSEK
+		if (numVarsToSplit > 0) {
+
+			// Create the lists of vars to split, starting from the end
+			toProcess = {};
+			std::vector<int> varsToSplit = {};
+			for (int i=maxVariables-1; i>maxVariables-numVarsToSplit-1; i--) {
+				varsToSplit.push_back(i);
+			}
+
+			// It's exponential in the number of vars, do every combination
+			for (int i=0; i<std::pow(2, varsToSplit.size()); i++) {
+				auto regionCopy = varMinMax;
+				for (int j=0; j<varsToSplit.size(); j++) {
+					if (i >> j & 1) {
+						regionCopy[varsToSplit[j]].second = 0;
+					} else {
+						regionCopy[varsToSplit[j]].first = 0;
+					}
+				}
+				toProcess.push_back(regionCopy);
+			}
+
+		}
 
 		// Verbose output
 		if (verbosity >= 2) {
@@ -4241,6 +4259,10 @@ public:
 		std::vector<double> idenCoeffs;
 		std::vector<double> monCoeffs;
 		std::vector<int> monLocs;
+		std::unordered_map<std::string,int> monomsInverted;
+		for (int j=0; j<monoms.size(); j++) {
+			monomsInverted[monoms[j]] = j;
+		}
 		for (int j=0; j<monomProducts.size(); j++) {
 
 			// Get the list of all monomial locations for the PSD matrix
@@ -4254,10 +4276,11 @@ public:
 					std::string monString = (monomProducts[j][i]*monomProducts[j][k]).getMonomials()[0];
 
 					// Find this in the monomial list
-					auto loc = std::find(monoms.begin(), monoms.end(), monString);
-					if (loc != monoms.end()) {
-						monLocs.push_back(loc - monoms.begin());
+					auto loc = monomsInverted.find(monString);
+					if (loc != monomsInverted.end()) {
+						monLocs.push_back(monomsInverted[monString]);
 					} else {
+						monomsInverted[monString] = monoms.size();
 						monLocs.push_back(monoms.size());
 						monoms.push_back(monString);
 					}
@@ -4862,7 +4885,7 @@ public:
 	}
 
 	// Attempt to find a series of constraints that show this is infeasible
-	void proveInfeasibleSCS(int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="", int verbosity=1) {
+	void proveInfeasibleSCS(int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="", int verbosity=1, int numVarsToSplit=0) {
 
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
@@ -5010,22 +5033,30 @@ public:
 			maxArea *= 2*bound;
 		}
 		toProcess.push_back(varMinMax);
+				
+		// If told to start by splitting at various vars TODO SCS
+		if (numVarsToSplit > 0) {
 
-		// TODO
-		toProcess = {};
-		//std::vector<int> varsToSplit = {maxVariables-1, maxVariables-2, maxVariables-3, maxVariables-4};
-		std::vector<int> varsToSplit = {maxVariables-1, maxVariables-2, maxVariables-3, maxVariables-4, maxVariables-5, maxVariables-6};
-		for (int i=0; i<std::pow(2, varsToSplit.size()); i++) {
-			auto regionCopy = varMinMax;
-			for (int j=0; j<varsToSplit.size(); j++) {
-				if (i >> j & 1) {
-					regionCopy[varsToSplit[j]].second = 0;
-				} else {
-					regionCopy[varsToSplit[j]].first = 0;
-				}
+			// Create the lists of vars to split, starting from the end
+			toProcess = {};
+			std::vector<int> varsToSplit = {};
+			for (int i=maxVariables; i>maxVariables-numVarsToSplit; i--) {
+				varsToSplit.push_back(i);
 			}
-			toProcess.push_back(regionCopy);
-			std::cout << regionCopy << std::endl;
+
+			// It's exponential in the number of vars, do every combination
+			for (int i=0; i<std::pow(2, varsToSplit.size()); i++) {
+				auto regionCopy = varMinMax;
+				for (int j=0; j<varsToSplit.size(); j++) {
+					if (i >> j & 1) {
+						regionCopy[varsToSplit[j]].second = 0;
+					} else {
+						regionCopy[varsToSplit[j]].first = 0;
+					}
+				}
+				toProcess.push_back(regionCopy);
+			}
+
 		}
 
 		// Create the PSD matrices from this list
@@ -5047,10 +5078,8 @@ public:
 					std::string monString = (monomProducts[j][i]*monomProducts[j][k]).getMonomials()[0];
 
 					// Find this in the monomial list
-					//auto loc = std::find(monoms.begin(), monoms.end(), monString);
 					auto loc = monomsInverted.find(monString);
 					if (loc != monomsInverted.end()) {
-						//monLocs.push_back(loc - monoms.begin());
 						monLocs.push_back(monomsInverted[monString]);
 					} else {
 						monomsInverted[monString] = monoms.size();
@@ -5229,7 +5258,7 @@ public:
 			paramLocsMin[i][1] = AOrderingInv[paramLocsMin[i][1]];
 		}
 
-		// The A matrix for SCS TODO problems in SCS(form_kkt) in csparse.c
+		// The A matrix for SCS 
 		double* A_x = new double[AValsSCS.size()];
 		for (int i=0; i<AValsSCS.size(); i++) {
 			A_x[i] = -AValsSCS[AOrdering[i]];
@@ -5264,7 +5293,7 @@ public:
 		double* boxConsMin = new double[monoms.size()-1];
 		double* boxConsMax = new double[monoms.size()-1];
 		for (int i=0; i<monoms.size()-1; i++) {
-			boxConsMin[i] = mins[i]; // TODO tighter
+			boxConsMin[i] = mins[i];
 			boxConsMax[i] = maxs[i];
 		}
 		int numVarsSCS = varsTotal;
@@ -5305,7 +5334,7 @@ public:
 		coneSCS->ssize = 1;
 		coneSCS->s = SDPSizes;
 
-		// Solver parameters TODO
+		// Solver parameters TODO SCS
 		scs_set_default_settings(stgs);
 		if (verbosity >= 2) {
 			stgs->verbose = true;
