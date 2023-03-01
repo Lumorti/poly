@@ -5040,7 +5040,7 @@ public:
 			// Create the lists of vars to split, starting from the end
 			toProcess = {};
 			std::vector<int> varsToSplit = {};
-			for (int i=maxVariables; i>maxVariables-numVarsToSplit; i--) {
+			for (int i=maxVariables-1; i>maxVariables-numVarsToSplit-1; i--) {
 				varsToSplit.push_back(i);
 			}
 
