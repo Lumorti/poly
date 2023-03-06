@@ -355,7 +355,7 @@ int main(int argc, char ** argv) {
 		}
 		syms.push_back(newSym);
 
-		// Convert these symmetries into constraints with break them TODO
+		// Convert these symmetries into constraints with break them
 		std::vector<Polynomial<double>> orderingCons;
 		for (int i=0; i<syms.size(); i++) {
 
