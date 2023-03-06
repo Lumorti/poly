@@ -15,6 +15,7 @@ int main(int argc, char ** argv) {
 	int verbosity = 1;
 	int numToSplit = 0;
 	double testParam = 43;
+	float alpha = 0.9;
 	std::string solver = "mosek";
 	std::string level = "1f";
 	std::string fileName = "";
@@ -26,6 +27,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -l [str]    set the level for the relaxation e.g. 1+2f,3p" << std::endl;
 			std::cout << " -i [int]    set max iterations (-1 for no limit)" << std::endl;
 			std::cout << " -t [dbl]    set the test parameter" << std::endl;
+			std::cout << " -a [dbl]    set the scaling for the feasible check" << std::endl;
 			std::cout << " -v [int]    set the verbosity level (0,1,2)" << std::endl;
 			std::cout << " -p [int]    set the number of vars to split initially" << std::endl;
 			std::cout << " -o [str]    log points to a csv file" << std::endl;
@@ -49,6 +51,9 @@ int main(int argc, char ** argv) {
 			i++;
 		} else if (arg == "-t" && i+1 < argc) {
 			testParam = std::stod(argv[i+1]);
+			i++;
+		} else if (arg == "-a" && i+1 < argc) {
+			alpha = std::stod(argv[i+1]);
 			i++;
 		} else if (arg == "-l" && i+1 < argc) {
 			level = argv[i+1];
@@ -95,7 +100,6 @@ int main(int argc, char ** argv) {
 			dLimits.push_back({5, 2, 2, 1, 1, 1, 1});
 		} else if (d == 6) {
 			dLimits.push_back({6, 5, 3, 1}); 
-			dLimits.push_back({6, 3, 3, 3}); 
 		} else if (d == 7) {
 			dLimits.push_back({7, 2, 2, 2, 2, 2, 1, 1, 1});
 		} else if (d == 8) {
@@ -454,7 +458,7 @@ int main(int argc, char ** argv) {
 
 			// Find a upper bound
 			std::cout << std::scientific;
-			std::vector<double> x = prob.findFeasiblePoint(-1, 0.1, 1e-12, 1000000, 4, false, 1.0/std::sqrt(d));
+			std::vector<double> x = prob.findFeasibleEqualityPoint(-1, alpha, 1e-12, maxIters, 4, verbosity, 1.0/std::sqrt(d));
 			double maxVal = -1000;
 			for (int i=0; i<prob.conZero.size(); i++) {
 				maxVal = std::max(maxVal, std::abs(prob.conZero[i].eval(x)));

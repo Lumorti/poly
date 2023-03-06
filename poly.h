@@ -1497,16 +1497,19 @@ public:
 	}
 
 	// Try to find a root, with one variable being optimized towards zero
-	std::vector<polyType> findRoot(int zeroInd=0, double alpha=0.1, double tolerance=1e-10, int maxIters=10000000, int threads=4, bool verbose=false, double maxMag=1) {
-		return integrate(zeroInd).findLocalMinimum(zeroInd, alpha, tolerance, maxIters, threads, verbose, maxMag);
+	std::vector<polyType> findRoot(int zeroInd=0, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1) {
+		return integrate(zeroInd).findLocalMinimum(zeroInd, alpha, tolerance, maxIters, threads, verbosity, maxMag);
 	}
 
 	// Use the Newton method to find a local minimum
-	std::vector<polyType> findLocalMinimum(int zeroInd=0, double alpha=0.1, double tolerance=1e-10, int maxIters=10000000, int threads=4, bool verbose=false, double maxMag=1) {
+	std::vector<polyType> findLocalMinimum(int zeroInd=0, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1) {
 
 		// Prepare everything for parallel computation
 		omp_set_num_threads(threads);
 		Eigen::setNbThreads(threads);
+
+		// Start a timer
+		auto begin = std::chrono::steady_clock::now();
 
 		// Get the gradient
 		std::vector<Polynomial> gradient(maxVariables, Polynomial(maxVariables));
@@ -1546,7 +1549,8 @@ public:
 		double minVal = 1e10;
 		double norm = 1;
 		double alphaOG = alpha;
-		for (iter=0; iter<maxIters; iter++) {
+		while (iter < maxIters || maxIters < 0) {
+			iter++;
 
 			// Calculate the gradient
 			#pragma omp parallel for
@@ -1568,7 +1572,7 @@ public:
 			p = H.colPivHouseholderQr().solve(-g);
 
 			// If this is zero, jump
-			if (p.norm() < 1e-10 || x(zeroInd) < 1e-50) {
+			if (p.norm() < 1e-10 || x(zeroInd) < 1e-40) {
 				x = maxMag*Eigen::VectorXd::Random(maxVariables);
 			}
 
@@ -1584,7 +1588,11 @@ public:
 
 			// Per-iteration output
 			minVal = std::min(norm, minVal);
-			std::cout << iter << " " << norm << " " << x(zeroInd) << "   " << minVal << "  "  << p.norm() << "          \r" << std::flush;
+			if (verbosity >= 2) {
+				std::cout << iter << " " << norm << " " << minVal << "\n" << std::flush;
+			} else if (verbosity >= 1) {
+				std::cout << iter << " " << norm << " " << minVal << "          \r" << std::flush;
+			}
 
 			// Convergence criteria
 			if (norm < tolerance) {
@@ -1592,25 +1600,13 @@ public:
 			}
 
 		}
-		std::cout << iter << " " << norm << " " << g(zeroInd) << " " << x(zeroInd) << std::endl;
 
-		// Final output
-		if (verbose) {
-			std::cout.precision(std::numeric_limits<double>::max_digits10);
-			std::cout << "Finished in " << iter << " iterations       " << std::endl;
-			if (iter == maxIters) {
-				std::cout << "WARNING - reached iteration limit" << std::endl;
-			}
-			std::cout << "Final x = ";
-			std::cout << "{ ";
-			for (int i=0; i<maxVariables; i++) {
-				std::cout << x(i);
-				if (i < x.size()-1) {
-					std::cout << ", ";
-				}
-			}
-			std::cout << "}" << std::endl;
-			std::cout << "Final gradient = " << g(0) << std::endl;
+		// Stop the timer and report
+		std::cout << std::defaultfloat;
+		auto end = std::chrono::steady_clock::now();
+		double timeTaken = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() / 1000.0;
+		if (verbosity >= 1) {
+			std::cout << "finished in " << iter << " iterations (" << timeTaken << " seconds total)" << std::endl;
 		}
 
 		// Convert the eigen vec into a normal vec
@@ -2379,7 +2375,7 @@ public:
 	}
 	
 	// Get a lower bound
-	polyType lowerBound(int maxIters=100000000, int matLevel=2, bool verbose=false, bool elimAtEnd=false, int matsPerIter=20) {
+	polyType lowerBound(int maxIters=100000000, int matLevel=2, int verbosity=1, bool elimAtEnd=false, int matsPerIter=20) {
 
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
@@ -2539,13 +2535,13 @@ public:
 		}
 
 		// Output final moment list
-		if (verbose) {
+		if (verbosity >= 2) {
 			std::cout << std::endl << "final moments:" << std::endl;
 			std::cout << monoms << std::endl;
 		}
 
 		// Output final matrix list
-		if (verbose) {
+		if (verbosity >= 2) {
 			std::cout << std::endl << "final mats:" << std::endl;
 			std::cout << "{";
 			for (int i=0; i<monomPairs.size(); i++) {
@@ -2558,7 +2554,7 @@ public:
 		}
 
 		// Output final matrix list expanded as monoms
-		if (verbose) {
+		if (verbosity >= 2) {
 			std::cout <<std::endl << "final mats as monoms:" << std::endl;
 			std::cout << "{";
 			for (int i=0; i<monomPairs.size(); i++) {
@@ -2689,7 +2685,7 @@ public:
 	//}
 
 	// Get a lower bound with the new method
-	//polyType lowerBoundNew(int maxIters=1000000000, int matLevel=2, bool verbose=false, bool elimAtEnd=false, int matsPerIter=20) {
+	//polyType lowerBoundNew(int maxIters=1000000000, int matLevel=2, int verbosity=1, bool elimAtEnd=false, int matsPerIter=20) {
 
 		//// Get the monomial list and sort it
 		//std::vector<std::string> monoms = getMonomials();
@@ -3422,7 +3418,7 @@ public:
 	}
 	
 	// Get a lower bound
-	polyType lowerBound2(int maxIters=100000000, int matLevel=2, bool verbose=false, bool elimAtEnd=false, int matsPerIter=20) {
+	polyType lowerBound2(int maxIters=100000000, int matLevel=2, int verbosity=1, bool elimAtEnd=false, int matsPerIter=20) {
 
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
@@ -3990,7 +3986,7 @@ public:
 	}
 
 	// Attempt find a feasible point of this problem
-	std::vector<polyType> findFeasiblePoint(int zeroInd=-1, double alpha=0.1, double tolerance=1e-10, int maxIters=10000000, int threads=4, bool verbose=false, double maxMag=1) {
+	std::vector<polyType> findFeasibleEqualityPoint(int zeroInd=-1, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1) {
 
 		// Combine these to create a single polynomial
 		Polynomial<polyType> poly(maxVariables);
@@ -4005,7 +4001,7 @@ public:
 		}
 
 		// Find a root of this polynomial
-		std::vector<polyType> x = poly.findRoot(zeroInd, alpha, tolerance, maxIters, threads, verbose, maxMag);
+		std::vector<polyType> x = poly.findRoot(zeroInd, alpha, tolerance, maxIters, threads, verbosity, maxMag);
 		return x;
 		
 	}
