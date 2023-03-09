@@ -991,25 +991,14 @@ public:
 
 	}
 
-	// Overload the addition operator with a constant
-	template <class otherType>
-	Polynomial operator+(const otherType& other) const {
-		Polynomial con(maxVariables, polyType(other), {});
-		return (*this) + con;
-	}
-
-	// Overload the addition operator with a constant
-	template <class otherType>
-	Polynomial operator-(const otherType& other) const {
-		Polynomial con(maxVariables, -polyType(other), {});
-		return (*this) + con;
-	}
-
 	// Overload the addition operator with another polynomial
 	Polynomial operator+(const Polynomial& other) const {
 
 		// Start with one equation
 		Polynomial result = other;
+
+		// Reserve some space for the new map
+		result.coeffs.reserve(std::max(coeffs.size(), other.coeffs.size()));
 
 		// For each term of the other
 		for (auto const &pair: coeffs) {
@@ -1030,6 +1019,34 @@ public:
 
 	}
 
+	// Overload the addition operator with another polynomial
+	Polynomial operator-(const Polynomial& other) const {
+
+		// Start with one equation
+		Polynomial result = other;
+
+		// Reserve some space for the new map
+		result.coeffs.reserve(std::max(coeffs.size(), other.coeffs.size()));
+
+		// For each term of the other
+		for (auto const &pair: coeffs) {
+
+			// If it's new add it, otherwise combine with the existing
+			if (result.coeffs.find(pair.first) != result.coeffs.end()) {
+				result.coeffs[pair.first] -= pair.second;
+				if (std::abs(result.coeffs[pair.first]) < zeroTol) {
+					result.coeffs.erase(pair.first);
+				}
+			} else {
+				result.coeffs[pair.first] = -pair.second;
+			}
+
+		}
+
+		return result;
+
+	}
+
 	// Overload the self-subtraction operator
 	Polynomial operator-() const {
 		Polynomial negPoly(maxVariables);
@@ -1039,23 +1056,84 @@ public:
 		return negPoly;
 	}
 
-	// Overload the subtraction operator (using the addition)
-	Polynomial operator-(const Polynomial& other) const {
-		return (*this + (-other));
-	}
-
-	// Overload for in-place addition
+	// Overload for in-place addition with constant
 	template <class otherType>
 	Polynomial& operator+=(const otherType& other) {
-		*this = (*this) + other;
+
+		// If it's new add it, otherwise combine with the existing
+		if (coeffs.find("") != coeffs.end()) {
+			coeffs[""] += polyType(other);
+			if (std::abs(coeffs[""]) < zeroTol) {
+				coeffs.erase("");
+			}
+		} else {
+			coeffs[""] = polyType(other);
+		}
+
 		return *this;
+
 	}
 
-	// Overload for in-place subtraction
+	// Overload for in-place addition with another poly
+	Polynomial& operator+=(const Polynomial& other) {
+
+		// For each term of the other
+		for (auto const &pair: other.coeffs) {
+
+			// If it's new add it, otherwise combine with the existing
+			if (coeffs.find(pair.first) != coeffs.end()) {
+				coeffs[pair.first] += pair.second;
+				if (std::abs(coeffs[pair.first]) < zeroTol) {
+					coeffs.erase(pair.first);
+				}
+			} else {
+				coeffs[pair.first] = pair.second;
+			}
+
+		}
+
+		return *this;
+
+	}
+
+	// Overload for in-place subtraction with a constant
 	template <class otherType>
 	Polynomial& operator-=(const otherType& other) {
-		*this = (*this) - other;
+
+		// If it's new add it, otherwise combine with the existing
+		if (coeffs.find("") != coeffs.end()) {
+			coeffs[""] -= polyType(other);
+			if (std::abs(coeffs[""]) < zeroTol) {
+				coeffs.erase("");
+			}
+		} else {
+			coeffs[""] = -polyType(other);
+		}
+
 		return *this;
+
+	}
+
+	// Overload for in-place subtraction with another poly
+	Polynomial& operator-=(const Polynomial& other) {
+
+		// For each term of the other
+		for (auto const &pair: other.coeffs) {
+
+			// If it's new add it, otherwise combine with the existing
+			if (coeffs.find(pair.first) != coeffs.end()) {
+				coeffs[pair.first] -= pair.second;
+				if (std::abs(coeffs[pair.first]) < zeroTol) {
+					coeffs.erase(pair.first);
+				}
+			} else {
+				coeffs[pair.first] = -pair.second;
+			}
+
+		}
+
+		return *this;
+
 	}
 
 	// Overload for in-place multiplication

@@ -10,7 +10,7 @@ LDLIBSMOSEK= -I$(HDIR) -L$(LIBDIR) -Wl,-rpath-link,$(LIBDIR) -Wl,-rpath=$(LIBDIR
 all: mub simple matrices sos ising
 
 mubdebug:
-	$(CXX) $(DEBUGFLAGS) -o mub mub.cpp $(LIBS) $(LDLIBSMOSEK)
+	$(CXX) $(DEBUGFLAGS) -o mub mub.cpp $(LIBS) $(LDLIBSMOSEK) $(LIBSCS)
 
 mub:
 	$(CXX) $(CXXFLAGS) -o mub mub.cpp $(LIBS) $(LDLIBSMOSEK) $(LIBSCS)
