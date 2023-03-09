@@ -101,15 +101,23 @@ int main(int argc, char ** argv) {
 		} else if (d == 6) {
 			dLimits.push_back({6, 5, 3, 1}); 
 		} else if (d == 7) {
-			dLimits.push_back({7, 2, 2, 2, 2, 2, 1, 1, 1});
+			dLimits.push_back({7, 2, 2, 2, 2, 1, 1, 1, 1});
 		} else if (d == 8) {
-			dLimits.push_back({8, 2, 2, 2, 2, 2, 2, 1, 1, 1});
+			dLimits.push_back({8, 2, 2, 2, 2, 2, 1, 1, 1, 1});
 		} else if (d == 9) {
-			dLimits.push_back({9, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1});
+			dLimits.push_back({9, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1});
 		} else if (d == 10) {
-			dLimits.push_back({10, 7, 3, 1});
-			dLimits.push_back({10, 8, 3, 1});
 			dLimits.push_back({10, 9, 3, 1});
+		} else if (d == 11) {
+			dLimits.push_back({11, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1});
+		} else if (d == 12) {
+			dLimits.push_back({12, 11, 3, 1});
+		} else if (d == 13) {
+			dLimits.push_back({13, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1});
+		} else if (d == 14) {
+			dLimits.push_back({14, 13, 3, 1});
+		} else if (d == 15) {
+			dLimits.push_back({15, 14, 3, 1});
 		} else {
 			dLimits.push_back(std::vector<int>(n, d));
 		}
