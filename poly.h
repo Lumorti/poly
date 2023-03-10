@@ -1262,28 +1262,6 @@ public:
 
 	}
 
-	// Evaluate a polynomial with x values
-	polyType eval(std::vector<polyType> x) {
-
-		// For each term being added
-		polyType soFar = 0;
-		for (auto const &pair: coeffs) {
-
-			// Multiply all the values
-			polyType sub = 1;
-			for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
-				sub *= x[std::stoi(pair.first.substr(j, digitsPerInd))];
-			}
-
-			// Add to the total
-			soFar += sub*pair.second;
-
-		}
-
-		return soFar;
-
-	}
-
 	// Prepares this equation for rapid eval by caching things
 	void prepareEvalMixed() {
 
@@ -1315,6 +1293,29 @@ public:
 
 		// Free some space
 		coeffs.clear();
+
+	}
+
+	// Evaluate a polynomial with x values
+	template <typename type>
+	polyType eval(type x) {
+
+		// For each term being added
+		polyType soFar = 0;
+		for (auto const &pair: coeffs) {
+
+			// Multiply all the values
+			polyType sub = 1;
+			for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
+				sub *= x[std::stoi(pair.first.substr(j, digitsPerInd))];
+			}
+
+			// Add to the total
+			soFar += sub*pair.second;
+
+		}
+
+		return soFar;
 
 	}
 
@@ -1606,6 +1607,7 @@ public:
 		}
 
 		// Pre-cache things to allow for much faster evals
+		prepareEvalMixed();
 		#pragma omp parallel for
 		for (int i=0; i<maxVariables; i++) {
 			gradient[i].prepareEvalFast();
@@ -1626,6 +1628,7 @@ public:
 		int iter = 0;
 		double minVal = 1e10;
 		double norm = 1;
+		double prevNorm = norm;
 		double alphaOG = alpha;
 		while (iter < maxIters || maxIters < 0) {
 			iter++;
@@ -1635,6 +1638,7 @@ public:
 			for (int i=0; i<maxVariables; i++) {
 				g(i) = gradient[i].evalFast(x);
 			}
+			prevNorm = norm;
 			norm = std::abs(g.norm());
 
 			// Calculate the Hessian
@@ -1646,20 +1650,30 @@ public:
 				}
 			}
 
-			// Determine the direction
-			p = H.colPivHouseholderQr().solve(-g);
+			// Determine the direction TODO
+			//p = -H.colPivHouseholderQr().solve(g);
+			p = -H.fullPivHouseholderQr().solve(g);
+			//p = -H.fullPivLu().solve(g);
+			//p = -H.ldlt().solve(g);
+			//p = -H.llt().solve(g);
 
-			// If this is zero, jump
-			if (p.norm() < 1e-10 || x(zeroInd) < 1e-40) {
+			// Jump if we're stalling a bit
+			if (iter % 1000 == 0 || p.norm() <= 1e-13 || std::abs(x(zeroInd)) < 1e-80) {
 				x = maxMag*Eigen::VectorXd::Random(maxVariables);
 			}
 
-			// Adjust the step size
-			if (norm > 1) {
-				alpha = alphaOG;
-			} else {
-				alpha = alphaOG / 2.0;
-			}
+			//if (norm < 1e-2) {
+				//alpha = 0.2;
+			//}
+			//alpha = std::max(0.1, std::min(0.8*std::log(norm+0.5)+0.6, 0.9));
+			//alpha = std::abs(-1.0/std::log(norm));
+			//alpha = std::max(0.1, std::min(alpha, 0.9));
+
+			//double bestAlpha = alpha;
+			//double bestVal = norm;
+			//for (int i=0; i<10; i++) {
+
+			//}
 
 			// Perform the update
 			x += alpha*p;
@@ -1667,7 +1681,7 @@ public:
 			// Per-iteration output
 			minVal = std::min(norm, minVal);
 			if (verbosity >= 2) {
-				std::cout << iter << " " << norm << " " << minVal << "\n" << std::flush;
+				std::cout << iter << " " << norm << " " << minVal << " " << alpha << "\n" << std::flush;
 			} else if (verbosity >= 1) {
 				std::cout << iter << " " << norm << " " << minVal << "          \r" << std::flush;
 			}
@@ -1678,6 +1692,10 @@ public:
 			}
 
 		}
+
+		std::cout << "x: " << x.transpose() << std::endl;
+		std::cout << "grad: " << g.transpose() << std::endl;
+		std::cout << "min eigen: " << H.eigenvalues()[0] << std::endl;
 
 		// Stop the timer and report
 		std::cout << std::defaultfloat;
@@ -1721,7 +1739,9 @@ template <typename polyType2, typename polyType>
 Polynomial<polyType2> std::real(const Polynomial<polyType>& poly) {
 	Polynomial<polyType2> newPoly(poly.maxVariables);
 	for (auto const &pair: poly.coeffs) {
-		newPoly.coeffs[pair.first] = std::real(pair.second);
+		if (std::abs(std::real(pair.second)) > poly.zeroTol) {
+			newPoly.coeffs[pair.first] = std::real(pair.second);
+		}
 	}
 	return newPoly;
 }
@@ -1731,7 +1751,9 @@ template <typename polyType2, typename polyType>
 Polynomial<polyType2> std::imag(const Polynomial<polyType>& poly) {
 	Polynomial<polyType2> newPoly(poly.maxVariables);
 	for (auto const &pair: poly.coeffs) {
-		newPoly.coeffs[pair.first] = std::imag(pair.second);
+		if (std::abs(std::imag(pair.second)) > poly.zeroTol) {
+			newPoly.coeffs[pair.first] = std::imag(pair.second);
+		}
 	}
 	return newPoly;
 }
@@ -4078,7 +4100,7 @@ public:
 			zeroInd = poly.maxVariables-1;
 		}
 
-		// Find a root of this polynomial
+		// Find a root of this polynomial TODO
 		std::vector<polyType> x = poly.findRoot(zeroInd, alpha, tolerance, maxIters, threads, verbosity, maxMag);
 		return x;
 		
