@@ -1263,7 +1263,7 @@ public:
 	}
 
 	// Prepares this equation for rapid eval by caching things
-	void prepareEvalMixed() {
+	void prepareEvalFast() {
 
 		// For each coefficient
 		for (auto const &pair: coeffs) {
@@ -1286,10 +1286,10 @@ public:
 	}
 
 	// Prepares this equation for ONLY fast eval (saves memory)
-	void prepareEvalFast() {
+	void prepareEvalFastOnly() {
 		
 		// Prepare for fast eval
-		prepareEvalMixed();
+		prepareEvalFast();
 
 		// Free some space
 		coeffs.clear();
@@ -1323,11 +1323,11 @@ public:
 	template <typename type>
 	polyType evalFast(type x) {
 
-		// For each term being added
+		// For each term in the polynomial
 		polyType soFar = 0;
 		for (int i=0; i<vals.size(); i++) {
 
-			// Multiply all the values
+			// Multiply all the values for this term
 			polyType sub = 1;
 			for (int j=0; j<inds[i].size(); j++) {
 				sub *= x[inds[i][j]];
@@ -1576,12 +1576,12 @@ public:
 	}
 
 	// Try to find a root, with one variable being optimized towards zero
-	std::vector<polyType> findRoot(int zeroInd=0, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1) {
+	std::vector<polyType> findRoot(int zeroInd=0, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13) {
 		return integrate(zeroInd).findLocalMinimum(zeroInd, alpha, tolerance, maxIters, threads, verbosity, maxMag);
 	}
 
 	// Use the Newton method to find a local minimum
-	std::vector<polyType> findLocalMinimum(int zeroInd=0, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1) {
+	std::vector<polyType> findLocalMinimum(int zeroInd=0, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13) {
 
 		// Prepare everything for parallel computation
 		omp_set_num_threads(threads);
@@ -1607,7 +1607,7 @@ public:
 		}
 
 		// Pre-cache things to allow for much faster evals
-		prepareEvalMixed();
+		prepareEvalFast();
 		#pragma omp parallel for
 		for (int i=0; i<maxVariables; i++) {
 			gradient[i].prepareEvalFast();
@@ -1616,14 +1616,26 @@ public:
 			}
 		}
 
-		// Random starting x
+		// Check a bunch of random xs to see which is the best
 		Eigen::VectorXd x = maxMag*Eigen::VectorXd::Random(maxVariables);
+		double bestVal = evalFast(x);
+		#pragma omp parallel for
+		for (int i=0; i<1000; i++) {
+			Eigen::VectorXd testX = maxMag*Eigen::VectorXd::Random(maxVariables);
+			double *xFast = testX.data();
+			double val = evalFast(xFast);
+			if (val < bestVal) {
+				bestVal = val;
+				x = testX;
+			}
+		}
 
 		// Perform gradient descent using this info
 		Eigen::MatrixXd inv(maxVariables, maxVariables);
 		Eigen::VectorXd p(maxVariables);
 		Eigen::MatrixXd H(maxVariables, maxVariables);
 		Eigen::VectorXd g(maxVariables);
+		Eigen::VectorXd bestX(maxVariables);
 		double maxX = 0;
 		int iter = 0;
 		double minVal = 1e10;
@@ -1633,10 +1645,13 @@ public:
 		while (iter < maxIters || maxIters < 0) {
 			iter++;
 
+			// Convert x to a C++ array for faster eval performance
+			double *xFast = x.data();
+
 			// Calculate the gradient
 			#pragma omp parallel for
 			for (int i=0; i<maxVariables; i++) {
-				g(i) = gradient[i].evalFast(x);
+				g(i) = gradient[i].evalFast(xFast);
 			}
 			prevNorm = norm;
 			norm = std::abs(g.norm());
@@ -1645,45 +1660,58 @@ public:
 			#pragma omp parallel for
 			for (int i=0; i<maxVariables; i++) {
 				for (int j=i; j<maxVariables; j++) {
-					H(i,j) = hessian[i][j].evalFast(x);
+					H(i,j) = hessian[i][j].evalFast(xFast);
 					H(j,i) = H(i,j);
 				}
 			}
 
+			// Add some diagonal for a bit of numerical stability
+			double toAdd = stabilityTerm;
+			if (norm > 1e50) {
+				toAdd = 1;
+			} else if (norm > 1e20) {
+				toAdd = 0.01;
+			}
+			for (int i=0; i<maxVariables; i++) {
+				H(i,i) += toAdd;
+			}
+
 			// Determine the direction TODO
 			//p = -H.colPivHouseholderQr().solve(g);
-			p = -H.fullPivHouseholderQr().solve(g);
+			//p = -H.fullPivHouseholderQr().solve(g);
 			//p = -H.fullPivLu().solve(g);
+			p = -H.partialPivLu().solve(g);
+			//p = -H.bdcSvd<Eigen::ComputeThinU | Eigen::ComputeThinV>().solve(g)
 			//p = -H.ldlt().solve(g);
 			//p = -H.llt().solve(g);
 
+			double err = (H*(-p) - g).norm();
+
 			// Jump if we're stalling a bit
-			if (iter % 1000 == 0 || p.norm() <= 1e-13 || std::abs(x(zeroInd)) < 1e-80) {
-				x = maxMag*Eigen::VectorXd::Random(maxVariables);
-			}
-
-			//if (norm < 1e-2) {
-				//alpha = 0.2;
+			//if (p.norm() <= 1e-10 || std::abs(x(zeroInd)) < 1e-80 || std::abs(x(zeroInd)) > 1e3) {
+				//x = maxMag*Eigen::VectorXd::Random(maxVariables);
 			//}
-			//alpha = std::max(0.1, std::min(0.8*std::log(norm+0.5)+0.6, 0.9));
-			//alpha = std::abs(-1.0/std::log(norm));
-			//alpha = std::max(0.1, std::min(alpha, 0.9));
 
-			//double bestAlpha = alpha;
-			//double bestVal = norm;
-			//for (int i=0; i<10; i++) {
-
+			//if (norm < 1e-3) {
+				//alpha = 0.01;
+			//} else {
+				//alpha = alphaOG;
 			//}
 
 			// Perform the update
 			x += alpha*p;
 
+			// Keep track of the best we've found
+			if (norm < minVal) {
+				minVal = norm;
+				bestX = x;
+			}
+
 			// Per-iteration output
-			minVal = std::min(norm, minVal);
 			if (verbosity >= 2) {
-				std::cout << iter << " " << norm << " " << minVal << " " << alpha << "\n" << std::flush;
+				std::cout << iter << " " << norm << " " << minVal << " " << x(zeroInd) << " " << err << "\n" << std::flush;
 			} else if (verbosity >= 1) {
-				std::cout << iter << " " << norm << " " << minVal << "          \r" << std::flush;
+				std::cout << iter << " " << norm << " " << minVal << " " << x(zeroInd) << " " << err << "          \r" << std::flush;
 			}
 
 			// Convergence criteria
@@ -1692,10 +1720,13 @@ public:
 			}
 
 		}
+		x = bestX;
 
-		std::cout << "x: " << x.transpose() << std::endl;
-		std::cout << "grad: " << g.transpose() << std::endl;
-		std::cout << "min eigen: " << H.eigenvalues()[0] << std::endl;
+		// If asking for everything
+		if (verbosity >= 2) {
+			std::cout << "x: " << x.transpose() << std::endl;
+			std::cout << "grad: " << g.transpose() << std::endl;
+		}
 
 		// Stop the timer and report
 		std::cout << std::defaultfloat;
@@ -2307,7 +2338,7 @@ public:
 								secondLoc = monoms.size();
 								monoms.push_back(secondString);
 								monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, 1, secondString));
-								monomsAsPolys[monomsAsPolys.size()-1].prepareEvalMixed();
+								monomsAsPolys[monomsAsPolys.size()-1].prepareEvalFast();
 							}
 
 							// If it's new, add it
@@ -2391,7 +2422,7 @@ public:
 											if (loc == monoms.end()) {
 												monoms.push_back(monStrings[k]);
 												monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, 1, monStrings[k]));
-												monomsAsPolys[monomsAsPolys.size()-1].prepareEvalMixed();
+												monomsAsPolys[monomsAsPolys.size()-1].prepareEvalFast();
 												monLocs[k] = monoms.size()-1;
 											} else {
 												monLocs[k] = loc - monoms.begin();
@@ -2438,7 +2469,7 @@ public:
 								if (loc == monoms.end()) {
 									monoms.push_back(monStrings[k]);
 									monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, 1, monStrings[k]));
-									monomsAsPolys[monomsAsPolys.size()-1].prepareEvalMixed();
+									monomsAsPolys[monomsAsPolys.size()-1].prepareEvalFast();
 									monLocs[k] = monoms.size()-1;
 								} else {
 									monLocs[k] = loc - monoms.begin();
@@ -2518,7 +2549,7 @@ public:
 		std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
 		for (int i=0; i<monoms.size(); i++) {
 			monomsAsPolys[i] = Polynomial<polyType>(maxVariables, 1, monoms[i]);
-			monomsAsPolys[i].prepareEvalMixed();
+			monomsAsPolys[i].prepareEvalFast();
 		}
 
 		// Create the mapping from monomials to indices (to linearize)
@@ -2813,7 +2844,7 @@ public:
 		//std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
 		//for (int i=0; i<monoms.size(); i++) {
 			//monomsAsPolys[i] = Polynomial<polyType>(maxVariables, 1, monoms[i]);
-			//monomsAsPolys[i].prepareEvalMixed();
+			//monomsAsPolys[i].prepareEvalFast();
 		//}
 
 		//// Create the mapping from monomials to indices (to linearize)
@@ -3231,7 +3262,7 @@ public:
 				//for (int k=finalConMonoms.size()-1; k>=0; k--) {
 					//monoms.push_back(finalConMonoms[k]);
 					//monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, 1, finalConMonoms[k]));
-					//monomsAsPolys[monomsAsPolys.size()-1].prepareEvalMixed();
+					//monomsAsPolys[monomsAsPolys.size()-1].prepareEvalFast();
 					//n += 1;
 				//}
 
@@ -3554,7 +3585,7 @@ public:
 		std::vector<Polynomial<polyType>> monomsAsPolys(monoms.size());
 		for (int i=0; i<monoms.size(); i++) {
 			monomsAsPolys[i] = Polynomial<polyType>(maxVariables, 1, monoms[i]);
-			monomsAsPolys[i].prepareEvalMixed();
+			monomsAsPolys[i].prepareEvalFast();
 		}
 
 		// Create the mapping from monomials to indices (to linearize)
@@ -3653,7 +3684,7 @@ public:
 					//if (loc == monoms.end()) {
 						//monoms.push_back(newMons[k]);
 						//monomsAsPolys.push_back(Polynomial<polyType>(maxVariables, 1, newMons[k]));
-						//monomsAsPolys[monomsAsPolys.size()-1].prepareEvalMixed();
+						//monomsAsPolys[monomsAsPolys.size()-1].prepareEvalFast();
 						//std::string newInd = std::to_string(mapping.size());
 						//newInd.insert(0, digitsPerIndAfterLinear-newInd.size(), ' ');
 						//mapping[newMons[k]] = newInd;
@@ -4086,7 +4117,7 @@ public:
 	}
 
 	// Attempt find a feasible point of this problem
-	std::vector<polyType> findFeasibleEqualityPoint(int zeroInd=-1, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1) {
+	std::vector<polyType> findFeasibleEqualityPoint(int zeroInd=-1, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13) {
 
 		// Combine these to create a single polynomial
 		Polynomial<polyType> poly(maxVariables);
@@ -4100,8 +4131,8 @@ public:
 			zeroInd = poly.maxVariables-1;
 		}
 
-		// Find a root of this polynomial TODO
-		std::vector<polyType> x = poly.findRoot(zeroInd, alpha, tolerance, maxIters, threads, verbosity, maxMag);
+		// Find a root of this polynomial
+		std::vector<polyType> x = poly.findRoot(zeroInd, alpha, tolerance, maxIters, threads, verbosity, maxMag, stabilityTerm);
 		return x;
 		
 	}

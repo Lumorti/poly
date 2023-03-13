@@ -1,5 +1,5 @@
 CXX=g++
-CXXFLAGS=-Wfatal-errors -O3
+CXXFLAGS=-Wfatal-errors -O3 -march=native
 DEBUGFLAGS=-Wall -g -pg -Wfatal-errors
 LIBS=-I/usr/include/eigen3 -fopenmp
 LIBSCS=-L${SCSHOME}/lib/ -I${SCSHOME}/include/scs/ -lscsdir

@@ -14,6 +14,7 @@ int main(int argc, char ** argv) {
 	int numToSplit = 0;
 	int cores = 4;
 	double testParam = 43;
+	double stabilityTerm =1e-13;
 	float alpha = 0.9;
 	std::string solver = "mosek";
 	std::string level = "1f";
@@ -27,6 +28,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -i [int]    set max iterations (-1 for no limit)" << std::endl;
 			std::cout << " -t [dbl]    set the test parameter" << std::endl;
 			std::cout << " -a [dbl]    set the scaling for the feasible check" << std::endl;
+			std::cout << " -b [dbl]    set the stability term to be added to the Hessian" << std::endl;
 			std::cout << " -v [int]    set the verbosity level (0,1,2)" << std::endl;
 			std::cout << " -p [int]    set the number of vars to split initially" << std::endl;
 			std::cout << " -c [int]    set the number of cores to use" << std::endl;
@@ -49,6 +51,9 @@ int main(int argc, char ** argv) {
 			i++;
 		} else if (arg == "-t" && i+1 < argc) {
 			testParam = std::stod(argv[i+1]);
+			i++;
+		} else if (arg == "-b" && i+1 < argc) {
+			stabilityTerm = std::stod(argv[i+1]);
 			i++;
 		} else if (arg == "-a" && i+1 < argc) {
 			alpha = std::stod(argv[i+1]);
@@ -91,25 +96,108 @@ int main(int argc, char ** argv) {
 			dLimits.push_back({2, 1, 1, 1});
 		} else if (d == 3) {
 			dLimits.push_back({3, 1, 1, 1, 1});
-			//dLimits.push_back({3, 2, 1, 1, 1});
 		} else if (d == 4) {
 			dLimits.push_back({4, 2, 1, 1, 1, 1});
 		} else if (d == 5) {
+			dLimits.push_back({5, 2, 1, 1, 1, 1, 1});
 			dLimits.push_back({5, 2, 2, 1, 1, 1, 1});
+			dLimits.push_back({5, 3, 1, 1, 1, 1, 1});
 		} else if (d == 6) {
-			dLimits.push_back({6, 5, 3, 1}); 
+
+			//dLimits.push_back({6, 4, 3, 1}); 
+			//dLimits.push_back({6, 5, 2, 1}); 
+			//dLimits.push_back({6, 6, 1, 1}); 
+
+			dLimits.push_back({6, 3, 3, 3}); 
+			//dLimits.push_back({6, 4, 4, 1}); 
+			//dLimits.push_back({6, 5, 3, 1}); 
+			//dLimits.push_back({6, 6, 2, 1}); 
+
 		} else if (d == 7) {
+
+			dLimits.push_back({7, 2, 2, 2, 1, 1, 1, 1, 1});
+			dLimits.push_back({7, 3, 2, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({7, 3, 2, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({7, 4, 1, 1, 1, 1, 1, 1, 1});
+
 			dLimits.push_back({7, 2, 2, 2, 2, 1, 1, 1, 1});
+			dLimits.push_back({7, 3, 2, 2, 1, 1, 1, 1, 1});
+			dLimits.push_back({7, 3, 3, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({7, 4, 2, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({7, 5, 1, 1, 1, 1, 1, 1, 1});
+
 		} else if (d == 8) {
+
+			dLimits.push_back({8, 5, 1, 1, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({8, 4, 2, 1, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({8, 3, 2, 2, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({8, 2, 2, 2, 2, 1, 1, 1, 1, 1});
+
+			dLimits.push_back({8, 5, 2, 1, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({8, 4, 2, 2, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({8, 3, 2, 2, 2, 1, 1, 1, 1, 1});
 			dLimits.push_back({8, 2, 2, 2, 2, 2, 1, 1, 1, 1});
+
 		} else if (d == 9) {
+
+			dLimits.push_back({9, 5, 2, 1, 1, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({9, 4, 2, 2, 1, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({9, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({9, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1});
+
+			dLimits.push_back({9, 5, 2, 2, 1, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({9, 4, 2, 2, 2, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({9, 3, 2, 2, 2, 2, 1, 1, 1, 1, 1});
 			dLimits.push_back({9, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1});
+
 		} else if (d == 10) {
-			dLimits.push_back({10, 9, 3, 1});
+
+			//dLimits.push_back({10, 4, 4, 4});
+			//dLimits.push_back({10, 5, 4, 3});
+			//dLimits.push_back({10, 5, 5, 2});
+			//dLimits.push_back({10, 6, 5, 1});
+			//dLimits.push_back({10, 7, 4, 1});
+			//dLimits.push_back({10, 8, 3, 1});
+
+			//dLimits.push_back({10, 6, 5, 2});
+			//dLimits.push_back({10, 8, 4, 1});
+			//dLimits.push_back({10, 7, 5, 1});
+			//dLimits.push_back({10, 6, 6, 1});
+			//dLimits.push_back({10, 9, 3, 1});
+
+			//dLimits.push_back({10, 10, 3, 1});
+			//dLimits.push_back({10, 9, 4, 1});
+			//dLimits.push_back({10, 8, 5, 1});
+			//dLimits.push_back({10, 7, 6, 1});
+			//dLimits.push_back({10, 6, 6, 2});
+			//dLimits.push_back({10, 6, 5, 3});
+			//dLimits.push_back({10, 5, 5, 4});
+
+			dLimits.push_back({10, 5, 5, 5});
+			//dLimits.push_back({10, 10, 4, 1});
+			//dLimits.push_back({10, 7, 6, 1});
+			//dLimits.push_back({10, 6, 6, 2});
+			//dLimits.push_back({10, 6, 5, 3});
+
 		} else if (d == 11) {
+
+			//dLimits.push_back({11, 6, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+
+			dLimits.push_back({11, 7, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({11, 8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({11, 9, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({11, 10, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({11, 6, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({11, 5, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({11, 4, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({11, 3, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1});
 			dLimits.push_back({11, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1});
+
 		} else if (d == 12) {
-			dLimits.push_back({12, 11, 3, 1});
+			dLimits.push_back({12, 6, 6, 6});
+			dLimits.push_back({12, 7, 7, 7});
+			dLimits.push_back({12, 8, 8, 8});
+			dLimits.push_back({12, 9, 9, 9});
 		} else if (d == 13) {
 			dLimits.push_back({13, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1});
 		} else if (d == 14) {
@@ -131,33 +219,35 @@ int main(int argc, char ** argv) {
 	for (int i2=0; i2<dLimits.size(); i2++) {
 
 		// List the bases and the variables indices
-		std::cout << "---------------------" << std::endl;
-		std::cout << "Basis Indices:" << std::endl;
-		std::cout << "---------------------" << std::endl;
-		int nextInd = 0;
-		for (int i=0; i<n; i++) {
-			std::cout << std::endl;
-			for (int k=0; k<d; k++) {
-				std::cout << "{";
-				for (int m=0; m<d; m++) {
-					if (k < dLimits[i2][i]) {
-						if (m == 0 || i == 0 || (i == 1 && k == 0)) {
-							std::cout << "-" ;
-						} else {
-							std::cout << nextInd << "+i" << nextInd + conjDelta;
+		if (verbosity >= 2) {
+			std::cout << "---------------------" << std::endl;
+			std::cout << "Basis Indices:" << std::endl;
+			std::cout << "---------------------" << std::endl;
+			int nextInd = 0;
+			for (int i=0; i<n; i++) {
+				std::cout << std::endl;
+				for (int k=0; k<d; k++) {
+					std::cout << "{";
+					for (int m=0; m<d; m++) {
+						if (k < dLimits[i2][i]) {
+							if (m == 0 || i == 0 || (i == 1 && k == 0)) {
+								std::cout << "-" ;
+							} else {
+								std::cout << nextInd << "+i" << nextInd + conjDelta;
+							}
+							if (m < d-1) {
+								std::cout << ", ";
+							}
 						}
-						if (m < d-1) {
-							std::cout << ", ";
-						}
+						nextInd++;
 					}
-					nextInd++;
+					std::cout << "}";
+					if (k < d-1) {
+						std::cout << ", ";
+					}
 				}
-				std::cout << "}";
-				if (k < d-1) {
-					std::cout << ", ";
-				}
+				std::cout << std::endl << std::endl;
 			}
-			std::cout << std::endl << std::endl;
 		}
 
 		// The list of equations to fill
@@ -251,6 +341,8 @@ int main(int argc, char ** argv) {
 				}
 				extraEqn.addTerm(1.0/d);
 				extraEqn = std::conj(extraEqn)*extraEqn;
+
+				// There will be some squares which we can remove, since we know what they equal
 				for (auto const &pair: extraEqn.coeffs) {
 					if (pair.first.size() == 2*extraEqn.digitsPerInd && pair.first.substr(0, extraEqn.digitsPerInd) == pair.first.substr(extraEqn.digitsPerInd, extraEqn.digitsPerInd)) {
 						extraEqn.coeffs[pair.first] = 0.0;
@@ -370,23 +462,29 @@ int main(int argc, char ** argv) {
 
 		// Use as few indices as possible
 		std::unordered_map<int,int> reducedMap = prob.getMinimalMap();
-		std::cout << "---------------------" << std::endl;
-		std::cout << "Index Mapping: " << std::endl;
-		std::cout << "---------------------" << std::endl;
-		std::cout << std::endl;
-		std::cout << reducedMap << std::endl;
-		std::cout << std::endl;
 		prob = prob.replaceWithVariable(reducedMap);
-		std::cout << "---------------------" << std::endl;
-		std::cout << "Final Problem: " << std::endl;
-		std::cout << "---------------------" << std::endl;
-		std::cout << prob << std::endl;
-		std::cout << dLimits[i2] << " " << prob.maxVariables << std::endl;
+		if (verbosity >= 2) {
+			std::cout << "---------------------" << std::endl;
+			std::cout << "Index Mapping: " << std::endl;
+			std::cout << "---------------------" << std::endl;
+			std::cout << std::endl;
+			std::cout << reducedMap << std::endl;
+			std::cout << std::endl;
+			std::cout << "---------------------" << std::endl;
+			std::cout << "Final Problem: " << std::endl;
+			std::cout << "---------------------" << std::endl;
+			std::cout << prob << std::endl;
+		}
+		int numVectors = 0;
+		for (int i=0; i<n; i++) {
+			numVectors += dLimits[i2][i];
+		}
+		std::cout << dLimits[i2] << " vars: " << prob.maxVariables << ", vectors: " << numVectors << std::endl;
 
 		// If told to find a feasible point
 		if (task == "feasible") {
 			std::cout << std::scientific;
-			std::vector<double> x = prob.findFeasibleEqualityPoint(-1, alpha, 1e-12, maxIters, cores, verbosity, 1.0/std::sqrt(d));
+			std::vector<double> x = prob.findFeasibleEqualityPoint(-1, alpha, 1e-12, maxIters, cores, verbosity, 1.0/std::sqrt(d), stabilityTerm);
 			double maxVal = -1000;
 			for (int i=0; i<prob.conZero.size(); i++) {
 				maxVal = std::max(maxVal, std::abs(prob.conZero[i].eval(x)));
@@ -425,6 +523,11 @@ int main(int argc, char ** argv) {
 				prob.proveInfeasibleSCS(maxIters, level, 1.0/std::sqrt(d), fileName, verbosity, numToSplit);
 			}
 			
+		}
+
+		// Add a newline if we're trying multiple set sizes
+		if (i2 < dLimits.size()-1) {
+			std::cout << std::endl;
 		}
 
 	}
