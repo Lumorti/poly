@@ -1665,13 +1665,16 @@ public:
 				}
 			}
 
-			// Add some diagonal for a bit of numerical stability
+			// If we get to crazy gradients, change from accuracy to speed to recover faster
 			double toAdd = stabilityTerm;
-			if (norm > 1e50) {
-				toAdd = 1;
-			} else if (norm > 1e20) {
-				toAdd = 0.01;
+			if (norm > 1e10 || std::abs(x(zeroInd)) > 1e5) {
+				toAdd = 0.1;
 			}
+			if (norm > 1e50) {
+				Eigen::VectorXd x = maxMag*Eigen::VectorXd::Random(maxVariables);
+			}
+
+			// Add some diagonal for a bit of numerical stability
 			for (int i=0; i<maxVariables; i++) {
 				H(i,i) += toAdd;
 			}
@@ -1732,6 +1735,9 @@ public:
 		std::cout << std::defaultfloat;
 		auto end = std::chrono::steady_clock::now();
 		double timeTaken = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() / 1000.0;
+		if (verbosity == 1) {
+			std::cout << std::endl;
+		}
 		if (verbosity >= 1) {
 			std::cout << "finished in " << iter << " iterations (" << timeTaken << " seconds total)" << std::endl;
 		}

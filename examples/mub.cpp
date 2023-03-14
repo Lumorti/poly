@@ -14,7 +14,7 @@ int main(int argc, char ** argv) {
 	int numToSplit = 0;
 	int cores = 4;
 	double testParam = 43;
-	double stabilityTerm =1e-13;
+	double stabilityTerm = 1e-13;
 	float alpha = 0.9;
 	std::string solver = "mosek";
 	std::string level = "1f";
@@ -97,113 +97,51 @@ int main(int argc, char ** argv) {
 		} else if (d == 3) {
 			dLimits.push_back({3, 1, 1, 1, 1});
 		} else if (d == 4) {
+			//dLimits.push_back({4, 1, 1, 1, 1, 1});
 			dLimits.push_back({4, 2, 1, 1, 1, 1});
 		} else if (d == 5) {
-			dLimits.push_back({5, 2, 1, 1, 1, 1, 1});
-			dLimits.push_back({5, 2, 2, 1, 1, 1, 1});
+			//dLimits.push_back({5, 2, 1, 1, 1, 1, 1});
 			dLimits.push_back({5, 3, 1, 1, 1, 1, 1});
 		} else if (d == 6) {
-
-			//dLimits.push_back({6, 4, 3, 1}); 
-			//dLimits.push_back({6, 5, 2, 1}); 
-			//dLimits.push_back({6, 6, 1, 1}); 
-
+			//dLimits.push_back({6, 3, 3, 2}); 
 			dLimits.push_back({6, 3, 3, 3}); 
-			//dLimits.push_back({6, 4, 4, 1}); 
-			//dLimits.push_back({6, 5, 3, 1}); 
-			//dLimits.push_back({6, 6, 2, 1}); 
-
 		} else if (d == 7) {
-
-			dLimits.push_back({7, 2, 2, 2, 1, 1, 1, 1, 1});
-			dLimits.push_back({7, 3, 2, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({7, 3, 2, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({7, 4, 1, 1, 1, 1, 1, 1, 1});
-
-			dLimits.push_back({7, 2, 2, 2, 2, 1, 1, 1, 1});
-			dLimits.push_back({7, 3, 2, 2, 1, 1, 1, 1, 1});
-			dLimits.push_back({7, 3, 3, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({7, 4, 2, 1, 1, 1, 1, 1, 1});
+			//dLimits.push_back({7, 4, 1, 1, 1, 1, 1, 1, 1});
 			dLimits.push_back({7, 5, 1, 1, 1, 1, 1, 1, 1});
-
 		} else if (d == 8) {
-
-			dLimits.push_back({8, 5, 1, 1, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({8, 4, 2, 1, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({8, 3, 2, 2, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({8, 2, 2, 2, 2, 1, 1, 1, 1, 1});
-
-			dLimits.push_back({8, 5, 2, 1, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({8, 4, 2, 2, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({8, 3, 2, 2, 2, 1, 1, 1, 1, 1});
-			dLimits.push_back({8, 2, 2, 2, 2, 2, 1, 1, 1, 1});
-
+			//dLimits.push_back({8, 5, 1, 1, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({8, 6, 1, 1, 1, 1, 1, 1, 1, 1});
 		} else if (d == 9) {
-
-			dLimits.push_back({9, 5, 2, 1, 1, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({9, 4, 2, 2, 1, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({9, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({9, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1});
-
-			dLimits.push_back({9, 5, 2, 2, 1, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({9, 4, 2, 2, 2, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({9, 3, 2, 2, 2, 2, 1, 1, 1, 1, 1});
-			dLimits.push_back({9, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1});
-
+			//dLimits.push_back({9, 6, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({9, 7, 1, 1, 1, 1, 1, 1, 1, 1, 1});
 		} else if (d == 10) {
-
-			//dLimits.push_back({10, 4, 4, 4});
-			//dLimits.push_back({10, 5, 4, 3});
-			//dLimits.push_back({10, 5, 5, 2});
-			//dLimits.push_back({10, 6, 5, 1});
-			//dLimits.push_back({10, 7, 4, 1});
-			//dLimits.push_back({10, 8, 3, 1});
-
-			//dLimits.push_back({10, 6, 5, 2});
-			//dLimits.push_back({10, 8, 4, 1});
-			//dLimits.push_back({10, 7, 5, 1});
-			//dLimits.push_back({10, 6, 6, 1});
-			//dLimits.push_back({10, 9, 3, 1});
-
-			//dLimits.push_back({10, 10, 3, 1});
-			//dLimits.push_back({10, 9, 4, 1});
-			//dLimits.push_back({10, 8, 5, 1});
-			//dLimits.push_back({10, 7, 6, 1});
-			//dLimits.push_back({10, 6, 6, 2});
-			//dLimits.push_back({10, 6, 5, 3});
 			//dLimits.push_back({10, 5, 5, 4});
-
 			dLimits.push_back({10, 5, 5, 5});
-			//dLimits.push_back({10, 10, 4, 1});
-			//dLimits.push_back({10, 7, 6, 1});
-			//dLimits.push_back({10, 6, 6, 2});
-			//dLimits.push_back({10, 6, 5, 3});
-
 		} else if (d == 11) {
-
-			//dLimits.push_back({11, 6, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-
-			dLimits.push_back({11, 7, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({11, 8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+			//dLimits.push_back({11, 8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
 			dLimits.push_back({11, 9, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({11, 10, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({11, 6, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({11, 5, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({11, 4, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({11, 3, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({11, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1});
-
 		} else if (d == 12) {
+			//dLimits.push_back({12, 6, 6, 5});
 			dLimits.push_back({12, 6, 6, 6});
-			dLimits.push_back({12, 7, 7, 7});
-			dLimits.push_back({12, 8, 8, 8});
-			dLimits.push_back({12, 9, 9, 9});
 		} else if (d == 13) {
-			dLimits.push_back({13, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1});
+			//dLimits.push_back({13, 10, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({13, 11, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
 		} else if (d == 14) {
-			dLimits.push_back({14, 13, 3, 1});
+			//dLimits.push_back({14, 7, 7, 6});
+			dLimits.push_back({14, 7, 7, 7});
 		} else if (d == 15) {
-			dLimits.push_back({15, 14, 3, 1});
+			//dLimits.push_back({15, 7, 7, 7});
+			dLimits.push_back({15, 8, 7, 7});
+		} else if (d == 16) {
+			dLimits.push_back({16, 8, 8, 8});
+		} else if (d == 17) {
+			dLimits.push_back({17, 15, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+		} else if (d == 18) {
+			dLimits.push_back({18, 9, 9, 9});
+		} else if (d == 19) {
+			dLimits.push_back({19, 17, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+		} else if (d == 20) {
+			dLimits.push_back({20, 10, 10, 10});
 		} else {
 			dLimits.push_back(std::vector<int>(n, d));
 		}
