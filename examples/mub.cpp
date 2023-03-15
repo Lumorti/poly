@@ -259,7 +259,7 @@ int main(int argc, char ** argv) {
 				}
 
 				// All should have mag 1/sqrt(d) (since we're setting first basis to the comp)
-				for (int m=1; m<d; m++) {
+				for (int m=1; m<dLimits[i2][0]; m++) {
 					int var1 = i*d*d + k*d + m;
 					int var2 = var1 + conjDelta;
 					Polynomial<double> extraEqn(numVars);

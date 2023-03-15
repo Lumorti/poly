@@ -1,78 +1,53 @@
 #!/bin/bash
-iters=100000
+
+# Variables
 cores=8
-#./mub -f -c ${cores} -d 2 -n 3 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d2n3.log
-#./mub -f -c ${cores} -d 2 -n 4 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d2n4.log
-#./mub -f -c ${cores} -d 3 -n 3 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d3n3.log
-#./mub -f -c ${cores} -d 3 -n 4 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d3n4.log
-#./mub -f -c ${cores} -d 3 -n 5 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d3n5.log
-#./mub -f -c ${cores} -d 4 -n 2 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4n2.log
-#./mub -f -c ${cores} -d 4 -n 3 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4n3.log
-#./mub -f -c ${cores} -d 4 -n 4 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4n4.log
-#./mub -f -c ${cores} -d 4 -n 5 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4n5.log
-#./mub -f -c ${cores} -d 4 -n 6 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4n6.log
-#./mub -f -c ${cores} -d 5 -n 2 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d5n2.log
-#./mub -f -c ${cores} -d 5 -n 3 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d5n3.log
-#./mub -f -c ${cores} -d 5 -n 4 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d5n4.log
-#./mub -f -c ${cores} -d 5 -n 5 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d5n5.log
-#./mub -f -c ${cores} -d 5 -n 6 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d5n6.log
-#./mub -f -c ${cores} -d 5 -n 7 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d5n7.log
-#./mub -f -c ${cores} -d 6 -n 2 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d6n2.log
-#./mub -f -c ${cores} -d 6 -n 3 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d6n3.log
-#./mub -f -c ${cores} -d 6 -n 4 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d6n4.log
-#./mub -f -c ${cores} -d 10 -n 2 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d10n2.log
-#./mub -f -c ${cores} -d 10 -n 3 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d10n3.log
-#./mub -f -c ${cores} -d 10 -n 4 -v 2 -i ${iters} -a 0.3 -b 1e-13| tee data/d10n4.log
-#./mub -f -c ${cores} -d 12 -n 2 -v 2 -i ${iters} -a 0.9 -b 1e-13| tee data/d12n2.log
-#./mub -f -c ${cores} -d 12 -n 3 -v 2 -i ${iters} -a 0.9 -b 1e-13| tee data/d12n3.log
-#./mub -f -c ${cores} -d 12 -n 4 -v 2 -i ${iters} -a 0.9 -b 1e-13| tee data/d12n4.log
-#./mub -f -c ${cores} -d 14 -n 2 -v 2 -i ${iters} -a 0.9 -b 1e-13| tee data/d14n2.log
-#./mub -f -c ${cores} -d 14 -n 3 -v 2 -i ${iters} -a 0.9 -b 1e-13| tee data/d14n3.log
-#./mub -f -c ${cores} -d 14 -n 4 -v 2 -i ${iters} -a 0.5 -b 1e-13| tee data/d14n4.log
-#./mub -f -c ${cores} -d 15 -n 2 -v 2 -i ${iters} -a 0.9 -b 1e-13| tee data/d15n2.log
-#./mub -f -c ${cores} -d 15 -n 3 -v 2 -i ${iters} -a 0.9 -b 1e-13| tee data/d15n3.log
-#./mub -f -c ${cores} -d 15 -n 4 -v 2 -i ${iters} -a 0.3 -b 1e-13| tee data/d15n4.log
-./mub -f -c ${cores} -d 16 -n 2 -v 2 -i ${iters} -a 0.9 -b 1e-13| tee data/d16n2.log
-./mub -f -c ${cores} -d 16 -n 3 -v 2 -i ${iters} -a 0.9 -b 1e-13| tee data/d16n3.log
-./mub -f -c ${cores} -d 16 -n 4 -v 2 -i ${iters} -a 0.3 -b 1e-13| tee data/d16n4.log
-./mub -f -c ${cores} -d 18 -n 2 -v 2 -i ${iters} -a 0.9 -b 1e-13| tee data/d18n2.log
-./mub -f -c ${cores} -d 18 -n 3 -v 2 -i ${iters} -a 0.9 -b 1e-13| tee data/d18n3.log
-./mub -f -c ${cores} -d 18 -n 4 -v 2 -i ${iters} -a 0.3 -b 1e-13| tee data/d18n4.log
-#grep -H "finished in" data/d2n3.log
-#grep -H "finished in" data/d2n3.log
-#grep -H "finished in" data/d2n4.log
-#grep -H "finished in" data/d3n3.log
-#grep -H "finished in" data/d3n4.log
-#grep -H "finished in" data/d3n5.log
-#grep -H "finished in" data/d4n2.log
-#grep -H "finished in" data/d4n3.log
-#grep -H "finished in" data/d4n4.log
-#grep -H "finished in" data/d4n5.log
-#grep -H "finished in" data/d4n6.log
-#grep -H "finished in" data/d5n2.log
-#grep -H "finished in" data/d5n3.log
-#grep -H "finished in" data/d5n4.log
-#grep -H "finished in" data/d5n5.log
-#grep -H "finished in" data/d5n6.log
-#grep -H "finished in" data/d5n7.log
-#grep -H "finished in" data/d6n2.log
-#grep -H "finished in" data/d6n3.log
-#grep -H "finished in" data/d6n4.log
-#grep -H "finished in" data/d10n2.log
-#grep -H "finished in" data/d10n3.log
-#grep -H "finished in" data/d10n4.log
-#grep -H "finished in" data/d12n2.log
-#grep -H "finished in" data/d12n3.log
-#grep -H "finished in" data/d12n4.log
-#grep -H "finished in" data/d14n2.log
-#grep -H "finished in" data/d14n3.log
-#grep -H "finished in" data/d14n4.log
-#grep -H "finished in" data/d15n2.log
-#grep -H "finished in" data/d15n3.log
-#grep -H "finished in" data/d15n4.log
-grep -H "finished in" data/d16n2.log
-grep -H "finished in" data/d16n3.log
-grep -H "finished in" data/d16n4.log
-grep -H "finished in" data/d18n2.log
-grep -H "finished in" data/d18n3.log
-grep -H "finished in" data/d18n4.log
+iters=100000
+
+# User-specified arrays
+#prime_numbers=(2 3 4 5 7 8 9 11 13 17 19)
+#non_prime_numbers=(4 6 8 9 10 12 14 15 16 18 20)
+prime_numbers=(7 8 9 11 13 17 19)
+#non_prime_numbers=(4 6 8 9 10 12 14 15 16 18 20)
+
+# Function to run the command with given d and n_limit
+run_mub_command() {
+    local d=$1
+    local n_limit=$2
+
+    # Loop for n values
+    for ((n=2; n<=n_limit; n++)); do
+        ./mub -f -c ${cores} -d ${d} -n ${n} -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee "data/d${d}n${n}.log"
+    done
+}
+
+# Loop for prime numbers (and their powers)
+for d in "${prime_numbers[@]}"; do
+    n_limit=$((d + 2))
+    run_mub_command $d $n_limit
+done
+
+# Loop for non-prime numbers
+#for d in "${non_prime_numbers[@]}"; do
+    #n_limit=4
+    #run_mub_command $d $n_limit
+#done
+
+# Variables
+data_directory="data"
+
+# Function to display the line containing "iteration" from a log file
+display_iteration_line() {
+    local file=$1
+    grep "iteration" "$file"
+}
+
+# Main loop to read all log files in the data directory
+for file in "${data_directory}"/*; do
+    if [ -f "$file" ]; then
+        echo "File: $file"
+        display_iteration_line "$file"
+        echo
+    fi
+done
+
