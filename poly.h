@@ -1667,11 +1667,11 @@ public:
 
 			// If we get to crazy gradients, change from accuracy to speed to recover faster
 			double toAdd = stabilityTerm;
-			if (norm > 1e10 || std::abs(x(zeroInd)) > 1e5) {
-				toAdd = 0.1;
-			}
-			if (norm > 1e50) {
-				Eigen::VectorXd x = maxMag*Eigen::VectorXd::Random(maxVariables);
+			//if (norm > 1e10 || std::abs(x(zeroInd)) > 1e5) {
+				//toAdd = 0.1;
+			//}
+			if (norm > 1e30 || isnan(norm) || std::abs(x(zeroInd)) > 1e2) {
+				x = maxMag*Eigen::VectorXd::Random(maxVariables);
 			}
 
 			// Add some diagonal for a bit of numerical stability
@@ -1682,8 +1682,8 @@ public:
 			// Determine the direction TODO
 			//p = -H.colPivHouseholderQr().solve(g);
 			//p = -H.fullPivHouseholderQr().solve(g);
-			//p = -H.fullPivLu().solve(g);
 			p = -H.partialPivLu().solve(g);
+			//p = -H.fullPivLu().solve(g);
 			//p = -H.bdcSvd<Eigen::ComputeThinU | Eigen::ComputeThinV>().solve(g)
 			//p = -H.ldlt().solve(g);
 			//p = -H.llt().solve(g);
