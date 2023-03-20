@@ -1622,6 +1622,7 @@ public:
 		#pragma omp parallel for
 		for (int i=0; i<1000; i++) {
 			Eigen::VectorXd testX = maxMag*Eigen::VectorXd::Random(maxVariables);
+			testX(zeroInd) = 0;
 			double *xFast = testX.data();
 			double val = evalFast(xFast);
 			if (val < bestVal) {
@@ -1642,8 +1643,19 @@ public:
 		double norm = 1;
 		double prevNorm = norm;
 		double alphaOG = alpha;
+		bool fastMode = true;
 		while (iter < maxIters || maxIters < 0) {
 			iter++;
+
+			// Jump if we're stalling a bit
+			if (norm > 1e50 || isnan(norm) || std::abs(x(zeroInd)) > 1e5) {
+				//std::cout << std::endl;
+				//std::cout << x.maxCoeff() << std::endl;
+				//x = x.cwiseMax(-1).cwiseMin(1);
+				x = maxMag*Eigen::VectorXd::Random(maxVariables);
+				x(zeroInd) = 0;
+				alpha *= 0.8;
+			}
 
 			// Convert x to a C++ array for faster eval performance
 			double *xFast = x.data();
@@ -1670,9 +1682,6 @@ public:
 			//if (norm > 1e10 || std::abs(x(zeroInd)) > 1e5) {
 				//toAdd = 0.1;
 			//}
-			if (norm > 1e30 || isnan(norm) || std::abs(x(zeroInd)) > 1e2) {
-				x = maxMag*Eigen::VectorXd::Random(maxVariables);
-			}
 
 			// Add some diagonal for a bit of numerical stability
 			for (int i=0; i<maxVariables; i++) {
@@ -1688,12 +1697,15 @@ public:
 			//p = -H.ldlt().solve(g);
 			//p = -H.llt().solve(g);
 
-			double err = (H*(-p) - g).norm();
-
 			// Jump if we're stalling a bit
 			//if (p.norm() <= 1e-10 || std::abs(x(zeroInd)) < 1e-80 || std::abs(x(zeroInd)) > 1e3) {
 				//x = maxMag*Eigen::VectorXd::Random(maxVariables);
 			//}
+
+			//if (iter % 1000 == 0) {
+				//fastMode = !fastMode;
+				//alpha = fastMode ? 0.9 : 0.1;
+			//} 
 
 			//if (norm < 1e-3) {
 				//alpha = 0.01;
@@ -1712,9 +1724,9 @@ public:
 
 			// Per-iteration output
 			if (verbosity >= 2) {
-				std::cout << iter << " " << norm << " " << minVal << " " << x(zeroInd) << " " << err << "\n" << std::flush;
+				std::cout << iter << " " << norm << " " << minVal << " " << x(zeroInd) << " " << alpha << "\n" << std::flush;
 			} else if (verbosity >= 1) {
-				std::cout << iter << " " << norm << " " << minVal << " " << x(zeroInd) << " " << err << "          \r" << std::flush;
+				std::cout << iter << " " << norm << " " << minVal << " " << x(zeroInd) << " " << alpha << "          \r" << std::flush;
 			}
 
 			// Convergence criteria

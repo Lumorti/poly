@@ -25,7 +25,7 @@ run_mub_command() {
 # Function to display the line containing "iteration" from a log file
 display_iteration_line() {
     local file=$1
-    grep "iteration" "$file"
+    grep -H "iteration" "$file"
 }
 
 # Loop for prime numbers (and their powers)
@@ -43,9 +43,7 @@ display_iteration_line() {
 # Main loop to read all log files in the data directory
 for file in "${data_directory}"/*; do
     if [ -f "$file" ]; then
-        echo "File: $file"
         display_iteration_line "$file"
-        echo
     fi
 done
 
