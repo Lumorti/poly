@@ -1647,16 +1647,6 @@ public:
 		while (iter < maxIters || maxIters < 0) {
 			iter++;
 
-			// Jump if we're stalling a bit
-			if (norm > 1e50 || isnan(norm) || std::abs(x(zeroInd)) > 1e5) {
-				//std::cout << std::endl;
-				//std::cout << x.maxCoeff() << std::endl;
-				//x = x.cwiseMax(-1).cwiseMin(1);
-				x = maxMag*Eigen::VectorXd::Random(maxVariables);
-				x(zeroInd) = 0;
-				alpha *= 0.8;
-			}
-
 			// Convert x to a C++ array for faster eval performance
 			double *xFast = x.data();
 
@@ -1677,15 +1667,9 @@ public:
 				}
 			}
 
-			// If we get to crazy gradients, change from accuracy to speed to recover faster
-			double toAdd = stabilityTerm;
-			//if (norm > 1e10 || std::abs(x(zeroInd)) > 1e5) {
-				//toAdd = 0.1;
-			//}
-
 			// Add some diagonal for a bit of numerical stability
 			for (int i=0; i<maxVariables; i++) {
-				H(i,i) += toAdd;
+				H(i,i) += stabilityTerm;
 			}
 
 			// Determine the direction TODO
@@ -1693,25 +1677,8 @@ public:
 			//p = -H.fullPivHouseholderQr().solve(g);
 			p = -H.partialPivLu().solve(g);
 			//p = -H.fullPivLu().solve(g);
-			//p = -H.bdcSvd<Eigen::ComputeThinU | Eigen::ComputeThinV>().solve(g)
 			//p = -H.ldlt().solve(g);
 			//p = -H.llt().solve(g);
-
-			// Jump if we're stalling a bit
-			//if (p.norm() <= 1e-10 || std::abs(x(zeroInd)) < 1e-80 || std::abs(x(zeroInd)) > 1e3) {
-				//x = maxMag*Eigen::VectorXd::Random(maxVariables);
-			//}
-
-			//if (iter % 1000 == 0) {
-				//fastMode = !fastMode;
-				//alpha = fastMode ? 0.9 : 0.1;
-			//} 
-
-			//if (norm < 1e-3) {
-				//alpha = 0.01;
-			//} else {
-				//alpha = alphaOG;
-			//}
 
 			// Perform the update
 			x += alpha*p;
@@ -1732,6 +1699,11 @@ public:
 			// Convergence criteria
 			if (norm < tolerance) {
 				break;
+			}
+
+			// Jump if we're stalling a bit TODO
+			if (p.norm() <= 1e-10 || norm > 1e10 || isnan(norm) || std::abs(x(zeroInd)) > 1e5) {
+				x = maxMag*Eigen::VectorXd::Random(maxVariables);
 			}
 
 		}

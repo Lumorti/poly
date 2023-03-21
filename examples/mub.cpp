@@ -16,6 +16,9 @@ int main(int argc, char ** argv) {
 	double testParam = 43;
 	double stabilityTerm = 1e-13;
 	float alpha = 0.9;
+	bool firstIsComputational = true;
+	bool secondIsUniform = true;
+	bool firstElementIsOne = true;
 	std::string solver = "mosek";
 	std::string level = "1f";
 	std::string fileName = "";
@@ -33,6 +36,9 @@ int main(int argc, char ** argv) {
 			std::cout << " -p [int]    set the number of vars to split initially" << std::endl;
 			std::cout << " -c [int]    set the number of cores to use" << std::endl;
 			std::cout << " -o [str]    log points to a csv file" << std::endl;
+			std::cout << " -1          don't assume the first basis is the computational" << std::endl;
+			std::cout << " -2          don't assume the first vector of the second basis is uniform" << std::endl;
+			std::cout << " -3          don't assume the first element of each is one" << std::endl;
 			std::cout << " -s          use scs as the SDP solver insead of mosek" << std::endl;
 			std::cout << " -w          use whole bases, not partial" << std::endl;
 			std::cout << " -f          try to find a feasible point instead of proving infeasiblity" << std::endl;
@@ -74,6 +80,12 @@ int main(int argc, char ** argv) {
 			solver = "scs";
 		} else if (arg == "-w") {
 			useFull = true;
+		} else if (arg == "-1") {
+			firstIsComputational = false;
+		} else if (arg == "-2") {
+			secondIsUniform = false;
+		} else if (arg == "-3") {
+			firstElementIsOne = false;
 		} else if (arg == "-f") {
 			task = "feasible";
 		} else if (arg == "-i") {
@@ -103,26 +115,54 @@ int main(int argc, char ** argv) {
 			//dLimits.push_back({5, 2, 1, 1, 1, 1, 1});
 			dLimits.push_back({5, 3, 1, 1, 1, 1, 1});
 		} else if (d == 6) {
-			//dLimits.push_back({6, 3, 3, 2}); 
-			dLimits.push_back({6, 3, 3, 3}); 
+			//dLimits.push_back({4, 4, 3, 3});
+			//dLimits.push_back({4, 4, 4, 3});
+			//dLimits.push_back({4, 4, 4, 4});
+			dLimits.push_back({5, 5, 5, 5});
+			//dLimits.push_back({6, 3, 3, 3});
+			//dLimits.push_back({6, 6, 6, 6});
+			//dLimits.push_back({4, 4, 3, 3}); // 14
+			//dLimits.push_back({4, 4, 4, 3}); // 15
 		} else if (d == 7) {
-			//dLimits.push_back({7, 4, 1, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({7, 5, 1, 1, 1, 1, 1, 1, 1});
+
+			// 18
+			//dLimits.push_back({5, 4, 4, 1, 1, 1, 1, 1, 1});
+			//dLimits.push_back({5, 5, 3, 1, 1, 1, 1, 1, 1});
+			//dLimits.push_back({6, 5, 2, 1, 1, 1, 1, 1, 1});
+			//dLimits.push_back({7, 5, 1, 1, 1, 1, 1, 1, 1});
+
+			// 23
+			dLimits.push_back({3, 3, 3, 3, 3, 2, 2, 2, 2});
+			dLimits.push_back({4, 4, 4, 4, 3, 1, 1, 1, 1});
+			dLimits.push_back({5, 4, 4, 3, 3, 1, 1, 1, 1});
+			dLimits.push_back({6, 4, 3, 3, 3, 1, 1, 1, 1});
+			dLimits.push_back({6, 4, 4, 3, 2, 1, 1, 1, 1});
+
+			// 24
+			dLimits.push_back({4, 4, 4, 4, 4, 1, 1, 1, 1});
+			dLimits.push_back({5, 4, 4, 4, 3, 1, 1, 1, 1});
+			dLimits.push_back({6, 4, 4, 3, 3, 1, 1, 1, 1});
+			dLimits.push_back({7, 4, 3, 3, 3, 1, 1, 1, 1});
+			dLimits.push_back({7, 4, 4, 3, 2, 1, 1, 1, 1});
+
 		} else if (d == 8) {
 			//dLimits.push_back({8, 5, 1, 1, 1, 1, 1, 1, 1, 1});
 			dLimits.push_back({8, 6, 1, 1, 1, 1, 1, 1, 1, 1});
 		} else if (d == 9) {
-			//dLimits.push_back({9, 6, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({9, 7, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+			dLimits.push_back({3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2});
 		} else if (d == 10) {
-			//dLimits.push_back({10, 5, 5, 4});
-			dLimits.push_back({10, 5, 5, 5});
+			dLimits.push_back({10, 5, 5, 4}); // 24
+			dLimits.push_back({6, 6, 6, 6}); // 24
+			dLimits.push_back({7, 6, 6, 6}); // 25
+			dLimits.push_back({10, 5, 5, 5}); // 25
 		} else if (d == 11) {
 			//dLimits.push_back({11, 8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
 			dLimits.push_back({11, 9, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
 		} else if (d == 12) {
-			//dLimits.push_back({12, 6, 6, 5});
-			dLimits.push_back({12, 6, 6, 6});
+			//dLimits.push_back({12, 6, 6, 5}); // 29
+			dLimits.push_back({8, 7, 7, 7}); // 29
+			dLimits.push_back({8, 8, 7, 7}); // 30
+			//dLimits.push_back({12, 6, 6, 6}); // 30
 		} else if (d == 13) {
 			//dLimits.push_back({13, 10, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
 			dLimits.push_back({13, 11, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
@@ -131,9 +171,9 @@ int main(int argc, char ** argv) {
 			dLimits.push_back({14, 7, 7, 7});
 		} else if (d == 15) {
 			//dLimits.push_back({15, 7, 7, 7});
-			dLimits.push_back({15, 8, 7, 7});
+			dLimits.push_back({10, 10, 10, 7});
 		} else if (d == 16) {
-			dLimits.push_back({16, 8, 8, 8});
+			dLimits.push_back({16, 14, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
 		} else if (d == 17) {
 			dLimits.push_back({17, 15, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
 		} else if (d == 18) {
@@ -153,6 +193,154 @@ int main(int argc, char ** argv) {
 
 	}
 
+	for (int i2=0; i2<dLimits.size(); i2++) {
+
+		// TODO seesaw between PSD matrix and mag cons
+		std::vector<int> setSizes = dLimits[i2];
+		int numVectorsTotal = 0;
+		for (int i=0; i<n; i++) {
+			numVectorsTotal += setSizes[i];
+		}
+		std::cout << setSizes << " " << numVectorsTotal << std::endl;
+
+		Eigen::MatrixXcd X = Eigen::MatrixXcd::Random(numVectorsTotal, numVectorsTotal);
+		Eigen::MatrixXd idealMags = Eigen::MatrixXd::Constant(numVectorsTotal, numVectorsTotal, 1.0/std::sqrt(d));
+		int deltaInd = 0;
+		for (int i=0; i<n; i++) {
+			for (int j=0; j<setSizes[i]; j++) {
+				for (int k=0; k<setSizes[i]; k++) {
+					if (j == k) {
+						idealMags(j+deltaInd, k+deltaInd) = 1;
+					} else {
+						idealMags(j+deltaInd, k+deltaInd) = 0;
+					}
+				}
+			}
+			deltaInd += setSizes[i];
+		}
+
+		double prevDelta = -1000;
+		double lowestError = 10000;
+		for (int i=0; i<1000000; i++) {
+
+			// Perform eigenvalue decomposition
+			Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> es(X);
+			Eigen::MatrixXcd eigenvectors = es.eigenvectors();
+			Eigen::VectorXcd eigenvalues = es.eigenvalues();
+			double minEigen = eigenvalues[0].real();
+
+			// Set negative eigenvalues to zero
+			int rank = 0;
+			for (int j=0; j<eigenvalues.size(); j++) {
+				eigenvalues(j) = std::max(eigenvalues(j).real(), 0.0);
+				if (rank >= d) {
+					eigenvalues(j) = 0.0;
+				} else if (eigenvalues(j).real() > 1e-10) {
+					rank++;
+				}
+
+			}
+
+			// Reconstruct the semidefinite matrix
+			X = eigenvectors * eigenvalues.asDiagonal() * eigenvectors.adjoint();
+
+			// Check for convergence 
+			double error = (X.cwiseAbs() - idealMags).norm();
+			lowestError = std::min(error, lowestError);
+			if (verbosity >= 2) {
+				std::cout << i << " " << error << " " << rank << "         \n" << std::flush;
+			} else {
+				std::cout << i << " " << error << " " << rank << "         \r" << std::flush;
+			}
+			if (error < 1e-13) {
+				break;
+			}
+
+			// Correct all the magnitudes
+			Eigen::MatrixXcd XCopy = X;
+			for (int j=0; j<X.rows(); j++) {
+				for (int k=j; k<X.cols(); k++) {
+					double angle = std::arg(X(j, k));
+					X(j, k) = std::polar(idealMags(j, k), angle);
+					X(k, j) = std::polar(idealMags(j, k), -angle);
+				}
+			}
+
+			// Check for stalling 
+			double delta = (X-XCopy).norm();
+			if (std::abs((delta - prevDelta) / delta) < 1e-5) {
+				X = Eigen::MatrixXcd::Random(numVectorsTotal, numVectorsTotal);
+			}
+			prevDelta = delta;
+
+		}
+		std::cout << std::endl;
+		std::cout << std::endl;
+		if (verbosity >= 2) {
+			std::cout << X << std::endl;
+			std::cout << std::endl;
+			std::cout << X.cwiseAbs() << std::endl;
+			std::cout << std::endl;
+		}
+
+		if (n == 4 && setSizes[3] == 5) {
+
+			// Perform SVD on G.
+			Eigen::JacobiSVD<Eigen::MatrixXcd> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
+
+			Eigen::VectorXcd S = svd.singularValues();
+
+			// Define the dimensionality of the reduced space.
+			int reducedDimension = 6;
+			Eigen::MatrixXcd U_reduced = svd.matrixU().leftCols(reducedDimension);
+			Eigen::VectorXcd S_reduced = S.head(reducedDimension);
+			Eigen::MatrixXcd lowerDimVectors = U_reduced * S_reduced.asDiagonal();
+
+			std::cout << std::endl;
+			std::cout << S << std::endl;
+			std::cout << std::endl;
+
+			std::cout << std::endl;
+			std::cout << lowerDimVectors*lowerDimVectors.transpose() << std::endl;
+			std::cout << std::endl;
+
+			// Print the lower-dimensional vectors.
+			for (int i=0; i<lowerDimVectors.rows(); i++) {
+				std::cout << "Vector " << i+1 << ": " << lowerDimVectors.row(i) << std::endl;
+			}
+
+
+			//Eigen::LLT<Eigen::MatrixXcd> llt(X);
+
+			//Eigen::MatrixXcd L = llt.matrixL();
+
+			//for (int k=0; k<L.cols(); k++) {
+				//std::cout << L.col(k).transpose() << std::endl;
+			//}
+			//std::cout << L << std::endl;
+
+			//Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> es(X);
+			//Eigen::VectorXcd eigenvalues = es.eigenvalues();
+			//double minEigen = eigenvalues[0].real();
+			//std::cout << minEigen << std::endl;
+
+			//std::cout << std::endl;
+			//std::cout << std::endl;
+
+			//Eigen::MatrixXcd mags = Eigen::MatrixXcd::Constant(numVectorsTotal, numVectorsTotal, 0.0);
+			//for (int k=0; k<L.cols(); k++) {
+				//for (int l=0; l<L.cols(); l++) {
+					//mags(k,l) = L.col(k).conj().dot(L.col(l));
+				//}
+			//}
+			//std::cout << mags << std::endl;
+
+		}
+
+	}
+
+	return 0;
+
 	// For each different restriction
 	for (int i2=0; i2<dLimits.size(); i2++) {
 
@@ -168,7 +356,7 @@ int main(int argc, char ** argv) {
 					std::cout << "{";
 					for (int m=0; m<d; m++) {
 						if (k < dLimits[i2][i]) {
-							if (m == 0 || i == 0 || (i == 1 && k == 0)) {
+							if ((m == 0 && firstElementIsOne) || (i == 0 && firstIsComputational) || (secondIsUniform && i == 1 && k == 0)) {
 								std::cout << "-" ;
 							} else {
 								std::cout << nextInd << "+i" << nextInd + conjDelta;
@@ -191,13 +379,19 @@ int main(int argc, char ** argv) {
 		// The list of equations to fill
 		std::vector<Polynomial<double>> eqns;
 
+		// If the first basis is computational, don't do normal equations
+		int startBasis = 0;
+		if (firstIsComputational) {
+			startBasis = 1;
+		}
+
 		// Generate equations, here iterating over all the vectors
 		int newVarInd = 2*numVarsNonConj;
-		for (int i=1; i<n; i++) {
+		for (int i=startBasis; i<n; i++) {
 			for (int k=0; k<dLimits[i2][i]; k++) {
 
 				// We assume the first vector of the second basis is uniform, so skip it
-				if (i == 1 && k == 0) {
+				if (secondIsUniform && i == 1 && k == 0) {
 					continue;
 				}
 
@@ -210,9 +404,16 @@ int main(int argc, char ** argv) {
 							continue;
 						}
 
-						// (a+ib)*(c-id)
+						// If we're assuming that the first element of each vector is 1
 						Polynomial<std::complex<double>> eqn(numVars);
-						for (int m=1; m<d; m++) {
+						int startInd = 0;
+						if (firstElementIsOne) {
+							startInd = 1;
+							eqn.addTerm(1.0/d);
+						}
+
+						// (a+ib)*(c-id)
+						for (int m=startInd; m<d; m++) {
 							int var1 = i*d*d + k*d + m;
 							int var2 = j*d*d + l*d + m;
 							int var3 = var1 + conjDelta;
@@ -222,9 +423,6 @@ int main(int argc, char ** argv) {
 							eqn.addTerm(1i, {var1, var4});
 							eqn.addTerm(-1i, {var2, var3});
 						}
-
-						// Assuming the first element of both is 1/sqrt(d)
-						eqn.addTerm(1.0/d);
 
 						// For the MUB-ness equations
 						if (i != j) {
@@ -259,36 +457,39 @@ int main(int argc, char ** argv) {
 				}
 
 				// All should have mag 1/sqrt(d) (since we're setting first basis to the comp)
-				for (int m=1; m<dLimits[i2][0]; m++) {
-					int var1 = i*d*d + k*d + m;
-					int var2 = var1 + conjDelta;
-					Polynomial<double> extraEqn(numVars);
-					extraEqn.addTerm(1, {var1,var1});
-					extraEqn.addTerm(1, {var2,var2});
-					extraEqn.addTerm(-1.0/d, {});
-					eqns.push_back(extraEqn);
+				if (firstIsComputational) {
+					int startInd = 0;
+					if (firstElementIsOne) {
+						startInd = 1;
+					}
+					for (int m=startInd; m<dLimits[i2][0]; m++) {
+						int var1 = i*d*d + k*d + m;
+						int var2 = var1 + conjDelta;
+						Polynomial<double> extraEqn(numVars);
+						extraEqn.addTerm(1, {var1,var1});
+						extraEqn.addTerm(1, {var2,var2});
+						extraEqn.addTerm(-1.0/d, {});
+						eqns.push_back(extraEqn);
+					}
 				}
 
 				// Vs the uniform vector (e.g. |1/sqrt(d) * sum of basis| = 1/sqrt(d))
-				Polynomial<std::complex<double>> extraEqn(numVars);
-				for (int m=1; m<d; m++) {
-					int var1 = i*d*d + k*d + m;
-					int var2 = var1 + conjDelta;
-					extraEqn.addTerm(1/std::sqrt(d), {var1});
-					extraEqn.addTerm(1i/std::sqrt(d), {var2});
-				}
-				extraEqn.addTerm(1.0/d);
-				extraEqn = std::conj(extraEqn)*extraEqn;
-
-				// There will be some squares which we can remove, since we know what they equal
-				for (auto const &pair: extraEqn.coeffs) {
-					if (pair.first.size() == 2*extraEqn.digitsPerInd && pair.first.substr(0, extraEqn.digitsPerInd) == pair.first.substr(extraEqn.digitsPerInd, extraEqn.digitsPerInd)) {
-						extraEqn.coeffs[pair.first] = 0.0;
-						extraEqn.addTerm(0.5/(d*d));
+				if (secondIsUniform) {
+					Polynomial<std::complex<double>> extraEqn(numVars);
+					int startInd = 0;
+					if (firstElementIsOne) {
+						extraEqn.addTerm(1.0/d);
+						startInd = 1;
 					}
+					for (int m=startInd; m<d; m++) {
+						int var1 = i*d*d + k*d + m;
+						int var2 = var1 + conjDelta;
+						extraEqn.addTerm(1/std::sqrt(d), {var1});
+						extraEqn.addTerm(1i/std::sqrt(d), {var2});
+					}
+					extraEqn = std::conj(extraEqn)*extraEqn;
+					eqns.push_back(std::real<double>(extraEqn));
 				}
-				extraEqn.addTerm(-1.0/d);
-				eqns.push_back(std::real<double>(extraEqn));
 
 			}
 		}

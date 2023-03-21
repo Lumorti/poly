@@ -3,22 +3,20 @@
 # Variables
 cores=8
 iters=100000
+a=0.9
+b=1e-15
 
 # User-specified arrays
 #prime_numbers=(2 3 4 5 7 8 9 11 13 16 17 19)
-#non_prime_numbers=(4 6 8 9 10 12 14 15 18 20)
-prime_numbers=(7 8 9 11 13 17 19)
-#non_prime_numbers=(4 6 8 9 10 12 14 15 16 18 20)
+#non_prime_numbers=(6 10 12 14 15 18 20)
 data_directory="data"
 
 # Function to run the command with given d and n_limit
 run_mub_command() {
     local d=$1
     local n_limit=$2
-
-    # Loop for n values
     for ((n=2; n<=n_limit; n++)); do
-        ./mub -f -c ${cores} -d ${d} -n ${n} -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee "data/d${d}n${n}.log"
+        ./mub -f -c ${cores} -d ${d} -n ${n} -v 2 -i ${iters} -a ${a} -b ${b} | tee "data/d${d}n${n}.log"
     done
 }
 
