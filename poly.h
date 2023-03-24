@@ -1702,7 +1702,7 @@ public:
 			}
 
 			// Jump if we're stalling a bit TODO
-			if (p.norm() <= 1e-10 || norm > 1e10 || isnan(norm) || std::abs(x(zeroInd)) > 1e5) {
+			if (p.norm() <= 1e-10 || norm > 1e20 || isnan(norm) || std::abs(x(zeroInd)) > 1e5) {
 				x = maxMag*Eigen::VectorXd::Random(maxVariables);
 			}
 

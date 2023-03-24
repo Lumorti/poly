@@ -13,7 +13,6 @@ int main(int argc, char ** argv) {
 	int verbosity = 1;
 	int numToSplit = 0;
 	int cores = 4;
-	double testParam = 43;
 	double stabilityTerm = 1e-13;
 	float alpha = 0.9;
 	bool firstIsComputational = true;
@@ -54,9 +53,6 @@ int main(int argc, char ** argv) {
 			i++;
 		} else if (arg == "-p" && i+1 < argc) {
 			numToSplit = std::stoi(argv[i+1]);
-			i++;
-		} else if (arg == "-t" && i+1 < argc) {
-			testParam = std::stod(argv[i+1]);
 			i++;
 		} else if (arg == "-b" && i+1 < argc) {
 			stabilityTerm = std::stod(argv[i+1]);
@@ -105,67 +101,126 @@ int main(int argc, char ** argv) {
 		dLimits.push_back(std::vector<int>(n, d));
 	} else {
 		if (d == 2) {
-			dLimits.push_back({2, 1, 1, 1});
+
+			// 4
+			dLimits.push_back({1, 1, 1, 1});
+
+			// 5
+			//dLimits.push_back({2, 1, 1, 1});
+
 		} else if (d == 3) {
-			dLimits.push_back({3, 1, 1, 1, 1});
+
+			// 6
+			//dLimits.push_back({2, 1, 1, 1, 1});
+
+			// 7 TODO
+			dLimits.push_back({2, 2, 1, 1, 1});
+			//dLimits.push_back({3, 1, 1, 1, 1});
+
 		} else if (d == 4) {
+
+			// 9
+			//dLimits.push_back({2, 2, 2, 1, 1, 1});
 			//dLimits.push_back({4, 1, 1, 1, 1, 1});
-			dLimits.push_back({4, 2, 1, 1, 1, 1});
+
+			// 10
+			dLimits.push_back({2, 2, 2, 2, 1, 1});
+			//dLimits.push_back({4, 2, 1, 1, 1, 1});
+
 		} else if (d == 5) {
+
+			// 12
+			//dLimits.push_back({2, 2, 2, 2, 2, 1, 1});
 			//dLimits.push_back({5, 2, 1, 1, 1, 1, 1});
-			dLimits.push_back({5, 3, 1, 1, 1, 1, 1});
+
+			// 13
+			dLimits.push_back({2, 2, 2, 2, 2, 2, 1});
+			//dLimits.push_back({5, 3, 1, 1, 1, 1, 1});
+
 		} else if (d == 6) {
+
+			// 14
 			//dLimits.push_back({4, 4, 3, 3});
-			//dLimits.push_back({4, 4, 4, 3});
-			//dLimits.push_back({4, 4, 4, 4});
-			dLimits.push_back({5, 5, 5, 5});
-			//dLimits.push_back({6, 3, 3, 3});
-			//dLimits.push_back({6, 6, 6, 6});
-			//dLimits.push_back({4, 4, 3, 3}); // 14
-			//dLimits.push_back({4, 4, 4, 3}); // 15
+			//dLimits.push_back({6, 5, 2, 1});
+			//dLimits.push_back({6, 6, 1, 1});
+			
+			// 15
+			dLimits.push_back({4, 4, 4, 3});
+			//dLimits.push_back({6, 5, 3, 1});
+			//dLimits.push_back({6, 6, 2, 1});
+
 		} else if (d == 7) {
 
 			// 18
-			//dLimits.push_back({5, 4, 4, 1, 1, 1, 1, 1, 1});
-			//dLimits.push_back({5, 5, 3, 1, 1, 1, 1, 1, 1});
-			//dLimits.push_back({6, 5, 2, 1, 1, 1, 1, 1, 1});
+			//dLimits.push_back({2, 2, 2, 2, 2, 2, 2, 2, 2});
+			//dLimits.push_back({7, 4, 1, 1, 1, 1, 1, 1, 1});
+
+			// 19
+			//dLimits.push_back({3, 2, 2, 2, 2, 2, 2, 2, 2});
 			//dLimits.push_back({7, 5, 1, 1, 1, 1, 1, 1, 1});
 
-			// 23
-			dLimits.push_back({3, 3, 3, 3, 3, 2, 2, 2, 2});
-			dLimits.push_back({4, 4, 4, 4, 3, 1, 1, 1, 1});
-			dLimits.push_back({5, 4, 4, 3, 3, 1, 1, 1, 1});
-			dLimits.push_back({6, 4, 3, 3, 3, 1, 1, 1, 1});
-			dLimits.push_back({6, 4, 4, 3, 2, 1, 1, 1, 1});
+		} else if (d == 8) {
+
+			// 21
+			//dLimits.push_back({3, 2, 2, 2, 2, 2, 2, 2, 2, 2});
+			//dLimits.push_back({8, 5, 1, 1, 1, 1, 1, 1, 1, 1});
+
+			// 22
+			dLimits.push_back({3, 3, 2, 2, 2, 2, 2, 2, 2, 2});
+			//dLimits.push_back({8, 6, 1, 1, 1, 1, 1, 1, 1, 1});
+
+		} else if (d == 9) {
+
+			// 25 
+			//dLimits.push_back({3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2});
+			//dLimits.push_back({9, 7, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+
+			// 26
+			dLimits.push_back({3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2});
+			//dLimits.push_back({9, 8, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+
+		} else if (d == 10) {
 
 			// 24
-			dLimits.push_back({4, 4, 4, 4, 4, 1, 1, 1, 1});
-			dLimits.push_back({5, 4, 4, 4, 3, 1, 1, 1, 1});
-			dLimits.push_back({6, 4, 4, 3, 3, 1, 1, 1, 1});
-			dLimits.push_back({7, 4, 3, 3, 3, 1, 1, 1, 1});
-			dLimits.push_back({7, 4, 4, 3, 2, 1, 1, 1, 1});
+			//dLimits.push_back({6, 6, 6, 6});
+			//dLimits.push_back({10, 5, 5, 4});
+			//dLimits.push_back({10, 9, 4, 1});
 
-		} else if (d == 8) {
-			//dLimits.push_back({8, 5, 1, 1, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({8, 6, 1, 1, 1, 1, 1, 1, 1, 1});
-		} else if (d == 9) {
-			dLimits.push_back({3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2});
-		} else if (d == 10) {
-			dLimits.push_back({10, 5, 5, 4}); // 24
-			dLimits.push_back({6, 6, 6, 6}); // 24
-			dLimits.push_back({7, 6, 6, 6}); // 25
-			dLimits.push_back({10, 5, 5, 5}); // 25
+			// 25
+			//dLimits.push_back({7, 6, 6, 6});
+			dLimits.push_back({10, 5, 5, 5});
+			//dLimits.push_back({10, 9, 5, 1});
+
 		} else if (d == 11) {
+
+			// 30
+			//dLimits.push_back({3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2});
 			//dLimits.push_back({11, 8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-			dLimits.push_back({11, 9, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+
+			// 31
+			dLimits.push_back({3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2});
+			//dLimits.push_back({11, 9, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+
 		} else if (d == 12) {
-			//dLimits.push_back({12, 6, 6, 5}); // 29
-			dLimits.push_back({8, 7, 7, 7}); // 29
-			dLimits.push_back({8, 8, 7, 7}); // 30
-			//dLimits.push_back({12, 6, 6, 6}); // 30
+
+			// 29
+			//dLimits.push_back({8, 7, 7, 7});
+			//dLimits.push_back({12, 6, 6, 5});
+			//dLimits.push_back({12, 11, 5, 1});
+
+			// 30
+			//dLimits.push_back({8, 8, 7, 7});
+			dLimits.push_back({12, 6, 6, 6});
+			//dLimits.push_back({12, 11, 6, 1});
+
 		} else if (d == 13) {
+
 			//dLimits.push_back({13, 10, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+
+			// 34
+			dLimits.push_back({3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2});
 			dLimits.push_back({13, 11, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+
 		} else if (d == 14) {
 			//dLimits.push_back({14, 7, 7, 6});
 			dLimits.push_back({14, 7, 7, 7});
@@ -192,154 +247,6 @@ int main(int argc, char ** argv) {
 		}
 
 	}
-
-	for (int i2=0; i2<dLimits.size(); i2++) {
-
-		// TODO seesaw between PSD matrix and mag cons
-		std::vector<int> setSizes = dLimits[i2];
-		int numVectorsTotal = 0;
-		for (int i=0; i<n; i++) {
-			numVectorsTotal += setSizes[i];
-		}
-		std::cout << setSizes << " " << numVectorsTotal << std::endl;
-
-		Eigen::MatrixXcd X = Eigen::MatrixXcd::Random(numVectorsTotal, numVectorsTotal);
-		Eigen::MatrixXd idealMags = Eigen::MatrixXd::Constant(numVectorsTotal, numVectorsTotal, 1.0/std::sqrt(d));
-		int deltaInd = 0;
-		for (int i=0; i<n; i++) {
-			for (int j=0; j<setSizes[i]; j++) {
-				for (int k=0; k<setSizes[i]; k++) {
-					if (j == k) {
-						idealMags(j+deltaInd, k+deltaInd) = 1;
-					} else {
-						idealMags(j+deltaInd, k+deltaInd) = 0;
-					}
-				}
-			}
-			deltaInd += setSizes[i];
-		}
-
-		double prevDelta = -1000;
-		double lowestError = 10000;
-		for (int i=0; i<1000000; i++) {
-
-			// Perform eigenvalue decomposition
-			Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> es(X);
-			Eigen::MatrixXcd eigenvectors = es.eigenvectors();
-			Eigen::VectorXcd eigenvalues = es.eigenvalues();
-			double minEigen = eigenvalues[0].real();
-
-			// Set negative eigenvalues to zero
-			int rank = 0;
-			for (int j=0; j<eigenvalues.size(); j++) {
-				eigenvalues(j) = std::max(eigenvalues(j).real(), 0.0);
-				if (rank >= d) {
-					eigenvalues(j) = 0.0;
-				} else if (eigenvalues(j).real() > 1e-10) {
-					rank++;
-				}
-
-			}
-
-			// Reconstruct the semidefinite matrix
-			X = eigenvectors * eigenvalues.asDiagonal() * eigenvectors.adjoint();
-
-			// Check for convergence 
-			double error = (X.cwiseAbs() - idealMags).norm();
-			lowestError = std::min(error, lowestError);
-			if (verbosity >= 2) {
-				std::cout << i << " " << error << " " << rank << "         \n" << std::flush;
-			} else {
-				std::cout << i << " " << error << " " << rank << "         \r" << std::flush;
-			}
-			if (error < 1e-13) {
-				break;
-			}
-
-			// Correct all the magnitudes
-			Eigen::MatrixXcd XCopy = X;
-			for (int j=0; j<X.rows(); j++) {
-				for (int k=j; k<X.cols(); k++) {
-					double angle = std::arg(X(j, k));
-					X(j, k) = std::polar(idealMags(j, k), angle);
-					X(k, j) = std::polar(idealMags(j, k), -angle);
-				}
-			}
-
-			// Check for stalling 
-			double delta = (X-XCopy).norm();
-			if (std::abs((delta - prevDelta) / delta) < 1e-5) {
-				X = Eigen::MatrixXcd::Random(numVectorsTotal, numVectorsTotal);
-			}
-			prevDelta = delta;
-
-		}
-		std::cout << std::endl;
-		std::cout << std::endl;
-		if (verbosity >= 2) {
-			std::cout << X << std::endl;
-			std::cout << std::endl;
-			std::cout << X.cwiseAbs() << std::endl;
-			std::cout << std::endl;
-		}
-
-		if (n == 4 && setSizes[3] == 5) {
-
-			// Perform SVD on G.
-			Eigen::JacobiSVD<Eigen::MatrixXcd> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
-
-			Eigen::VectorXcd S = svd.singularValues();
-
-			// Define the dimensionality of the reduced space.
-			int reducedDimension = 6;
-			Eigen::MatrixXcd U_reduced = svd.matrixU().leftCols(reducedDimension);
-			Eigen::VectorXcd S_reduced = S.head(reducedDimension);
-			Eigen::MatrixXcd lowerDimVectors = U_reduced * S_reduced.asDiagonal();
-
-			std::cout << std::endl;
-			std::cout << S << std::endl;
-			std::cout << std::endl;
-
-			std::cout << std::endl;
-			std::cout << lowerDimVectors*lowerDimVectors.transpose() << std::endl;
-			std::cout << std::endl;
-
-			// Print the lower-dimensional vectors.
-			for (int i=0; i<lowerDimVectors.rows(); i++) {
-				std::cout << "Vector " << i+1 << ": " << lowerDimVectors.row(i) << std::endl;
-			}
-
-
-			//Eigen::LLT<Eigen::MatrixXcd> llt(X);
-
-			//Eigen::MatrixXcd L = llt.matrixL();
-
-			//for (int k=0; k<L.cols(); k++) {
-				//std::cout << L.col(k).transpose() << std::endl;
-			//}
-			//std::cout << L << std::endl;
-
-			//Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> es(X);
-			//Eigen::VectorXcd eigenvalues = es.eigenvalues();
-			//double minEigen = eigenvalues[0].real();
-			//std::cout << minEigen << std::endl;
-
-			//std::cout << std::endl;
-			//std::cout << std::endl;
-
-			//Eigen::MatrixXcd mags = Eigen::MatrixXcd::Constant(numVectorsTotal, numVectorsTotal, 0.0);
-			//for (int k=0; k<L.cols(); k++) {
-				//for (int l=0; l<L.cols(); l++) {
-					//mags(k,l) = L.col(k).conj().dot(L.col(l));
-				//}
-			//}
-			//std::cout << mags << std::endl;
-
-		}
-
-	}
-
-	return 0;
 
 	// For each different restriction
 	for (int i2=0; i2<dLimits.size(); i2++) {
@@ -473,12 +380,13 @@ int main(int argc, char ** argv) {
 					}
 				}
 
+				// TODO check
 				// Vs the uniform vector (e.g. |1/sqrt(d) * sum of basis| = 1/sqrt(d))
 				if (secondIsUniform) {
 					Polynomial<std::complex<double>> extraEqn(numVars);
 					int startInd = 0;
 					if (firstElementIsOne) {
-						extraEqn.addTerm(1.0/d);
+						extraEqn.addTerm(1.0/std::sqrt(d));
 						startInd = 1;
 					}
 					for (int m=startInd; m<d; m++) {
@@ -487,7 +395,13 @@ int main(int argc, char ** argv) {
 						extraEqn.addTerm(1/std::sqrt(d), {var1});
 						extraEqn.addTerm(1i/std::sqrt(d), {var2});
 					}
+					std::cout << "pre square: " << extraEqn << std::endl;
 					extraEqn = std::conj(extraEqn)*extraEqn;
+					if (i != 1) {
+						extraEqn.addTerm(-1.0/d);
+					}
+					std::cout << "post square: " << extraEqn << std::endl;
+					std::cout << std::endl;
 					eqns.push_back(std::real<double>(extraEqn));
 				}
 
@@ -601,19 +515,19 @@ int main(int argc, char ** argv) {
 
 		// Use as few indices as possible
 		std::unordered_map<int,int> reducedMap = prob.getMinimalMap();
-		prob = prob.replaceWithVariable(reducedMap);
 		if (verbosity >= 2) {
+			std::cout << "---------------------" << std::endl;
+			std::cout << "Problem: " << std::endl;
+			std::cout << "---------------------" << std::endl;
+			std::cout << prob << std::endl;
 			std::cout << "---------------------" << std::endl;
 			std::cout << "Index Mapping: " << std::endl;
 			std::cout << "---------------------" << std::endl;
 			std::cout << std::endl;
 			std::cout << reducedMap << std::endl;
 			std::cout << std::endl;
-			std::cout << "---------------------" << std::endl;
-			std::cout << "Final Problem: " << std::endl;
-			std::cout << "---------------------" << std::endl;
-			std::cout << prob << std::endl;
 		}
+		prob = prob.replaceWithVariable(reducedMap);
 		int numVectors = 0;
 		for (int i=0; i<n; i++) {
 			numVectors += dLimits[i2][i];
