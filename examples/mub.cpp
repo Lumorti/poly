@@ -8,16 +8,17 @@ int main(int argc, char ** argv) {
 	int d = 2;
 	int n = 4;
 	std::string task = "infeasible";
-	bool useFull = false;
 	int maxIters = -1;
 	int verbosity = 1;
 	int numToSplit = 0;
 	int cores = 4;
-	double stabilityTerm = 1e-13;
+	double stabilityTerm = 1e-15;
 	float alpha = 0.9;
+	double tolerance = 1e-13;
 	bool firstIsComputational = true;
 	bool secondIsUniform = true;
 	bool firstElementIsOne = true;
+	std::string givenSizes = "";
 	std::string solver = "mosek";
 	std::string level = "1f";
 	std::string fileName = "";
@@ -26,9 +27,10 @@ int main(int argc, char ** argv) {
 		if (arg == "-h") {
 			std::cout << " -d [int]    set the dimension" << std::endl;
 			std::cout << " -n [int]    set the number of bases" << std::endl;
+			std::cout << " -N [str]    set the basis sizes e.g. 2,1,1,1" << std::endl;
 			std::cout << " -l [str]    set the level for the relaxation e.g. 1+2f,3p" << std::endl;
 			std::cout << " -i [int]    set max iterations (-1 for no limit)" << std::endl;
-			std::cout << " -t [dbl]    set the test parameter" << std::endl;
+			std::cout << " -t [dbl]    set the tolerance" << std::endl;
 			std::cout << " -a [dbl]    set the scaling for the feasible check" << std::endl;
 			std::cout << " -b [dbl]    set the stability term to be added to the Hessian" << std::endl;
 			std::cout << " -v [int]    set the verbosity level (0,1,2)" << std::endl;
@@ -38,8 +40,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -1          don't assume the first basis is the computational" << std::endl;
 			std::cout << " -2          don't assume the first vector of the second basis is uniform" << std::endl;
 			std::cout << " -3          don't assume the first element of each is one" << std::endl;
-			std::cout << " -s          use scs as the SDP solver insead of mosek" << std::endl;
-			std::cout << " -w          use whole bases, not partial" << std::endl;
+			std::cout << " -s          use SCS as the SDP solver insead of Mosek" << std::endl;
 			std::cout << " -f          try to find a feasible point instead of proving infeasiblity" << std::endl;
 			return 0;
 		} else if (arg == "-d" && i+1 < argc) {
@@ -57,6 +58,9 @@ int main(int argc, char ** argv) {
 		} else if (arg == "-b" && i+1 < argc) {
 			stabilityTerm = std::stod(argv[i+1]);
 			i++;
+		} else if (arg == "-t" && i+1 < argc) {
+			tolerance = std::stod(argv[i+1]);
+			i++;
 		} else if (arg == "-a" && i+1 < argc) {
 			alpha = std::stod(argv[i+1]);
 			i++;
@@ -72,10 +76,11 @@ int main(int argc, char ** argv) {
 		} else if (arg == "-o" && i+1 < argc) {
 			fileName = argv[i+1];
 			i++;
+		} else if (arg == "-N" && i+1 < argc) {
+			givenSizes = argv[i+1];
+			i++;
 		} else if (arg == "-s") {
 			solver = "scs";
-		} else if (arg == "-w") {
-			useFull = true;
 		} else if (arg == "-1") {
 			firstIsComputational = false;
 		} else if (arg == "-2") {
@@ -90,399 +95,321 @@ int main(int argc, char ** argv) {
 
 	}
 
+	// Different "bases"
+	std::vector<int> basisSizes;
+	if (givenSizes.size() > 0) {
+
+		// Load the basis sizes
+		std::string currentNum = "";
+		for (int i=0; i<givenSizes.size(); i++) {
+			if (givenSizes[i] == ',') {
+				basisSizes.push_back(std::stoi(currentNum));
+				currentNum = "";
+			} else {
+				currentNum += givenSizes[i];
+			}
+		}
+		basisSizes.push_back(std::stoi(currentNum));
+		n = basisSizes.size();
+
+	// Otherwise use sizes based on dimension
+	} else {
+		if (d == 2) {
+			basisSizes = {1, 1, 1, 1};
+		} else if (d == 3) {
+			basisSizes = {2, 1, 1, 1, 1};
+		} else if (d == 4) {
+			basisSizes = {2, 2, 2, 2, 1, 1};
+		} else if (d == 5) {
+			basisSizes = {2, 2, 2, 2, 2, 2, 1};
+		} else if (d == 6) {
+			basisSizes = {6, 5, 3, 1};
+		} else if (d == 7) {
+			basisSizes = {3, 2, 2, 2, 2, 2, 2, 2, 2};
+		} else if (d == 8) {
+			basisSizes = {3, 3, 2, 2, 2, 2, 2, 2, 2, 2};
+		} else if (d == 9) {
+			basisSizes = {3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2};
+		} else if (d == 10) {
+			basisSizes = {6, 6, 6, 6};
+		} else if (d == 11) {
+			basisSizes = {3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2};
+		} else if (d == 12) {
+			basisSizes = {12, 6, 6, 6};
+		} else if (d == 13) {
+			basisSizes = {3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2};
+		} else if (d == 14) {
+			basisSizes = {14, 7, 7, 7};
+		} else if (d == 15) {
+			basisSizes = {10, 10, 10, 7};
+		} else if (d == 16) {
+			basisSizes = {16, 14, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+		} else if (d == 17) {
+			basisSizes = {17, 15, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+		} else if (d == 18) {
+			basisSizes = {18, 9, 9, 9};
+		} else if (d == 19) {
+			basisSizes = {19, 17, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+		} else if (d == 20) {
+			basisSizes = {20, 10, 10, 10};
+		} else {
+			basisSizes = std::vector<int>(n, d);
+		}
+
+	}
+
 	// Useful quantities
 	int numVarsNonConj = n*d*d;
 	int numVars = 2*numVarsNonConj+1000;
 	int conjDelta = numVarsNonConj;
 
-	// Different "bases"
-	std::vector<std::vector<int>> dLimits;
-	if (useFull) {
-		dLimits.push_back(std::vector<int>(n, d));
-	} else {
-		if (d == 2) {
-
-			// 4
-			dLimits.push_back({1, 1, 1, 1});
-
-			// 5
-			//dLimits.push_back({2, 1, 1, 1});
-
-		} else if (d == 3) {
-
-			// 6
-			//dLimits.push_back({2, 1, 1, 1, 1});
-
-			// 7 TODO
-			dLimits.push_back({2, 2, 1, 1, 1});
-			//dLimits.push_back({3, 1, 1, 1, 1});
-
-		} else if (d == 4) {
-
-			// 9
-			//dLimits.push_back({2, 2, 2, 1, 1, 1});
-			//dLimits.push_back({4, 1, 1, 1, 1, 1});
-
-			// 10
-			dLimits.push_back({2, 2, 2, 2, 1, 1});
-			//dLimits.push_back({4, 2, 1, 1, 1, 1});
-
-		} else if (d == 5) {
-
-			// 12
-			//dLimits.push_back({2, 2, 2, 2, 2, 1, 1});
-			//dLimits.push_back({5, 2, 1, 1, 1, 1, 1});
-
-			// 13
-			dLimits.push_back({2, 2, 2, 2, 2, 2, 1});
-			//dLimits.push_back({5, 3, 1, 1, 1, 1, 1});
-
-		} else if (d == 6) {
-
-			// 14
-			//dLimits.push_back({4, 4, 3, 3});
-			//dLimits.push_back({6, 5, 2, 1});
-			//dLimits.push_back({6, 6, 1, 1});
-			
-			// 15
-			dLimits.push_back({4, 4, 4, 3});
-			//dLimits.push_back({6, 5, 3, 1});
-			//dLimits.push_back({6, 6, 2, 1});
-
-		} else if (d == 7) {
-
-			// 18
-			//dLimits.push_back({2, 2, 2, 2, 2, 2, 2, 2, 2});
-			//dLimits.push_back({7, 4, 1, 1, 1, 1, 1, 1, 1});
-
-			// 19
-			//dLimits.push_back({3, 2, 2, 2, 2, 2, 2, 2, 2});
-			//dLimits.push_back({7, 5, 1, 1, 1, 1, 1, 1, 1});
-
-		} else if (d == 8) {
-
-			// 21
-			//dLimits.push_back({3, 2, 2, 2, 2, 2, 2, 2, 2, 2});
-			//dLimits.push_back({8, 5, 1, 1, 1, 1, 1, 1, 1, 1});
-
-			// 22
-			dLimits.push_back({3, 3, 2, 2, 2, 2, 2, 2, 2, 2});
-			//dLimits.push_back({8, 6, 1, 1, 1, 1, 1, 1, 1, 1});
-
-		} else if (d == 9) {
-
-			// 25 
-			//dLimits.push_back({3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2});
-			//dLimits.push_back({9, 7, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-
-			// 26
-			dLimits.push_back({3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2});
-			//dLimits.push_back({9, 8, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-
-		} else if (d == 10) {
-
-			// 24
-			//dLimits.push_back({6, 6, 6, 6});
-			//dLimits.push_back({10, 5, 5, 4});
-			//dLimits.push_back({10, 9, 4, 1});
-
-			// 25
-			//dLimits.push_back({7, 6, 6, 6});
-			dLimits.push_back({10, 5, 5, 5});
-			//dLimits.push_back({10, 9, 5, 1});
-
-		} else if (d == 11) {
-
-			// 30
-			//dLimits.push_back({3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2});
-			//dLimits.push_back({11, 8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-
-			// 31
-			dLimits.push_back({3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2});
-			//dLimits.push_back({11, 9, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-
-		} else if (d == 12) {
-
-			// 29
-			//dLimits.push_back({8, 7, 7, 7});
-			//dLimits.push_back({12, 6, 6, 5});
-			//dLimits.push_back({12, 11, 5, 1});
-
-			// 30
-			//dLimits.push_back({8, 8, 7, 7});
-			dLimits.push_back({12, 6, 6, 6});
-			//dLimits.push_back({12, 11, 6, 1});
-
-		} else if (d == 13) {
-
-			//dLimits.push_back({13, 10, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-
-			// 34
-			dLimits.push_back({3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2});
-			dLimits.push_back({13, 11, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-
-		} else if (d == 14) {
-			//dLimits.push_back({14, 7, 7, 6});
-			dLimits.push_back({14, 7, 7, 7});
-		} else if (d == 15) {
-			//dLimits.push_back({15, 7, 7, 7});
-			dLimits.push_back({10, 10, 10, 7});
-		} else if (d == 16) {
-			dLimits.push_back({16, 14, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-		} else if (d == 17) {
-			dLimits.push_back({17, 15, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-		} else if (d == 18) {
-			dLimits.push_back({18, 9, 9, 9});
-		} else if (d == 19) {
-			dLimits.push_back({19, 17, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-		} else if (d == 20) {
-			dLimits.push_back({20, 10, 10, 10});
-		} else {
-			dLimits.push_back(std::vector<int>(n, d));
+	// List the bases and the variables indices
+	if (verbosity >= 2) {
+		std::cout << "---------------------" << std::endl;
+		std::cout << "Basis Indices:" << std::endl;
+		std::cout << "---------------------" << std::endl;
+		int nextInd = 0;
+		for (int i=0; i<n; i++) {
+			std::cout << std::endl;
+			for (int k=0; k<d; k++) {
+				std::cout << "{";
+				for (int m=0; m<d; m++) {
+					if (k < basisSizes[i]) {
+						if ((m == 0 && firstElementIsOne) || (i == 0 && firstIsComputational) || (secondIsUniform && i == 1 && k == 0)) {
+							std::cout << "-" ;
+						} else {
+							std::cout << nextInd << "+i" << nextInd + conjDelta;
+						}
+						if (m < d-1) {
+							std::cout << ", ";
+						}
+					}
+					nextInd++;
+				}
+				std::cout << "}";
+				if (k < d-1) {
+					std::cout << ", ";
+				}
+			}
+			std::cout << std::endl << std::endl;
 		}
-
-		// If going past infeasibility, pad with zeros
-		while (dLimits[0].size() < n) {
-			dLimits[0].push_back(0);
-		}
-
 	}
 
-	// For each different restriction
-	for (int i2=0; i2<dLimits.size(); i2++) {
+	// The list of equations to fill
+	std::vector<Polynomial<double>> eqns;
 
-		// List the bases and the variables indices
-		if (verbosity >= 2) {
-			std::cout << "---------------------" << std::endl;
-			std::cout << "Basis Indices:" << std::endl;
-			std::cout << "---------------------" << std::endl;
-			int nextInd = 0;
-			for (int i=0; i<n; i++) {
-				std::cout << std::endl;
-				for (int k=0; k<d; k++) {
-					std::cout << "{";
-					for (int m=0; m<d; m++) {
-						if (k < dLimits[i2][i]) {
-							if ((m == 0 && firstElementIsOne) || (i == 0 && firstIsComputational) || (secondIsUniform && i == 1 && k == 0)) {
-								std::cout << "-" ;
-							} else {
-								std::cout << nextInd << "+i" << nextInd + conjDelta;
-							}
-							if (m < d-1) {
-								std::cout << ", ";
-							}
-						}
-						nextInd++;
-					}
-					std::cout << "}";
-					if (k < d-1) {
-						std::cout << ", ";
-					}
-				}
-				std::cout << std::endl << std::endl;
+	// If the first basis is computational, don't do normal equations
+	int startBasis = 0;
+	if (firstIsComputational) {
+		startBasis = 1;
+	}
+
+	// Generate equations, here iterating over all the vectors
+	int newVarInd = 2*numVarsNonConj;
+	for (int i=startBasis; i<n; i++) {
+		for (int k=0; k<basisSizes[i]; k++) {
+
+			// We assume the first vector of the second basis is uniform, so skip it
+			if (secondIsUniform && i == 1 && k == 0) {
+				continue;
 			}
-		}
 
-		// The list of equations to fill
-		std::vector<Polynomial<double>> eqns;
+			// Second vector (not repeating the first)
+			for (int j=i; j<n; j++) {
+				for (int l=0; l<basisSizes[j]; l++) {
 
-		// If the first basis is computational, don't do normal equations
-		int startBasis = 0;
-		if (firstIsComputational) {
-			startBasis = 1;
-		}
-
-		// Generate equations, here iterating over all the vectors
-		int newVarInd = 2*numVarsNonConj;
-		for (int i=startBasis; i<n; i++) {
-			for (int k=0; k<dLimits[i2][i]; k++) {
-
-				// We assume the first vector of the second basis is uniform, so skip it
-				if (secondIsUniform && i == 1 && k == 0) {
-					continue;
-				}
-
-				// Second vector (not repeating the first)
-				for (int j=i; j<n; j++) {
-					for (int l=0; l<dLimits[i2][j]; l++) {
-
-						// Prevent repeat equations
-						if (i == j && l <= k) {
-							continue;
-						}
-
-						// If we're assuming that the first element of each vector is 1
-						Polynomial<std::complex<double>> eqn(numVars);
-						int startInd = 0;
-						if (firstElementIsOne) {
-							startInd = 1;
-							eqn.addTerm(1.0/d);
-						}
-
-						// (a+ib)*(c-id)
-						for (int m=startInd; m<d; m++) {
-							int var1 = i*d*d + k*d + m;
-							int var2 = j*d*d + l*d + m;
-							int var3 = var1 + conjDelta;
-							int var4 = var2 + conjDelta;
-							eqn.addTerm(1, {var1, var2});
-							eqn.addTerm(1, {var3, var4});
-							eqn.addTerm(1i, {var1, var4});
-							eqn.addTerm(-1i, {var2, var3});
-						}
-
-						// For the MUB-ness equations
-						if (i != j) {
-
-							// Constrain that this should equal a new complex number
-							eqn.addTerm(-1, {newVarInd});
-							eqn.addTerm(-1i, {newVarInd+1});
-
-							// Constrain that this new complex should have mag 1/sqrt(d)
-							Polynomial<double> extraEqn(numVars);
-							extraEqn.addTerm(1, {newVarInd,newVarInd});
-							extraEqn.addTerm(1, {newVarInd+1,newVarInd+1});
-							extraEqn.addTerm(-1.0/d, {});
-							eqns.push_back(extraEqn);
-							newVarInd += 2;
-
-						}
-
-						// Split into real and imag parts (both should be 0)
-						Polynomial<double> eqnReal = std::real<double>(eqn);
-						Polynomial<double> eqnImag = std::imag<double>(eqn);
-
-						// Add these equations if they're not empty
-						if (eqnReal.size() > 0) {
-							eqns.push_back(eqnReal);
-						}
-						if (eqnImag.size() > 0) {
-							eqns.push_back(eqnImag);
-						}
-
+					// Prevent repeat equations
+					if (i == j && l <= k) {
+						continue;
 					}
-				}
 
-				// All should have mag 1/sqrt(d) (since we're setting first basis to the comp)
-				if (firstIsComputational) {
+					// If we're assuming that the first element of each vector is 1
+					Polynomial<std::complex<double>> eqn(numVars);
 					int startInd = 0;
 					if (firstElementIsOne) {
 						startInd = 1;
+						eqn.addTerm(1.0/d);
 					}
-					for (int m=startInd; m<dLimits[i2][0]; m++) {
-						int var1 = i*d*d + k*d + m;
-						int var2 = var1 + conjDelta;
-						Polynomial<double> extraEqn(numVars);
-						extraEqn.addTerm(1, {var1,var1});
-						extraEqn.addTerm(1, {var2,var2});
-						extraEqn.addTerm(-1.0/d, {});
-						eqns.push_back(extraEqn);
-					}
-				}
 
-				// TODO check
-				// Vs the uniform vector (e.g. |1/sqrt(d) * sum of basis| = 1/sqrt(d))
-				if (secondIsUniform) {
-					Polynomial<std::complex<double>> extraEqn(numVars);
-					int startInd = 0;
-					if (firstElementIsOne) {
-						extraEqn.addTerm(1.0/std::sqrt(d));
-						startInd = 1;
-					}
+					// (a+ib)*(c-id)
 					for (int m=startInd; m<d; m++) {
 						int var1 = i*d*d + k*d + m;
-						int var2 = var1 + conjDelta;
-						extraEqn.addTerm(1/std::sqrt(d), {var1});
-						extraEqn.addTerm(1i/std::sqrt(d), {var2});
+						int var2 = j*d*d + l*d + m;
+						int var3 = var1 + conjDelta;
+						int var4 = var2 + conjDelta;
+						eqn.addTerm(1, {var1, var2});
+						eqn.addTerm(1, {var3, var4});
+						eqn.addTerm(1i, {var1, var4});
+						eqn.addTerm(-1i, {var2, var3});
 					}
-					std::cout << "pre square: " << extraEqn << std::endl;
-					extraEqn = std::conj(extraEqn)*extraEqn;
-					if (i != 1) {
-						extraEqn.addTerm(-1.0/d);
+
+					// For the MUB-ness equations
+					if (i != j) {
+
+						// Constrain that this should equal a new complex number
+						eqn.addTerm(-1, {newVarInd});
+						eqn.addTerm(-1i, {newVarInd+1});
+
+						// Constrain that this new complex should have mag 1/sqrt(d)
+						Polynomial<double> extraEqn(numVars);
+						extraEqn.addTerm(1, {newVarInd,newVarInd});
+						extraEqn.addTerm(1, {newVarInd+1,newVarInd+1});
+						extraEqn.addTerm(-1.0/d, {});
+						eqns.push_back(extraEqn);
+						newVarInd += 2;
+
 					}
-					std::cout << "post square: " << extraEqn << std::endl;
-					std::cout << std::endl;
-					eqns.push_back(std::real<double>(extraEqn));
-				}
 
+					// Split into real and imag parts (both should be 0)
+					Polynomial<double> eqnReal = std::real<double>(eqn);
+					Polynomial<double> eqnImag = std::imag<double>(eqn);
+
+					// Add these equations if they're not empty
+					if (eqnReal.size() > 0) {
+						eqns.push_back(eqnReal);
+					}
+					if (eqnImag.size() > 0) {
+						eqns.push_back(eqnImag);
+					}
+
+				}
 			}
+
+			// All should have mag 1/sqrt(d) (since we're setting first basis to the comp)
+			if (firstIsComputational) {
+				int startInd = 0;
+				if (firstElementIsOne) {
+					startInd = 1;
+				}
+				for (int m=startInd; m<basisSizes[0]; m++) {
+					int var1 = i*d*d + k*d + m;
+					int var2 = var1 + conjDelta;
+					Polynomial<double> extraEqn(numVars);
+					extraEqn.addTerm(1, {var1,var1});
+					extraEqn.addTerm(1, {var2,var2});
+					extraEqn.addTerm(-1.0/d, {});
+					eqns.push_back(extraEqn);
+				}
+			}
+
+			// If we don't have implict normalization, need to add
+			if (!firstIsComputational || basisSizes[0] < d) {
+				Polynomial<std::complex<double>> extraEqn(numVars);
+				int startInd = 0;
+				if (firstElementIsOne) {
+					extraEqn.addTerm(1.0/d);
+					startInd = 1;
+				}
+				for (int m=startInd; m<d; m++) {
+					int var1 = i*d*d + k*d + m;
+					int var2 = var1 + conjDelta;
+					extraEqn.addTerm(1.0, {var1, var1});
+					extraEqn.addTerm(1.0, {var2, var2});
+				}
+				extraEqn.addTerm(-1.0);
+				eqns.push_back(std::real<double>(extraEqn));
+			}
+
+			// Vs the uniform vector (e.g. |1/sqrt(d) * sum of basis| = 1/sqrt(d))
+			if (secondIsUniform) {
+				Polynomial<std::complex<double>> extraEqn(numVars);
+				int startInd = 0;
+				if (firstElementIsOne) {
+					extraEqn.addTerm(1.0/d);
+					startInd = 1;
+				}
+				for (int m=startInd; m<d; m++) {
+					int var1 = i*d*d + k*d + m;
+					int var2 = var1 + conjDelta;
+					extraEqn.addTerm(1/std::sqrt(d), {var1});
+					extraEqn.addTerm(1i/std::sqrt(d), {var2});
+				}
+				extraEqn = std::conj(extraEqn)*extraEqn;
+				if (i != 1) {
+					extraEqn.addTerm(-1.0/d);
+				}
+				eqns.push_back(std::real<double>(extraEqn));
+			}
+
 		}
-		int ogEqns = eqns.size();
+	}
+	int ogEqns = eqns.size();
 
-		// Find the symmetries of the problem
-		std::vector<std::unordered_map<int,int>> syms;
+	// Find the symmetries of the problem
+	std::vector<std::unordered_map<int,int>> syms;
 
-		// Ordering within each basis
-		int base = 2;
-		for (int i=1; i<n; i++) {
-			for (int j=0; j<dLimits[i2][i]-1; j++) {
-				if (i == 1 && j == 0) {
-					continue;
-				}
-				std::unordered_map<int,int> newSym;
-				for (int k=1; k<d; k++) {
-					int indLeft = i*d*d+j*d+k; 
-					int indRight = i*d*d+(j+1)*d+k; 
-					newSym[indLeft] = indRight;
-					newSym[indLeft+conjDelta] = indRight+conjDelta;
-				}
-				syms.push_back(newSym);
-			}
-		}
-
-		// Ordering of the bases
-		for (int i=1; i<n-1; i++) {
-			int ind1 = 0;
-			if (i == 1) {
-				ind1 = 1;
-			}
-			if (ind1 > dLimits[i2][i]-1) {
+	// Ordering within each basis
+	int base = 2;
+	for (int i=1; i<n; i++) {
+		for (int j=0; j<basisSizes[i]-1; j++) {
+			if (i == 1 && j == 0) {
 				continue;
 			}
 			std::unordered_map<int,int> newSym;
 			for (int k=1; k<d; k++) {
-				int indLeft = i*d*d+ind1*d+k;
-				int indRight = (i+1)*d*d+0*d+k;
+				int indLeft = i*d*d+j*d+k; 
+				int indRight = i*d*d+(j+1)*d+k; 
 				newSym[indLeft] = indRight;
 				newSym[indLeft+conjDelta] = indRight+conjDelta;
 			}
 			syms.push_back(newSym);
 		}
+	}
 
-		// Ordering of the elements in the vectors
-		for (int k=1; k<d-1; k++) {
-			std::unordered_map<int,int> newSym;
-			for (int i=1; i<n; i++) {
-				for (int j=0; j<dLimits[i2][i]; j++) {
-					if (i == 1 && j == 0) {
-						continue;
-					}
-					int indLeft = i*d*d+j*d+k;
-					int indRight = i*d*d+j*d+k+1;
-					newSym[indLeft] = indRight;
-					newSym[indLeft+conjDelta] = indRight+conjDelta;
-				}
-			}
-			syms.push_back(newSym);
+	// Ordering of the bases
+	for (int i=1; i<n-1; i++) {
+		int ind1 = 0;
+		if (i == 1) {
+			ind1 = 1;
 		}
+		if (ind1 > basisSizes[i]-1) {
+			continue;
+		}
+		std::unordered_map<int,int> newSym;
+		for (int k=1; k<d; k++) {
+			int indLeft = i*d*d+ind1*d+k;
+			int indRight = (i+1)*d*d+0*d+k;
+			newSym[indLeft] = indRight;
+			newSym[indLeft+conjDelta] = indRight+conjDelta;
+		}
+		syms.push_back(newSym);
+	}
 
-		// Could also take the conjugate of everything
+	// Ordering of the elements in the vectors
+	for (int k=1; k<d-1; k++) {
 		std::unordered_map<int,int> newSym;
 		for (int i=1; i<n; i++) {
-			for (int j=0; j<dLimits[i2][i]; j++) {
+			for (int j=0; j<basisSizes[i]; j++) {
 				if (i == 1 && j == 0) {
 					continue;
 				}
-				for (int k=1; k<d; k++) {
-					int indLeft = i*d*d+j*d+k;
-					newSym[indLeft+conjDelta] = indLeft+conjDelta;
-				}
+				int indLeft = i*d*d+j*d+k;
+				int indRight = i*d*d+j*d+k+1;
+				newSym[indLeft] = indRight;
+				newSym[indLeft+conjDelta] = indRight+conjDelta;
 			}
 		}
 		syms.push_back(newSym);
+	}
 
-		// Convert these symmetries into constraints with break them
-		std::vector<Polynomial<double>> orderingCons;
+	// Could also take the conjugate of everything
+	std::unordered_map<int,int> newSym;
+	for (int i=1; i<n; i++) {
+		for (int j=0; j<basisSizes[i]; j++) {
+			if (i == 1 && j == 0) {
+				continue;
+			}
+			for (int k=1; k<d; k++) {
+				int indLeft = i*d*d+j*d+k;
+				newSym[indLeft+conjDelta] = indLeft+conjDelta;
+			}
+		}
+	}
+	syms.push_back(newSym);
+
+	// Convert these symmetries into constraints which break them
+	std::vector<Polynomial<double>> orderingCons;
+	if (task == "infeasible") {
 		for (int i=0; i<syms.size(); i++) {
 
 			// If the indices are the same, this means the sum should be positive
@@ -510,79 +437,135 @@ int main(int argc, char ** argv) {
 
 		}
 
-		// Combine these equations into a single object
-		PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, orderingCons);
+	}
 
-		// Use as few indices as possible
-		std::unordered_map<int,int> reducedMap = prob.getMinimalMap();
+	// Combine these equations into a single object
+	PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, orderingCons);
+
+	// Use as few indices as possible
+	std::unordered_map<int,int> reducedMap = prob.getMinimalMap();
+	if (verbosity >= 2) {
+		std::cout << "---------------------" << std::endl;
+		std::cout << "Problem: " << std::endl;
+		std::cout << "---------------------" << std::endl;
+		std::cout << prob << std::endl;
+		//std::cout << "---------------------" << std::endl;
+		//std::cout << "Index Mapping: " << std::endl;
+		//std::cout << "---------------------" << std::endl;
+		//std::cout << reducedMap << std::endl;
+		//std::cout << std::endl;
+	}
+	prob = prob.replaceWithVariable(reducedMap);
+	int numVectors = 0;
+	for (int i=0; i<n; i++) {
+		numVectors += basisSizes[i];
+	}
+	std::cout << "set sizes: " << basisSizes << ", vars: " << prob.maxVariables << ", vectors: " << numVectors << std::endl;
+
+	// If told to find a feasible point
+	if (task == "feasible") {
+
+		// Find a feasible point of the equality constraints TODO better init
+		std::cout << std::scientific;
+		std::vector<double> x = prob.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, verbosity, 1.0/std::sqrt(d), stabilityTerm);
+		double maxVal = -1000;
+		for (int i=0; i<prob.conZero.size(); i++) {
+			maxVal = std::max(maxVal, std::abs(prob.conZero[i].eval(x)));
+		}
+		std::cout << "max viol = " << maxVal << std::endl;
+
+		// If verbose, also display the overlaps
 		if (verbosity >= 2) {
-			std::cout << "---------------------" << std::endl;
-			std::cout << "Problem: " << std::endl;
-			std::cout << "---------------------" << std::endl;
-			std::cout << prob << std::endl;
-			std::cout << "---------------------" << std::endl;
-			std::cout << "Index Mapping: " << std::endl;
-			std::cout << "---------------------" << std::endl;
-			std::cout << std::endl;
-			std::cout << reducedMap << std::endl;
-			std::cout << std::endl;
-		}
-		prob = prob.replaceWithVariable(reducedMap);
-		int numVectors = 0;
-		for (int i=0; i<n; i++) {
-			numVectors += dLimits[i2][i];
-		}
-		std::cout << dLimits[i2] << " vars: " << prob.maxVariables << ", vectors: " << numVectors << std::endl;
 
-		// If told to find a feasible point
-		if (task == "feasible") {
-			std::cout << std::scientific;
-			std::vector<double> x = prob.findFeasibleEqualityPoint(-1, alpha, 1e-12, maxIters, cores, verbosity, 1.0/std::sqrt(d), stabilityTerm);
-			double maxVal = -1000;
-			for (int i=0; i<prob.conZero.size(); i++) {
-				maxVal = std::max(maxVal, std::abs(prob.conZero[i].eval(x)));
+			std::vector<std::vector<std::vector<std::complex<double>>>> bases(n, std::vector<std::vector<std::complex<double>>>(d, std::vector<std::complex<double>>(d, 0.0)));
+			std::cout << std::endl;
+			std::cout << "---------------------" << std::endl;
+			std::cout << "MUBs:" << std::endl;
+			std::cout << "---------------------" << std::endl;
+			int nextInd = 0;
+			for (int i=0; i<n; i++) {
+				std::cout << std::endl;
+				for (int k=0; k<d; k++) {
+					std::cout << "{";
+					for (int m=0; m<d; m++) {
+						if (k < basisSizes[i]) {
+							if (i == 0 && firstIsComputational) {
+								bases[i][k][m] = int(m == k);
+							} else if ((m == 0 && firstElementIsOne) || (secondIsUniform && i == 1 && k == 0)) {
+								bases[i][k][m] = 1.0/std::sqrt(d);
+							} else {
+								bases[i][k][m] = x[reducedMap[nextInd]] + 1i*x[reducedMap[nextInd+conjDelta]];
+							}
+							std::cout << bases[i][k][m];
+							if (m < d-1) {
+								std::cout << ", ";
+							}
+						}
+						nextInd++;
+					}
+					std::cout << "}";
+					if (k < d-1) {
+						std::cout << ", ";
+					}
+				}
+				std::cout << std::endl << std::endl;
 			}
-			std::cout << "max viol = " << maxVal << std::endl;
 
-		// If told to prove the search space is infeasible
-		} else if (task == "infeasible") {
-
-			// If we're using a higher level mat, add higher-order cons
-			int ogCons = prob.conZero.size();
-			if (level.find("2") != std::string::npos) {
-				for (int i=0; i<ogCons; i++) {
-					prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]);
+			std::cout << "---------------------" << std::endl;
+			std::cout << "Abs of Gram matrix:" << std::endl;
+			std::cout << "---------------------" << std::endl;
+			std::vector<std::vector<double>> gramMat(n*d, std::vector<double>(n*d));
+			std::cout << n*d << std::endl;
+			for (int i1=0; i1<n; i1++) {
+				for (int k1=0; k1<d; k1++) {
+					for (int i2=0; i2<n; i2++) {
+						for (int k2=0; k2<d; k2++) {
+							std::complex<double> sum = 0;
+							for (int m=0; m<d; m++) {
+								sum += std::conj(bases[i1][k1][m])*bases[i2][k2][m];
+							}
+							gramMat[i1*d+k1][i2*d+k2] = std::abs(sum);
+						}
+					}
 				}
 			}
+			std::cout << std::setprecision(4) << std::endl;
+			std::cout << gramMat << std::endl;
 
-			// If we're using a higher level mat, add higher-order cons
-			if (level.find("3") != std::string::npos) {
-				for (int i=0; i<ogCons; i++) {
-					prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
-				}
-			}
-
-			// If we're using a higher level mat, add higher-order cons
-			if (level.find("4") != std::string::npos) {
-				for (int i=0; i<ogCons; i++) {
-					prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
-				}
-			}
-
-			// Try to prove infeasiblity
-			if (solver == "mosek") {
-				prob.proveInfeasible(maxIters, level, 1.0/std::sqrt(d), fileName, verbosity, numToSplit);
-			} else if (solver == "scs") {
-				prob.proveInfeasibleSCS(maxIters, level, 1.0/std::sqrt(d), fileName, verbosity, numToSplit);
-			}
-			
 		}
 
-		// Add a newline if we're trying multiple set sizes
-		if (i2 < dLimits.size()-1) {
-			std::cout << std::endl;
+	// If told to prove the search space is infeasible
+	} else if (task == "infeasible") {
+
+		// If we're using a higher level mat, add higher-order cons
+		int ogCons = prob.conZero.size();
+		if (level.find("2") != std::string::npos) {
+			for (int i=0; i<ogCons; i++) {
+				prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]);
+			}
 		}
 
+		// If we're using a higher level mat, add higher-order cons
+		if (level.find("3") != std::string::npos) {
+			for (int i=0; i<ogCons; i++) {
+				prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
+			}
+		}
+
+		// If we're using a higher level mat, add higher-order cons
+		if (level.find("4") != std::string::npos) {
+			for (int i=0; i<ogCons; i++) {
+				prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
+			}
+		}
+
+		// Try to prove infeasiblity
+		if (solver == "mosek") {
+			prob.proveInfeasible(maxIters, level, 1.0/std::sqrt(d), fileName, verbosity, numToSplit);
+		} else if (solver == "scs") {
+			prob.proveInfeasibleSCS(maxIters, level, 1.0/std::sqrt(d), fileName, verbosity, numToSplit);
+		}
+		
 	}
 
 	return 0;

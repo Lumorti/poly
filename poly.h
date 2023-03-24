@@ -95,8 +95,8 @@ template <typename type>
 std::ostream &operator<<(std::ostream &output, const std::vector<std::vector<type>> &arr) {
 
 	// Use fixed precision
-	int precision = 7;
-	output << std::showpos << std::fixed << std::setprecision(precision);
+	int precision = output.precision();
+	output << std::showpos << std::fixed;
 
 	// Loop over the array
 	std::string rowText;
