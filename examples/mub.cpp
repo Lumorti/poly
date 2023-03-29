@@ -12,7 +12,7 @@ int main(int argc, char ** argv) {
 	int verbosity = 1;
 	int numToSplit = 0;
 	int cores = 4;
-	double stabilityTerm = 1e-15;
+	double stabilityTerm = 1e-20;
 	float alpha = 0.9;
 	double tolerance = 1e-13;
 	bool firstIsComputational = true;
@@ -449,11 +449,6 @@ int main(int argc, char ** argv) {
 		std::cout << "Problem: " << std::endl;
 		std::cout << "---------------------" << std::endl;
 		std::cout << prob << std::endl;
-		//std::cout << "---------------------" << std::endl;
-		//std::cout << "Index Mapping: " << std::endl;
-		//std::cout << "---------------------" << std::endl;
-		//std::cout << reducedMap << std::endl;
-		//std::cout << std::endl;
 	}
 	prob = prob.replaceWithVariable(reducedMap);
 	int numVectors = 0;

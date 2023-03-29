@@ -73,7 +73,7 @@ iters=100000
 #./mub -2 -f -c ${cores} -d 11 -n 10 -v 2 -i ${iters} -a 0.7 -b 1e-15 | tee data/d11n10.log
 #./mub -2 -f -c ${cores} -d 11 -n 11 -v 2 -i ${iters} -a 0.7 -b 1e-15 | tee data/d11n11.log
 #./mub -2 -f -c ${cores} -d 11 -n 12 -v 2 -i ${iters} -a 0.6 -b 1e-15 | tee data/d11n12.log
-./mub -2 -f -c ${cores} -d 11 -n 13 -v 2 -i ${iters} -a 0.6 -b 1e-15 | tee data/d11n13.log
+#./mub -2 -f -c ${cores} -d 11 -n 13 -v 2 -i ${iters} -a 0.6 -b 1e-15 | tee data/d11n13.log
 
 #./mub -f -c ${cores} -d 12 -n 2 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d12n2.log
 #./mub -f -c ${cores} -d 12 -n 3 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d12n3.log
@@ -181,7 +181,7 @@ iters=100000
 #./mub -f -c ${cores} -d 20 -n 4 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d20n4.log
 
 # Read all log files in the data directory
-for file in $(ls data/d11*.log | sort); do
+for file in $(ls data/*.log | sort); do
     if [ -f "$file" ]; then
         grep -H "iteration" "$file"
     fi
