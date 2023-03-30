@@ -13,8 +13,9 @@ int main(int argc, char ** argv) {
 	int numToSplit = 0;
 	int cores = 4;
 	double stabilityTerm = 1e-20;
-	float alpha = 0.9;
+	float alpha = 0.99;
 	double tolerance = 1e-13;
+	bool debugFlag = false;
 	bool firstIsComputational = true;
 	bool secondIsUniform = true;
 	bool firstElementIsOne = true;
@@ -42,6 +43,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -3          don't assume the first element of each is one" << std::endl;
 			std::cout << " -s          use SCS as the SDP solver insead of Mosek" << std::endl;
 			std::cout << " -f          try to find a feasible point instead of proving infeasiblity" << std::endl;
+			std::cout << " -0          debug flag" << std::endl;
 			return 0;
 		} else if (arg == "-d" && i+1 < argc) {
 			d = std::stoi(argv[i+1]);
@@ -87,6 +89,8 @@ int main(int argc, char ** argv) {
 			secondIsUniform = false;
 		} else if (arg == "-3") {
 			firstElementIsOne = false;
+		} else if (arg == "-0") {
+			debugFlag = true;
 		} else if (arg == "-f") {
 			task = "feasible";
 		} else if (arg == "-i") {
@@ -462,7 +466,12 @@ int main(int argc, char ** argv) {
 
 		// Find a feasible point of the equality constraints TODO better init
 		std::cout << std::scientific;
-		std::vector<double> x = prob.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, verbosity, 1.0/std::sqrt(d), stabilityTerm);
+		std::vector<double> x;
+		if (!debugFlag) {
+			x = prob.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, verbosity, 1.0/std::sqrt(d), stabilityTerm);
+		} else {
+			x = prob.findFeasibleEqualityPoint2(alpha, tolerance, maxIters, cores, verbosity, 1.0/std::sqrt(d), stabilityTerm);
+		}
 		double maxVal = -1000;
 		for (int i=0; i<prob.conZero.size(); i++) {
 			maxVal = std::max(maxVal, std::abs(prob.conZero[i].eval(x)));
@@ -510,7 +519,6 @@ int main(int argc, char ** argv) {
 			std::cout << "Abs of Gram matrix:" << std::endl;
 			std::cout << "---------------------" << std::endl;
 			std::vector<std::vector<double>> gramMat(n*d, std::vector<double>(n*d));
-			std::cout << n*d << std::endl;
 			for (int i1=0; i1<n; i1++) {
 				for (int k1=0; k1<d; k1++) {
 					for (int i2=0; i2<n; i2++) {

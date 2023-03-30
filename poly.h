@@ -1577,11 +1577,11 @@ public:
 
 	// Try to find a root, with one variable being optimized towards zero
 	std::vector<polyType> findRoot(int zeroInd=0, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13) {
-		return integrate(zeroInd).findLocalMinimum(zeroInd, alpha, tolerance, maxIters, threads, verbosity, maxMag);
+		return integrate(zeroInd).findLocalMinimum(alpha, tolerance, maxIters, threads, verbosity, maxMag);
 	}
 
 	// Use the Newton method to find a local minimum
-	std::vector<polyType> findLocalMinimum(int zeroInd=0, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13) {
+	std::vector<polyType> findLocalMinimum(double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13) {
 
 		// Prepare everything for parallel computation
 		omp_set_num_threads(threads);
@@ -1618,18 +1618,18 @@ public:
 
 		// Check a bunch of random xs to see which is the best
 		Eigen::VectorXd x = maxMag*Eigen::VectorXd::Random(maxVariables);
-		double bestVal = evalFast(x);
-		#pragma omp parallel for
-		for (int i=0; i<1000; i++) {
-			Eigen::VectorXd testX = maxMag*Eigen::VectorXd::Random(maxVariables);
-			testX(zeroInd) = 0;
-			double *xFast = testX.data();
-			double val = evalFast(xFast);
-			if (val < bestVal) {
-				bestVal = val;
-				x = testX;
-			}
-		}
+		//double bestVal = evalFast(x);
+		//#pragma omp parallel for
+		//for (int i=0; i<1000; i++) {
+			//Eigen::VectorXd testX = maxMag*Eigen::VectorXd::Random(maxVariables);
+			//double *xFast = testX.data();
+			//double val = evalFast(xFast);
+			//if (val < bestVal) {
+				//bestVal = val;
+				//x = testX;
+			//}
+		//}
+		//std::cout << x.transpose() << std::endl;
 
 		// Perform gradient descent using this info
 		Eigen::MatrixXd inv(maxVariables, maxVariables);
@@ -1672,13 +1672,10 @@ public:
 				H(i,i) += stabilityTerm;
 			}
 
-			// Determine the direction TODO
+			// Determine the direction
 			//p = -H.colPivHouseholderQr().solve(g);
 			//p = -H.fullPivHouseholderQr().solve(g);
 			p = -H.partialPivLu().solve(g);
-			//p = -H.fullPivLu().solve(g);
-			//p = -H.ldlt().solve(g);
-			//p = -H.llt().solve(g);
 
 			// Perform the update
 			x += alpha*p;
@@ -1691,9 +1688,9 @@ public:
 
 			// Per-iteration output
 			if (verbosity >= 2) {
-				std::cout << iter << " " << norm << " " << minVal << " " << x(zeroInd) << " " << alpha << "\n" << std::flush;
+				std::cout << iter << " " << norm << " " << minVal << "\n" << std::flush;
 			} else if (verbosity >= 1) {
-				std::cout << iter << " " << norm << " " << minVal << " " << x(zeroInd) << " " << alpha << "          \r" << std::flush;
+				std::cout << iter << " " << norm << " " << minVal << "          \r" << std::flush;
 			}
 
 			// Convergence criteria
@@ -1702,7 +1699,7 @@ public:
 			}
 
 			// Jump if we're stalling a bit TODO
-			if (p.norm() <= 1e-10 || norm > 1e20 || isnan(norm) || std::abs(x(zeroInd)) > 1e5) {
+			if (p.norm() <= 1e-10 || norm > 1e20 || isnan(norm)) {
 				x = maxMag*Eigen::VectorXd::Random(maxVariables);
 			}
 
@@ -1711,8 +1708,11 @@ public:
 
 		// If asking for everything
 		if (verbosity >= 2) {
+			std::cout << std::endl;
 			std::cout << "x: " << x.transpose() << std::endl;
+			std::cout << std::endl;
 			std::cout << "grad: " << g.transpose() << std::endl;
+			std::cout << std::endl;
 		}
 
 		// Stop the timer and report
@@ -4122,9 +4122,19 @@ public:
 		}
 
 		// Find a root of this polynomial
-		std::vector<polyType> x = poly.findRoot(zeroInd, alpha, tolerance, maxIters, threads, verbosity, maxMag, stabilityTerm);
-		return x;
+		return poly.findRoot(zeroInd, alpha, tolerance, maxIters, threads, verbosity, maxMag, stabilityTerm);
 		
+	}
+
+	// Attempt find a feasible point of this problem TODO
+	std::vector<polyType> findFeasibleEqualityPoint2(double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13) {
+		int newPolySize = maxVariables+conZero.size();
+		Polynomial<double> newPoly(newPolySize);
+		for (int i=0; i<conZero.size(); i++) {
+			Polynomial<double> newCon = conZero[i].changeMaxVariables(newPolySize).integrate(maxVariables+i);
+			newPoly += newCon*newCon;
+		}
+		return newPoly.findLocalMinimum(alpha, tolerance, maxIters, threads, verbosity, maxMag);
 	}
 
 	// Make a number of a seconds look nicer for output
