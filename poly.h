@@ -1794,7 +1794,7 @@ template <typename polyType>
 class PolynomialBinaryProblem {
 public:
 
-	// The things definiting the problem
+	// The things defining the problem
 	int maxVariables = 1;
 	int digitsPerInd = 1;
 	Polynomial<polyType> obj;
@@ -5669,7 +5669,7 @@ public:
 	
 };
 
-// Generic overload for outputting vector of vector
+// Generic overload for outputting vector of vector of Polynomials
 template <typename type> 
 std::ostream &operator<<(std::ostream &output, const std::vector<std::vector<Polynomial<type>>> &arr) {
 
