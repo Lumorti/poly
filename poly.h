@@ -1667,6 +1667,8 @@ public:
 				}
 			}
 
+			// TODO try with ADAM or something
+
 			// Add some diagonal for a bit of numerical stability
 			for (int i=0; i<maxVariables; i++) {
 				H(i,i) += stabilityTerm;
