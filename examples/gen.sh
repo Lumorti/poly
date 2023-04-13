@@ -1,8 +1,35 @@
 #!/bin/bash
 
 # Variables
-cores=4
+cores=8
 iters=100000
+
+#./mub -f -c ${cores} -d 3 -N 1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d3N11111.log
+#./mub -f -c ${cores} -d 3 -N 2,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d3N21111.log
+#./mub -f -c ${cores} -d 3 -N 2,2,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d3N22111.log
+#./mub -f -c ${cores} -d 3 -N 3,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d3N31111.log
+#./mub -f -c ${cores} -d 3 -N 2,2,2,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d3N22211.log
+#./mub -f -c ${cores} -d 3 -N 3,2,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d3N32111.log
+#./mub -f -c ${cores} -d 3 -N 2,2,2,2,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d3N22221.log
+#./mub -f -c ${cores} -d 3 -N 3,2,2,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d3N32211.log
+#./mub -f -c ${cores} -d 3 -N 3,3,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d3N33111.log
+
+#./mub -f -c ${cores} -d 4 -N 1,1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N111111.log
+#./mub -f -c ${cores} -d 4 -N 2,1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N211111.log
+#./mub -f -c ${cores} -d 4 -N 2,2,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N221111.log
+#./mub -f -c ${cores} -d 4 -N 3,1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N311111.log
+#./mub -f -c ${cores} -d 4 -N 2,2,2,1,1,1 -v 2 -i ${iters} -a 0.99 -b 0.5 | tee data/d4N222111.log
+./mub -f -c ${cores} -d 4 -N 3,2,1,1,1,1 -v 2 -i ${iters} -a 0.95 -b 0.9 | tee data/d4N321111.log
+#./mub -f -c ${cores} -d 4 -N 4,1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N411111.log
+#./mub -f -c ${cores} -d 4 -N 2,2,2,2,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N222211.log
+#./mub -f -c ${cores} -d 4 -N 3,2,2,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N322111.log
+#./mub -f -c ${cores} -d 4 -N 4,2,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N421111.log
+#./mub -f -c ${cores} -d 4 -N 3,3,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N331111.log
+#./mub -f -c ${cores} -d 4 -N 2,2,2,2,2,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N222221.log
+#./mub -f -c ${cores} -d 4 -N 3,2,2,2,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N322211.log
+#./mub -f -c ${cores} -d 4 -N 3,3,2,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N332111.log
+#./mub -f -c ${cores} -d 4 -N 4,2,2,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N422111.log
+#./mub -f -c ${cores} -d 4 -N 4,3,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N431111.log
 
 #./mub -f -c ${cores} -d 2 -n 3 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d2n3.log
 #./mub -f -c ${cores} -d 2 -n 4 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d2n4.log
@@ -181,8 +208,9 @@ iters=100000
 #./mub -f -c ${cores} -d 20 -n 4 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d20n4.log
 
 # Read all log files in the data directory
-for file in $(ls data/*.log | sort); do
+for file in $(ls data/d4N*.log | sort); do
     if [ -f "$file" ]; then
+        grep -H "vars" "$file"
         grep -H "iteration" "$file"
     fi
 done

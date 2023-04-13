@@ -1699,7 +1699,7 @@ public:
 			}
 
 			// Jump if we're stalling a bit TODO
-			if (p.norm() <= 1e-10 || norm > 1e20 || isnan(norm)) {
+			if (p.norm() <= 1e-10 || norm > 1e20 || isnan(norm) || iter % 500 == 0) {
 				x = maxMag*Eigen::VectorXd::Random(maxVariables);
 			}
 
@@ -4128,10 +4128,12 @@ public:
 
 	// Attempt find a feasible point of this problem TODO
 	std::vector<polyType> findFeasibleEqualityPoint2(double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13) {
-		int newPolySize = maxVariables+conZero.size();
+		//int newPolySize = maxVariables+conZero.size();
+		int newPolySize = maxVariables+1;
 		Polynomial<double> newPoly(newPolySize);
 		for (int i=0; i<conZero.size(); i++) {
-			Polynomial<double> newCon = conZero[i].changeMaxVariables(newPolySize).integrate(maxVariables+i);
+			//Polynomial<double> newCon = conZero[i].changeMaxVariables(newPolySize).integrate(maxVariables+i);
+			Polynomial<double> newCon = conZero[i].changeMaxVariables(newPolySize).integrate(maxVariables);
 			newPoly += newCon*newCon;
 		}
 		return newPoly.findLocalMinimum(alpha, tolerance, maxIters, threads, verbosity, maxMag);
