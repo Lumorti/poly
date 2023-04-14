@@ -467,11 +467,7 @@ int main(int argc, char ** argv) {
 		// Find a feasible point of the equality constraints TODO better init
 		std::cout << std::scientific;
 		std::vector<double> x;
-		if (!debugFlag) {
-			x = prob.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, verbosity, 1.0/std::sqrt(d), stabilityTerm);
-		} else {
-			x = prob.findFeasibleEqualityPoint2(alpha, tolerance, maxIters, cores, verbosity, 1.0/std::sqrt(d), stabilityTerm);
-		}
+		x = prob.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, verbosity, 1.0/std::sqrt(d), stabilityTerm);
 		double maxVal = -1000;
 		for (int i=0; i<prob.conZero.size(); i++) {
 			maxVal = std::max(maxVal, std::abs(prob.conZero[i].eval(x)));
