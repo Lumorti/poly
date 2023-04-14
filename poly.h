@@ -1581,32 +1581,24 @@ public:
 
 	// Try to find a root, with one variable being optimized towards zero
 	std::vector<polyType> findRoot(int zeroInd=0, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13) {
-		return integrate(zeroInd).findLocalMinimum(alpha, tolerance, maxIters, threads, verbosity, maxMag);
+		return integrate(zeroInd).findStationaryPoint(alpha, tolerance, maxIters, threads, verbosity, maxMag);
 	}
 
-	// Cost/gradient function for optim TODO
-	static double gradFunction(const Eigen::VectorXd& x, Eigen::VectorXd* gradOut, Eigen::MatrixXd* hessOut, void* optData) {
+	// Cost/gradient function for optim
+	static double gradFunction(const Eigen::VectorXd& x, Eigen::VectorXd* gradOut, void* optData) {
 		
-		struct data_type {
+		// Recast this generic pointer into the correct format
+		struct dataType {
 			int maxVariables;
 			Polynomial obj;
 			std::vector<Polynomial> gradient;
-			std::vector<std::vector<Polynomial>> hessian;
 		};
-
-		data_type* optDataRecast = reinterpret_cast<data_type*>(optData);
+		dataType* optDataRecast = reinterpret_cast<dataType*>(optData);
 
 		// Calculate the gradient
 		if (gradOut) {
 			for (int i=0; i<optDataRecast->maxVariables; i++) {
 				(*gradOut)(i) = optDataRecast->gradient[i].evalFast(x);
-			}
-		}
-		if (hessOut) {
-			for (int i=0; i<optDataRecast->maxVariables; i++) {
-				for (int j=0; j<optDataRecast->maxVariables; j++) {
-					(*hessOut)(i,j) = optDataRecast->hessian[i][j].evalFast(x);
-				}
 			}
 		}
 
@@ -1615,8 +1607,8 @@ public:
 
 	}
 
-	// Use the Newton method to find a local minimum
-	std::vector<polyType> findLocalMinimum(double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13) {
+	// Use the optim library to minimize the polynomial
+	std::vector<polyType> minimize(double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13) {
 
 		// Prepare everything for parallel computation
 		omp_set_num_threads(threads);
@@ -1653,150 +1645,192 @@ public:
 
 		// Check a bunch of random xs to see which is the best
 		Eigen::VectorXd x = maxMag*Eigen::VectorXd::Random(maxVariables);
-		//double bestVal = evalFast(x);
-		//#pragma omp parallel for
-		//for (int i=0; i<1000; i++) {
-			//Eigen::VectorXd testX = maxMag*Eigen::VectorXd::Random(maxVariables);
-			//double *xFast = testX.data();
-			//double val = evalFast(xFast);
-			//if (val < bestVal) {
-				//bestVal = val;
-				//x = testX;
-			//}
-		//}
-		//std::cout << x.transpose() << std::endl;
 
-		struct data_type {
+		// The format of a our data object
+		struct dataType {
 			int maxVariables;
 			Polynomial obj;
 			std::vector<Polynomial> gradient;
-			std::vector<std::vector<Polynomial>> hessian;
 		};
 
-		data_type optData;
+		// The data object to be passed to the gradient function
+		dataType optData;
 		optData.maxVariables = maxVariables;
 		optData.gradient = gradient;
 		optData.hessian = hessian;
 		optData.obj = *this;
  
+		// Settings for optim
 		optim::algo_settings_t settings;
-		settings.print_level = 1;
+		settings.print_level = 0;
 		settings.iter_max = 100000;
 		settings.grad_err_tol = 1e-08;
 		settings.rel_sol_change_tol = 1e-14;
 		settings.rel_objfn_change_tol = 1e-08;
 
-		// TODO try with ADAM or something
-		bool success = optim::newton(x, gradFunction, &optData, settings);
+		// Run the optimisation from the optim library
+		bool success = optim::lbfgs(x, gradFunction, &optData, settings);
 
-		std::cout << "success? = " << success << std::endl;
+		// Convert to a std::vector and return
 		std::vector<polyType> toReturn2(maxVariables);
 		for (int i=0; i<maxVariables; i++) {
 			toReturn2[i] = x(i);
 		}
 		return toReturn2;
 
-		//// Perform gradient descent using this info
-		//Eigen::MatrixXd inv(maxVariables, maxVariables);
-		//Eigen::VectorXd p(maxVariables);
-		//Eigen::MatrixXd H(maxVariables, maxVariables);
-		//Eigen::VectorXd g(maxVariables);
-		//Eigen::VectorXd bestX(maxVariables);
-		//double maxX = 0;
-		//int iter = 0;
-		//double minVal = 1e10;
-		//double norm = 1;
-		//double prevNorm = norm;
-		//double alphaOG = alpha;
-		//bool fastMode = true;
-		//while (iter < maxIters || maxIters < 0) {
-			//iter++;
+	}
 
-			//// Convert x to a C++ array for faster eval performance
-			//double *xFast = x.data();
+	// Use the Newton method to find a stationary point
+	std::vector<polyType> findStationaryPoint(double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13) {
 
-			//// Calculate the gradient
-			//#pragma omp parallel for
-			//for (int i=0; i<maxVariables; i++) {
-				//g(i) = gradient[i].evalFast(xFast);
-			//}
-			//prevNorm = norm;
-			//norm = std::abs(g.norm());
+		// Prepare everything for parallel computation
+		omp_set_num_threads(threads);
+		Eigen::setNbThreads(threads);
 
-			//// Calculate the Hessian
-			//#pragma omp parallel for
-			//for (int i=0; i<maxVariables; i++) {
-				//for (int j=i; j<maxVariables; j++) {
-					//H(i,j) = hessian[i][j].evalFast(xFast);
-					//H(j,i) = H(i,j);
-				//}
-			//}
+		// Start a timer
+		auto begin = std::chrono::steady_clock::now();
 
-			//// Add some diagonal for a bit of numerical stability
-			//for (int i=0; i<maxVariables; i++) {
-				//H(i,i) += stabilityTerm;
-			//}
+		// Get the gradient
+		std::vector<Polynomial> gradient(maxVariables, Polynomial(maxVariables));
+		#pragma omp parallel for
+		for (int i=0; i<maxVariables; i++) {
+			gradient[i] = differentiate(i);
+		}
 
-			//// Determine the direction
-			////p = -H.colPivHouseholderQr().solve(g);
-			////p = -H.fullPivHouseholderQr().solve(g);
-			//p = -H.partialPivLu().solve(g);
+		// Get the Hessian
+		std::vector<std::vector<Polynomial>> hessian(maxVariables, std::vector<Polynomial>(maxVariables, Polynomial(maxVariables)));
+		#pragma omp parallel for
+		for (int i=0; i<maxVariables; i++) {
+			for (int j=i; j<maxVariables; j++) {
+				hessian[i][j] = gradient[i].differentiate(j);
+			}
+		}
 
-			//// Perform the update
-			//x += alpha*p;
+		// Pre-cache things to allow for much faster evals
+		prepareEvalFast();
+		#pragma omp parallel for
+		for (int i=0; i<maxVariables; i++) {
+			gradient[i].prepareEvalFast();
+			for (int j=i; j<maxVariables; j++) {
+				hessian[i][j].prepareEvalFast();
+			}
+		}
 
-			//// Keep track of the best we've found
-			//if (norm < minVal) {
-				//minVal = norm;
-				//bestX = x;
-			//}
+		// Check a bunch of random xs to see which is the best
+		Eigen::VectorXd x = maxMag*Eigen::VectorXd::Random(maxVariables);
+		double bestVal = evalFast(x);
+		#pragma omp parallel for
+		for (int i=0; i<1000; i++) {
+			Eigen::VectorXd testX = maxMag*Eigen::VectorXd::Random(maxVariables);
+			double *xFast = testX.data();
+			double val = evalFast(xFast);
+			if (val < bestVal) {
+				bestVal = val;
+				x = testX;
+			}
+		}
 
-			//// Per-iteration output
-			//if (verbosity >= 2) {
-				//std::cout << iter << " " << norm << " " << minVal << "\n" << std::flush;
-			//} else if (verbosity >= 1) {
-				//std::cout << iter << " " << norm << " " << minVal << "          \r" << std::flush;
-			//}
+		// Perform gradient descent using this info
+		Eigen::MatrixXd inv(maxVariables, maxVariables);
+		Eigen::VectorXd p(maxVariables);
+		Eigen::MatrixXd H(maxVariables, maxVariables);
+		Eigen::VectorXd g(maxVariables);
+		Eigen::VectorXd bestX(maxVariables);
+		double maxX = 0;
+		int iter = 0;
+		double minVal = 1e10;
+		double norm = 1;
+		double prevNorm = norm;
+		double alphaOG = alpha;
+		bool fastMode = true;
+		while (iter < maxIters || maxIters < 0) {
+			iter++;
 
-			//// Convergence criteria
-			//if (norm < tolerance) {
-				//break;
-			//}
+			// Convert x to a C++ array for faster eval performance
+			double *xFast = x.data();
 
-			//// Jump if we're stalling a bit TODO
-			//if (p.norm() <= 1e-10 || norm > 1e20 || isnan(norm) || iter % 500 == 0) {
-				//x = maxMag*Eigen::VectorXd::Random(maxVariables);
-			//}
+			// Calculate the gradient
+			#pragma omp parallel for
+			for (int i=0; i<maxVariables; i++) {
+				g(i) = gradient[i].evalFast(xFast);
+			}
+			prevNorm = norm;
+			norm = std::abs(g.norm());
 
-		//}
-		//x = bestX;
+			// Calculate the Hessian
+			#pragma omp parallel for
+			for (int i=0; i<maxVariables; i++) {
+				for (int j=i; j<maxVariables; j++) {
+					H(i,j) = hessian[i][j].evalFast(xFast);
+					H(j,i) = H(i,j);
+				}
+			}
 
-		//// If asking for everything
-		//if (verbosity >= 2) {
-			//std::cout << std::endl;
-			//std::cout << "x: " << x.transpose() << std::endl;
-			//std::cout << std::endl;
-			//std::cout << "grad: " << g.transpose() << std::endl;
-			//std::cout << std::endl;
-		//}
+			// Add some diagonal for a bit of numerical stability
+			for (int i=0; i<maxVariables; i++) {
+				H(i,i) += stabilityTerm;
+			}
 
-		//// Stop the timer and report
-		//std::cout << std::defaultfloat;
-		//auto end = std::chrono::steady_clock::now();
-		//double timeTaken = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() / 1000.0;
-		//if (verbosity == 1) {
-			//std::cout << std::endl;
-		//}
-		//if (verbosity >= 1) {
-			//std::cout << "finished in " << iter << " iterations (" << timeTaken << " seconds total)" << std::endl;
-		//}
+			// Determine the direction
+			//p = -H.colPivHouseholderQr().solve(g);
+			//p = -H.fullPivHouseholderQr().solve(g);
+			p = -H.partialPivLu().solve(g);
 
-		//// Convert the eigen vec into a normal vec
-		//std::vector<polyType> toReturn(maxVariables);
-		//for (int i=0; i<maxVariables; i++) {
-			//toReturn[i] = x(i);
-		//}
-		//return toReturn;
+			// Perform the update
+			x += alpha*p;
+
+			// Keep track of the best we've found
+			if (norm < minVal) {
+				minVal = norm;
+				bestX = x;
+			}
+
+			// Per-iteration output
+			if (verbosity >= 2) {
+				std::cout << iter << " " << norm << " " << minVal << "\n" << std::flush;
+			} else if (verbosity >= 1) {
+				std::cout << iter << " " << norm << " " << minVal << "          \r" << std::flush;
+			}
+
+			// Convergence criteria
+			if (norm < tolerance) {
+				break;
+			}
+
+			// Jump if we're stalling a bit TODO
+			if (p.norm() <= 1e-10 || norm > 1e20 || isnan(norm) || iter % 2000 == 0) {
+				x = maxMag*Eigen::VectorXd::Random(maxVariables);
+			}
+
+		}
+		x = bestX;
+
+		// If asking for everything
+		if (verbosity >= 2) {
+			std::cout << std::endl;
+			std::cout << "x: " << x.transpose() << std::endl;
+			std::cout << std::endl;
+			std::cout << "grad: " << g.transpose() << std::endl;
+			std::cout << std::endl;
+		}
+
+		// Stop the timer and report
+		std::cout << std::defaultfloat;
+		auto end = std::chrono::steady_clock::now();
+		double timeTaken = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() / 1000.0;
+		if (verbosity == 1) {
+			std::cout << std::endl;
+		}
+		if (verbosity >= 1) {
+			std::cout << "finished in " << iter << " iterations (" << timeTaken << " seconds total)" << std::endl;
+		}
+
+		// Convert the eigen vec into a normal vec
+		std::vector<polyType> toReturn(maxVariables);
+		for (int i=0; i<maxVariables; i++) {
+			toReturn[i] = x(i);
+		}
+		return toReturn;
 
 	}
 
@@ -4187,8 +4221,7 @@ public:
 		}
 
 		// Find a root of this polynomial
-		//return poly.findRoot(zeroInd, alpha, tolerance, maxIters, threads, verbosity, maxMag, stabilityTerm);
-		return poly.findLocalMinimum(alpha, tolerance, maxIters, threads, verbosity, maxMag, stabilityTerm);
+		return poly.findRoot(zeroInd, alpha, tolerance, maxIters, threads, verbosity, maxMag, stabilityTerm);
 		
 	}
 

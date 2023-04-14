@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Variables
-cores=8
+cores=4
 iters=100000
 
 #./mub -f -c ${cores} -d 3 -N 1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d3N11111.log
@@ -19,7 +19,7 @@ iters=100000
 #./mub -f -c ${cores} -d 4 -N 2,2,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N221111.log
 #./mub -f -c ${cores} -d 4 -N 3,1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N311111.log
 #./mub -f -c ${cores} -d 4 -N 2,2,2,1,1,1 -v 2 -i ${iters} -a 0.99 -b 0.5 | tee data/d4N222111.log
-./mub -f -c ${cores} -d 4 -N 3,2,1,1,1,1 -v 2 -i ${iters} -a 0.95 -b 0.9 | tee data/d4N321111.log
+#./mub -f -c ${cores} -d 4 -N 3,2,1,1,1,1 -v 2 -i ${iters} -a 0.95 -b 0.9 | tee data/d4N321111.log
 #./mub -f -c ${cores} -d 4 -N 4,1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N411111.log
 #./mub -f -c ${cores} -d 4 -N 2,2,2,2,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N222211.log
 #./mub -f -c ${cores} -d 4 -N 3,2,2,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N322111.log
@@ -30,6 +30,61 @@ iters=100000
 #./mub -f -c ${cores} -d 4 -N 3,3,2,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N332111.log
 #./mub -f -c ${cores} -d 4 -N 4,2,2,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N422111.log
 #./mub -f -c ${cores} -d 4 -N 4,3,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d4N431111.log
+
+#./mub -f -c ${cores} -d 5 -N 1,1,1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N1111111.log
+#./mub -f -c ${cores} -d 5 -N 2,1,1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N2111111.log
+#./mub -f -c ${cores} -d 5 -N 2,2,1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N2211111.log
+#./mub -f -c ${cores} -d 5 -N 3,1,1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N3111111.log
+#./mub -f -c ${cores} -d 5 -N 2,2,2,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N2221111.log
+#./mub -f -c ${cores} -d 5 -N 3,2,1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N3211111.log
+#./mub -f -c ${cores} -d 5 -N 4,1,1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N4111111.log
+#./mub -f -c ${cores} -d 5 -N 2,2,2,2,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N2222111.log
+#./mub -f -c ${cores} -d 5 -N 3,2,2,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N3221111.log
+#./mub -f -c ${cores} -d 5 -N 3,3,1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N3311111.log
+#./mub -f -c ${cores} -d 5 -N 4,2,1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N4211111.log
+#./mub -f -c ${cores} -d 5 -N 5,1,1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N5111111.log
+#./mub -f -c ${cores} -d 5 -N 2,2,2,2,2,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N2222211.log
+#./mub -f -c ${cores} -d 5 -N 3,2,2,2,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N3222111.log
+#./mub -f -c ${cores} -d 5 -N 3,3,2,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N3321111.log
+#./mub -f -c ${cores} -d 5 -N 4,2,2,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N4221111.log
+#./mub -f -c ${cores} -d 5 -N 5,2,1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N5211111.log
+#./mub -f -c ${cores} -d 5 -N 2,2,2,2,2,2,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N2222221.log
+#./mub -f -c ${cores} -d 5 -N 3,2,2,2,2,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N3222211.log
+#./mub -f -c ${cores} -d 5 -N 4,2,2,2,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N4222111.log
+#./mub -f -c ${cores} -d 5 -N 3,3,2,2,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N3322111.log
+#./mub -f -c ${cores} -d 5 -N 3,3,3,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N3331111.log
+#./mub -f -c ${cores} -d 5 -N 4,3,2,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N4321111.log
+#./mub -f -c ${cores} -d 5 -N 5,2,2,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N5221111.log
+#./mub -f -c ${cores} -d 5 -N 4,4,1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N4411111.log
+#./mub -f -c ${cores} -d 5 -N 5,3,1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d5N5311111.log
+
+./mub -f -c ${cores} -d 6 -N 1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N1111.log
+./mub -f -c ${cores} -d 6 -N 2,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N2111.log
+./mub -f -c ${cores} -d 6 -N 2,2,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N2211.log
+./mub -f -c ${cores} -d 6 -N 3,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N3111.log
+./mub -f -c ${cores} -d 6 -N 2,2,2,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N2221.log
+./mub -f -c ${cores} -d 6 -N 3,2,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N3211.log
+./mub -f -c ${cores} -d 6 -N 4,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N4111.log
+./mub -f -c ${cores} -d 6 -N 2,2,2,2 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N2222.log
+./mub -f -c ${cores} -d 6 -N 3,2,2,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N3221.log
+./mub -f -c ${cores} -d 6 -N 3,3,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N3311.log
+./mub -f -c ${cores} -d 6 -N 4,2,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N4211.log
+./mub -f -c ${cores} -d 6 -N 3,2,2,2 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N3222.log
+./mub -f -c ${cores} -d 6 -N 6,1,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N6111.log
+./mub -f -c ${cores} -d 6 -N 3,3,2,2 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N3322.log
+./mub -f -c ${cores} -d 6 -N 6,2,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N6211.log
+./mub -f -c ${cores} -d 6 -N 3,3,3,2 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N3332.log
+./mub -f -c ${cores} -d 6 -N 6,3,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N6311.log
+./mub -f -c ${cores} -d 6 -N 3,3,3,3 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N3333.log
+./mub -f -c ${cores} -d 6 -N 6,4,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N6411.log
+./mub -f -c ${cores} -d 6 -N 4,3,3,3 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N4333.log
+./mub -f -c ${cores} -d 6 -N 6,5,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N6511.log
+./mub -f -c ${cores} -d 6 -N 4,4,3,3 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N4433.log
+./mub -f -c ${cores} -d 6 -N 6,6,1,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N6611.log
+./mub -f -c ${cores} -d 6 -N 4,4,4,3 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N4443.log
+./mub -f -c ${cores} -d 6 -N 6,6,2,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N6621.log
+./mub -f -c ${cores} -d 6 -N 4,4,4,4 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N4444.log
+./mub -f -c ${cores} -d 6 -N 6,6,3,1 -v 2 -i ${iters} -a 0.9 -b 0.1 | tee data/d6N6631.log
 
 #./mub -f -c ${cores} -d 2 -n 3 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d2n3.log
 #./mub -f -c ${cores} -d 2 -n 4 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d2n4.log
@@ -208,7 +263,7 @@ iters=100000
 #./mub -f -c ${cores} -d 20 -n 4 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d20n4.log
 
 # Read all log files in the data directory
-for file in $(ls data/d4N*.log | sort); do
+for file in $(ls data/d5N*.log | sort); do
     if [ -f "$file" ]; then
         grep -H "vars" "$file"
         grep -H "iteration" "$file"
