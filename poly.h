@@ -1580,8 +1580,8 @@ public:
 	}
 
 	// Try to find a root, with one variable being optimized towards zero
-	std::vector<polyType> findRoot(int zeroInd=0, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13) {
-		return integrate(zeroInd).findStationaryPoint(alpha, tolerance, maxIters, threads, verbosity, maxMag);
+	std::vector<polyType> findRoot(int zeroInd=0, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13, std::vector<polyType> startX={}) {
+		return integrate(zeroInd).findStationaryPoint(alpha, tolerance, maxIters, threads, verbosity, maxMag, stabilityTerm, startX);
 	}
 
 	// Cost/gradient function for optim
@@ -1681,7 +1681,7 @@ public:
 	}
 
 	// Use the Newton method to find a stationary point
-	std::vector<polyType> findStationaryPoint(double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13) {
+	std::vector<polyType> findStationaryPoint(double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13, std::vector<polyType> startX={}) {
 
 		// Prepare everything for parallel computation
 		omp_set_num_threads(threads);
@@ -1716,17 +1716,11 @@ public:
 			}
 		}
 
-		// Check a bunch of random xs to see which is the best
+		// Start from a given point
 		Eigen::VectorXd x = maxMag*Eigen::VectorXd::Random(maxVariables);
-		double bestVal = evalFast(x);
-		#pragma omp parallel for
-		for (int i=0; i<1000; i++) {
-			Eigen::VectorXd testX = maxMag*Eigen::VectorXd::Random(maxVariables);
-			double *xFast = testX.data();
-			double val = evalFast(xFast);
-			if (val < bestVal) {
-				bestVal = val;
-				x = testX;
+		if (startX.size() > 0) {
+			for (int i=0; i<startX.size(); i++) {
+				x(i) = startX[i];
 			}
 		}
 
@@ -1735,16 +1729,23 @@ public:
 		Eigen::VectorXd p(maxVariables);
 		Eigen::MatrixXd H(maxVariables, maxVariables);
 		Eigen::VectorXd g(maxVariables);
-		Eigen::VectorXd bestX(maxVariables);
+		Eigen::VectorXd bestX = x;
 		double maxX = 0;
 		int iter = 0;
-		double minVal = 1e10;
+		int precisionIters = 0;
 		double norm = 1;
 		double prevNorm = norm;
-		double alphaOG = alpha;
-		bool fastMode = true;
-		while (iter < maxIters || maxIters < 0) {
-			iter++;
+		double minVal = 10000000;
+		double minValPrePrecision = minVal;
+		std::vector<Eigen::VectorXd> pastX;
+		while (true) {
+
+			// Increse the iter count, also the precision count if we're in precision mode
+			if (precisionIters == 0) {
+				iter++;
+			} else {
+				precisionIters++;
+			}
 
 			// Convert x to a C++ array for faster eval performance
 			double *xFast = x.data();
@@ -1767,14 +1768,18 @@ public:
 			}
 
 			// Add some diagonal for a bit of numerical stability
-			for (int i=0; i<maxVariables; i++) {
-				H(i,i) += stabilityTerm;
+			if (stabilityTerm >= 0) {
+				for (int i=0; i<maxVariables; i++) {
+					H(i,i) += stabilityTerm;
+				}
 			}
 
 			// Determine the direction
-			//p = -H.colPivHouseholderQr().solve(g);
-			//p = -H.fullPivHouseholderQr().solve(g);
-			p = -H.partialPivLu().solve(g);
+			if (precisionIters == 0) {
+				p = -H.partialPivLu().solve(g);
+			} else {
+				p = -H.fullPivHouseholderQr().solve(g);
+			}
 
 			// Perform the update
 			x += alpha*p;
@@ -1786,19 +1791,36 @@ public:
 			}
 
 			// Per-iteration output
-			if (verbosity >= 2) {
-				std::cout << iter << " " << norm << " " << minVal << "\n" << std::flush;
-			} else if (verbosity >= 1) {
-				std::cout << iter << " " << norm << " " << minVal << "          \r" << std::flush;
+			if (precisionIters == 0) {
+				if (verbosity >= 2) {
+					std::cout << iter << " " << norm << " " << minVal << "\n" << std::flush;
+				} else if (verbosity >= 1) {
+					std::cout << iter << " " << norm << " " << minVal << "          \r" << std::flush;
+				}
+			} else {
+				if (verbosity >= 2) {
+					std::cout << (precisionIters-1) << " (precision) " << norm << " " << minVal << " (from " << minValPrePrecision << ")\n" << std::flush;
+				} else if (verbosity >= 1) {
+					std::cout << (precisionIters-1) << " (precision) " << norm << " " << minVal << " (from " << minValPrePrecision << ")          \r" << std::flush;
+				}
 			}
 
-			// Convergence criteria
-			if (norm < tolerance) {
+			// Before finishing, see if we can improve the solution a bit
+			if (precisionIters == 0 && (norm < tolerance || (iter > maxIters && maxIters > 0))) {
+				x = bestX;
+				alpha = 0.95;
+				stabilityTerm = -1;
+				precisionIters = 1;
+				minValPrePrecision = minVal;
+			}
+
+			// Stop when we've improved the solution a bit
+			if (precisionIters > 100 || maxIters == 1) {
 				break;
 			}
 
 			// Jump if we're stalling a bit TODO
-			if (p.norm() <= 1e-10 || norm > 1e20 || isnan(norm) || iter % 2000 == 0) {
+			if (precisionIters == 0 && (p.norm() <= 1e-10 || norm > 1e20 || isnan(norm) || iter % 10000 == 0)) {
 				x = maxMag*Eigen::VectorXd::Random(maxVariables);
 			}
 
@@ -2603,9 +2625,6 @@ public:
 
 		// List of semdefinite matrices
 		std::vector<std::vector<int>> monomPairs;
-
-		// Random seed
-		std::srand(time(0));
 
 		// Single-order monomials should always appear
 		for (int i=0; i<maxVariables; i++) {
@@ -3647,9 +3666,6 @@ public:
 		// List of semdefinite matrices
 		std::vector<std::vector<int>> monomPairs;
 
-		// Random seed
-		std::srand(time(0));
-
 		// First monom should always be 1
 		auto loc = std::find(monoms.begin(), monoms.end(), "");
 		if (loc != monoms.end()) {
@@ -4206,8 +4222,41 @@ public:
 	}
 
 	// Attempt find a feasible point of this problem
-	std::vector<polyType> findFeasibleEqualityPoint(int zeroInd=-1, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13) {
+	std::vector<polyType> findFeasibleEqualityPoint(int zeroInd=-1, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13, std::vector<polyType> startX={}) {
 
+		// TODO
+		//std::vector<std::vector<polyType>> startXs(conZero.size()+1, std::vector<polyType>(0));
+		////int startJ = conZero.size()-1; 
+		//int startJ = std::min(maxVariables-1, int(conZero.size()-1)); 
+		//for (int j=startJ; j<=conZero.size(); j++) {
+
+			//// Combine these to create a single polynomial
+			//Polynomial<polyType> poly1(maxVariables);
+			//for (int i=0; i<j; i++) {
+				//poly1 += conZero[i]*conZero[i];
+			//}
+
+			//// If no index specified, add a var and use that
+			//int zeroInd1 = zeroInd;
+			//if (zeroInd1 == -1) {
+				//poly1 = poly1.changeMaxVariables(maxVariables+1);
+				//zeroInd1 = poly1.maxVariables-1;
+			//}
+
+			//std::cout << "   " << j << " / " << conZero.size() << std::endl;
+
+			//// Find a root of this polynomial
+			//startXs[j] = poly1.findRoot(zeroInd1, alpha, tolerance, maxIters, threads, verbosity, maxMag, stabilityTerm, startXs[j-1]);
+
+			//// If we can't find it, reset
+			//if (poly1.eval(startXs[j]) > tolerance) {
+				//j = startJ-1;
+			//}
+
+		//}
+
+		//return startXs[conZero.size()];
+		
 		// Combine these to create a single polynomial
 		Polynomial<polyType> poly(maxVariables);
 		for (int i=0; i<conZero.size(); i++) {
@@ -4221,7 +4270,7 @@ public:
 		}
 
 		// Find a root of this polynomial
-		return poly.findRoot(zeroInd, alpha, tolerance, maxIters, threads, verbosity, maxMag, stabilityTerm);
+		return poly.findRoot(zeroInd, alpha, tolerance, maxIters, threads, verbosity, maxMag, stabilityTerm, startX);
 		
 	}
 
@@ -4292,9 +4341,6 @@ public:
 
 		// List of semdefinite matrices
 		std::vector<std::vector<Polynomial<polyType>>> monomProducts;
-
-		// Random seed
-		std::srand(time(0));
 
 		// Get the order of the set of equations
 		int degree = getDegree();
@@ -4916,6 +4962,29 @@ public:
 
 	}
 
+	// Turn the equality constraints into a matrix and then find the rank
+	int getLinearRank() {
+
+		// Get the monomial list
+		std::vector<std::string> monoms = getMonomials();
+
+		// The matrix
+		Eigen::MatrixXd A = Eigen::MatrixXd::Zero(conZero.size(), monoms.size());
+
+		// Each column is a monomial, each row is an equation
+		for (int i=0; i<conZero.size(); i++) {
+			for (auto const &pair: conZero[i].coeffs) {
+				int loc = std::find(monoms.begin(), monoms.end(), pair.first)-monoms.begin();
+				A(i, loc) = pair.second;
+			}
+		}
+
+	   // Calculate and return the rank of this
+	   Eigen::FullPivLU<Eigen::MatrixXd> decomp(A);
+	   return decomp.rank();
+
+	}
+
 	// Use Hilbert's Nullstellensatz to try to prove infeasiblity
 	void useNull(int level=1, double bounds=1, int maxIters=-1) {
 
@@ -5108,9 +5177,6 @@ public:
 
 		// List of semdefinite matrices
 		std::vector<std::vector<Polynomial<polyType>>> monomProducts;
-
-		// Random seed
-		std::srand(time(0));
 
 		// Get the order of the set of equations
 		int degree = getDegree();

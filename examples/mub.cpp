@@ -4,7 +4,6 @@
 int main(int argc, char ** argv) {
 
 	// Get the problem from the args
-	std::srand(time(0));
 	int d = 2;
 	int n = 4;
 	std::string task = "infeasible";
@@ -14,7 +13,7 @@ int main(int argc, char ** argv) {
 	int cores = 4;
 	double stabilityTerm = 1e-20;
 	float alpha = 0.99;
-	double tolerance = 1e-13;
+	double tolerance = 1e-12;
 	bool debugFlag = false;
 	bool firstIsComputational = true;
 	bool secondIsUniform = true;
@@ -38,6 +37,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -p [int]    set the number of vars to split initially" << std::endl;
 			std::cout << " -c [int]    set the number of cores to use" << std::endl;
 			std::cout << " -o [str]    log points to a csv file" << std::endl;
+			std::cout << " -r          use a random seed" << std::endl;
 			std::cout << " -1          don't assume the first basis is the computational" << std::endl;
 			std::cout << " -2          don't assume the first vector of the second basis is uniform" << std::endl;
 			std::cout << " -3          don't assume the first element of each is one" << std::endl;
@@ -83,6 +83,8 @@ int main(int argc, char ** argv) {
 			i++;
 		} else if (arg == "-s") {
 			solver = "scs";
+		} else if (arg == "-r") {
+			std::srand(time(0));
 		} else if (arg == "-1") {
 			firstIsComputational = false;
 		} else if (arg == "-2") {
@@ -166,6 +168,7 @@ int main(int argc, char ** argv) {
 	int numVarsNonConj = n*d*d;
 	int numVars = 2*numVarsNonConj+1000;
 	int conjDelta = numVarsNonConj;
+	int ogVarsWithReductions = 0;
 
 	// List the bases and the variables indices
 	if (verbosity >= 2) {
@@ -179,10 +182,17 @@ int main(int argc, char ** argv) {
 				std::cout << "{";
 				for (int m=0; m<d; m++) {
 					if (k < basisSizes[i]) {
-						if ((m == 0 && firstElementIsOne) || (i == 0 && firstIsComputational) || (secondIsUniform && i == 1 && k == 0)) {
-							std::cout << "-" ;
+						if (i == 0 && firstIsComputational) {
+							if (i == m) {
+								std::cout << 1;
+							} else {
+								std::cout << 0;
+							}
+						} else if ((m == 0 && firstElementIsOne) || (secondIsUniform && i == 1 && k == 0)) {
+							std::cout << std::setprecision(3) << 1.0/std::sqrt(d);
 						} else {
-							std::cout << nextInd << "+i" << nextInd + conjDelta;
+							std::cout << "x_" << nextInd << "+i*x_" << nextInd + conjDelta;
+							ogVarsWithReductions += 2;
 						}
 						if (m < d-1) {
 							std::cout << ", ";
@@ -453,18 +463,28 @@ int main(int argc, char ** argv) {
 		std::cout << "Problem: " << std::endl;
 		std::cout << "---------------------" << std::endl;
 		std::cout << prob << std::endl;
+		std::cout << "---------------------" << std::endl;
+		std::cout << "Summary:" << std::endl;
+		std::cout << "---------------------" << std::endl;
 	}
 	prob = prob.replaceWithVariable(reducedMap);
 	int numVectors = 0;
 	for (int i=0; i<n; i++) {
 		numVectors += basisSizes[i];
 	}
-	std::cout << "set sizes: " << basisSizes << ", vars: " << prob.maxVariables << ", vectors: " << numVectors << std::endl;
+	std::cout << "set sizes: " << basisSizes << ", vars: " << prob.maxVariables << ", vectors: " << numVectors << ", equations: " << eqns.size() << ", true vars: " << ogVarsWithReductions << std::endl;
+	if (verbosity >= 2) {
+		std::cout << std::endl;
+		std::cout << "---------------------" << std::endl;
+		std::cout << "Optimization:" << std::endl;
+		std::cout << "---------------------" << std::endl;
+
+	}
 
 	// If told to find a feasible point
 	if (task == "feasible") {
 
-		// Find a feasible point of the equality constraints TODO better init
+		// Find a feasible point of the equality constraints
 		std::cout << std::scientific;
 		std::vector<double> x;
 		x = prob.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, verbosity, 1.0/std::sqrt(d), stabilityTerm);
@@ -480,7 +500,7 @@ int main(int argc, char ** argv) {
 			std::vector<std::vector<std::vector<std::complex<double>>>> bases(n, std::vector<std::vector<std::complex<double>>>(d, std::vector<std::complex<double>>(d, 0.0)));
 			std::cout << std::endl;
 			std::cout << "---------------------" << std::endl;
-			std::cout << "MUBs:" << std::endl;
+			std::cout << "Result:" << std::endl;
 			std::cout << "---------------------" << std::endl;
 			int nextInd = 0;
 			for (int i=0; i<n; i++) {
