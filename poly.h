@@ -4962,8 +4962,8 @@ public:
 
 	}
 
-	// Turn the equality constraints into a matrix and then find the rank
-	int getLinearRank() {
+	// Turn the equality constraints into a matrix and then find the rank TODO
+	int getLinearRank(int level=1) {
 
 		// Get the monomial list
 		std::vector<std::string> monoms = getMonomials();

@@ -5,7 +5,7 @@ LIBSEIGEN= -I/usr/include/eigen3
 LIBSOMP= -fopenmp
 LIBSSCS= -L${SCSHOME}/lib/ -I${SCSHOME}/include/scs/ -lscsdir
 LIBSMOSEK= -I${MSKHOME}/h -L${MSKHOME}/bin -Wl,-rpath-link,${MSKHOME}/bin -Wl,-rpath=${MSKHOME}/bin -lmosek64 -lfusion64
-LIBSOPTIM= -I/usr/local/include/optim/ -loptim
+LIBSOPTIM= -I${OPTIMHOME}/include/ -L${OPTIMHOME} -loptim
 LIBS=$(LIBSEIGEN) $(LIBSOPTIM) $(LIBSMOSEK) $(LIBSSCS) $(LIBSOMP)
 
 all: mub simple matrices sos ising

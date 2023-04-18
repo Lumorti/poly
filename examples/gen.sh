@@ -92,6 +92,8 @@ iters=100000
 #./mub -f -c ${cores} -d 6 -N 6,5,2,1 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N6521.log
 #./mub -f -c ${cores} -d 6 -N 6,5,3,1 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N6531.log
 #./mub -f -c ${cores} -d 6 -N 6,5,4,1 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N6541.log
+#./mub -f -c ${cores} -d 6 -N 6,3,2,2,1 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N63221.log
+#./mub -f -c ${cores} -d 6 -N 6,3,2,2,2 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N63222.log
 #./mub -f -c ${cores} -d 6 -N 6,2,2,1,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N62211111.log
 #./mub -f -c ${cores} -d 6 -N 6,2,2,2,1,1,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N62221111.log
 

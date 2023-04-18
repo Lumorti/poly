@@ -484,6 +484,34 @@ int main(int argc, char ** argv) {
 	// If told to find a feasible point
 	if (task == "feasible") {
 
+		// See if there are any constraints that can be removed without LoG TODO
+		PolynomialProblem<double> probReduced = prob;
+		for (int k=0; k<20; k++) {
+			bool removed = false;
+			for (int l=0; l<probReduced.conZero.size(); l++) {
+				int j = int((probReduced.conZero.size()*rand()) / RAND_MAX);
+				PolynomialProblem<double> probNew = probReduced;
+				Polynomial<double> removedEqn = probNew.conZero[j];
+				probNew.conZero.erase(probNew.conZero.begin()+j);
+				std::vector<double> xNew = probNew.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, 0, 1.0/std::sqrt(d), stabilityTerm);
+				double maxValNew = -1000;
+				for (int i=0; i<prob.conZero.size(); i++) {
+					maxValNew = std::max(maxValNew, std::abs(prob.conZero[i].eval(xNew)));
+				}
+				if (maxValNew < 1e-7) {
+					std::cout << "removed " << removedEqn << " with " << maxValNew << std::endl;
+					probReduced.conZero.erase(probReduced.conZero.begin()+j);
+					removed = true;
+					break;
+				}
+			}
+			if (!removed) {
+				std::cout << "couldn't find anything to remove" << std::endl;
+				probReduced = prob;
+				k = -1;
+			}
+		}
+
 		// Find a feasible point of the equality constraints
 		std::cout << std::scientific;
 		std::vector<double> x;
