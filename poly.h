@@ -4224,39 +4224,6 @@ public:
 	// Attempt find a feasible point of this problem
 	std::vector<polyType> findFeasibleEqualityPoint(int zeroInd=-1, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13, std::vector<polyType> startX={}) {
 
-		// TODO
-		//std::vector<std::vector<polyType>> startXs(conZero.size()+1, std::vector<polyType>(0));
-		////int startJ = conZero.size()-1; 
-		//int startJ = std::min(maxVariables-1, int(conZero.size()-1)); 
-		//for (int j=startJ; j<=conZero.size(); j++) {
-
-			//// Combine these to create a single polynomial
-			//Polynomial<polyType> poly1(maxVariables);
-			//for (int i=0; i<j; i++) {
-				//poly1 += conZero[i]*conZero[i];
-			//}
-
-			//// If no index specified, add a var and use that
-			//int zeroInd1 = zeroInd;
-			//if (zeroInd1 == -1) {
-				//poly1 = poly1.changeMaxVariables(maxVariables+1);
-				//zeroInd1 = poly1.maxVariables-1;
-			//}
-
-			//std::cout << "   " << j << " / " << conZero.size() << std::endl;
-
-			//// Find a root of this polynomial
-			//startXs[j] = poly1.findRoot(zeroInd1, alpha, tolerance, maxIters, threads, verbosity, maxMag, stabilityTerm, startXs[j-1]);
-
-			//// If we can't find it, reset
-			//if (poly1.eval(startXs[j]) > tolerance) {
-				//j = startJ-1;
-			//}
-
-		//}
-
-		//return startXs[conZero.size()];
-		
 		// Combine these to create a single polynomial
 		Polynomial<polyType> poly(maxVariables);
 		for (int i=0; i<conZero.size(); i++) {
@@ -4703,6 +4670,8 @@ public:
 			M->constraint(mosek::fusion::Expr::add(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Expr::mul(lambda, identityAsSVec[i])), mosek::fusion::Domain::inSVecPSDCone());
 		}
 
+		// TODO MOSEK adaptive SDP cons
+
 		// Original PSD cons
 		if (conPSDLinear.size() > 0) {
 			mosek::fusion::Expression::t matSum = mosek::fusion::Expr::mulElm(psdCoeffsM[0], xM->pick(psdLocsM[0]));
@@ -4962,26 +4931,62 @@ public:
 
 	}
 
-	// Turn the equality constraints into a matrix and then find the rank TODO
-	int getLinearRank(int level=1) {
+	// Turn the equality constraints into a matrix and then find the rank
+	float getRank(int level=1) {
 
-		// Get the monomial list
-		std::vector<std::string> monoms = getMonomials();
-
-		// The matrix
-		Eigen::MatrixXd A = Eigen::MatrixXd::Zero(conZero.size(), monoms.size());
-
-		// Each column is a monomial, each row is an equation
-		for (int i=0; i<conZero.size(); i++) {
-			for (auto const &pair: conZero[i].coeffs) {
-				int loc = std::find(monoms.begin(), monoms.end(), pair.first)-monoms.begin();
-				A(i, loc) = pair.second;
+		// For higher ranks, multiply by extra variables
+		std::vector<Polynomial<double>> conList = conZero;
+		if (level >= 2) {
+			for (int j=0; j<conZero.size(); j++) {
+				for (int i1=0; i1<maxVariables; i1++) {
+					conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1}));
+				}
+			}
+		}
+		if (level >= 3) {
+			for (int j=0; j<conZero.size(); j++) {
+				for (int i1=0; i1<maxVariables; i1++) {
+					for (int i2=0; i2<maxVariables; i2++) {
+						conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1, i2}));
+					}
+				}
 			}
 		}
 
-	   // Calculate and return the rank of this
-	   Eigen::FullPivLU<Eigen::MatrixXd> decomp(A);
-	   return decomp.rank();
+		// Use an unordered set to get the unique monomial list
+		std::unordered_set<std::string> monomsSet;
+		std::vector<std::string> tempList;
+		for (int i=0; i<conList.size(); i++) {
+			tempList = conList[i].getMonomials();
+			monomsSet.insert(tempList.begin(), tempList.end());
+		}
+		for (int i=0; i<conPositive.size(); i++) {
+			tempList = conPositive[i].getMonomials();
+			monomsSet.insert(tempList.begin(), tempList.end());
+		}
+
+		// Turn this into a vector
+		std::vector<std::string> monoms;
+		for (const std::string& mon: monomsSet) {
+			monoms.push_back(mon);
+		}
+
+		// Each column is a monomial, each row is an equation
+		std::vector<Eigen::Triplet<double>> triplets;
+		triplets.reserve(conList.size()*10);
+		for (int i=0; i<conList.size(); i++) {
+			for (auto const &pair: conList[i].coeffs) {
+				int loc = std::find(monoms.begin(), monoms.end(), pair.first)-monoms.begin();
+				triplets.push_back(Eigen::Triplet<double>(i, loc, pair.second));
+			}
+		}
+		Eigen::SparseMatrix<double> A(conList.size(), monoms.size());
+		A.setFromTriplets(triplets.begin(), triplets.end());
+
+		// Calculate and return the rank of this
+		Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
+        solver.compute(A);
+		return solver.rank() - conList.size();
 
 	}
 
@@ -5556,15 +5561,6 @@ public:
 				A_p[AColsSCS[AOrdering[i]]] = i;
 			}
 		}
-
-		int countTest = 0;
-		for (int j = 0; j < varsTotal; j++) { /* column */
-			for (int h = A_p[j]; h < A_p[j + 1]; h++) {
-				countTest++;
-			}
-		}
-		std::cout << AValsSCS.size() << std::endl;
-		std::cout << countTest << std::endl;
 
 		// Params needed for SCS
 		int* SDPSizes = new int[monomProducts.size()];

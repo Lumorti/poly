@@ -121,19 +121,19 @@ int main(int argc, char ** argv) {
 	// Otherwise use sizes based on dimension
 	} else {
 		if (d == 2) {
-			basisSizes = {1, 1, 1, 1};
+			basisSizes = {2, 1, 1, 1};
 		} else if (d == 3) {
-			basisSizes = {2, 1, 1, 1, 1};
+			basisSizes = {3, 1, 1, 1, 1};
 		} else if (d == 4) {
-			basisSizes = {2, 2, 2, 2, 1, 1};
+			basisSizes = {4, 2, 1, 1, 1, 1};
 		} else if (d == 5) {
-			basisSizes = {2, 2, 2, 2, 2, 2, 1};
+			basisSizes = {5, 2, 2, 1, 1, 1, 1};
 		} else if (d == 6) {
 			basisSizes = {6, 5, 3, 1};
 		} else if (d == 7) {
-			basisSizes = {3, 2, 2, 2, 2, 2, 2, 2, 2};
+			basisSizes = {7, 2, 2, 2, 1, 1, 1, 1, 1};
 		} else if (d == 8) {
-			basisSizes = {3, 3, 2, 2, 2, 2, 2, 2, 2, 2};
+			basisSizes = {8, 2, 2, 2, 2, 1, 1, 1, 1, 1};
 		} else if (d == 9) {
 			basisSizes = {3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2};
 		} else if (d == 10) {
@@ -168,7 +168,6 @@ int main(int argc, char ** argv) {
 	int numVarsNonConj = n*d*d;
 	int numVars = 2*numVarsNonConj+1000;
 	int conjDelta = numVarsNonConj;
-	int ogVarsWithReductions = 0;
 
 	// List the bases and the variables indices
 	if (verbosity >= 2) {
@@ -192,7 +191,6 @@ int main(int argc, char ** argv) {
 							std::cout << std::setprecision(3) << 1.0/std::sqrt(d);
 						} else {
 							std::cout << "x_" << nextInd << "+i*x_" << nextInd + conjDelta;
-							ogVarsWithReductions += 2;
 						}
 						if (m < d-1) {
 							std::cout << ", ";
@@ -442,8 +440,8 @@ int main(int argc, char ** argv) {
 				Polynomial<double> newCon(numVars);
 				int pow = 0;
 				for (auto const &pair: syms[i]) {
-					newCon.addTerm(std::pow(2, pow), {pair.first});
-					newCon.addTerm(-std::pow(2, pow), {pair.second});
+					newCon.addTerm(std::pow(1, pow), {pair.first});
+					newCon.addTerm(-std::pow(1, pow), {pair.second}); // TODO
 					pow++;
 				}
 				orderingCons.push_back(newCon);
@@ -472,7 +470,7 @@ int main(int argc, char ** argv) {
 	for (int i=0; i<n; i++) {
 		numVectors += basisSizes[i];
 	}
-	std::cout << "set sizes: " << basisSizes << ", vars: " << prob.maxVariables << ", vectors: " << numVectors << ", equations: " << eqns.size() << ", true vars: " << ogVarsWithReductions << std::endl;
+	std::cout << "set sizes: " << basisSizes << ", vars: " << prob.maxVariables << ", vectors: " << numVectors << ", equations: " << eqns.size() << std::endl;
 	if (verbosity >= 2) {
 		std::cout << std::endl;
 		std::cout << "---------------------" << std::endl;
@@ -485,32 +483,32 @@ int main(int argc, char ** argv) {
 	if (task == "feasible") {
 
 		// See if there are any constraints that can be removed without LoG TODO
-		PolynomialProblem<double> probReduced = prob;
-		for (int k=0; k<20; k++) {
-			bool removed = false;
-			for (int l=0; l<probReduced.conZero.size(); l++) {
-				int j = int((probReduced.conZero.size()*rand()) / RAND_MAX);
-				PolynomialProblem<double> probNew = probReduced;
-				Polynomial<double> removedEqn = probNew.conZero[j];
-				probNew.conZero.erase(probNew.conZero.begin()+j);
-				std::vector<double> xNew = probNew.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, 0, 1.0/std::sqrt(d), stabilityTerm);
-				double maxValNew = -1000;
-				for (int i=0; i<prob.conZero.size(); i++) {
-					maxValNew = std::max(maxValNew, std::abs(prob.conZero[i].eval(xNew)));
-				}
-				if (maxValNew < 1e-7) {
-					std::cout << "removed " << removedEqn << " with " << maxValNew << std::endl;
-					probReduced.conZero.erase(probReduced.conZero.begin()+j);
-					removed = true;
-					break;
-				}
-			}
-			if (!removed) {
-				std::cout << "couldn't find anything to remove" << std::endl;
-				probReduced = prob;
-				k = -1;
-			}
-		}
+		//PolynomialProblem<double> probReduced = prob;
+		//for (int k=0; k<20; k++) {
+			//bool removed = false;
+			//for (int l=0; l<probReduced.conZero.size(); l++) {
+				//int j = int((probReduced.conZero.size()*rand()) / RAND_MAX);
+				//PolynomialProblem<double> probNew = probReduced;
+				//Polynomial<double> removedEqn = probNew.conZero[j];
+				//probNew.conZero.erase(probNew.conZero.begin()+j);
+				//std::vector<double> xNew = probNew.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, 0, 1.0/std::sqrt(d), stabilityTerm);
+				//double maxValNew = -1000;
+				//for (int i=0; i<prob.conZero.size(); i++) {
+					//maxValNew = std::max(maxValNew, std::abs(prob.conZero[i].eval(xNew)));
+				//}
+				//if (maxValNew < 1e-7) {
+					//std::cout << "removed " << removedEqn << " with " << maxValNew << std::endl;
+					//probReduced.conZero.erase(probReduced.conZero.begin()+j);
+					//removed = true;
+					//break;
+				//}
+			//}
+			//if (!removed) {
+				//std::cout << "couldn't find anything to remove" << std::endl;
+				//probReduced = prob;
+				//k = -1;
+			//}
+		//}
 
 		// Find a feasible point of the equality constraints
 		std::cout << std::scientific;
