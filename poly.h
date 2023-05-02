@@ -4931,23 +4931,77 @@ public:
 
 	}
 
-	// Turn the equality constraints into a matrix and then find the rank
-	float getRank(int level=1) {
+	// Turn the equality constraints into a matrix, negative results imply redundancy
+	int getRankDifference(int level=0) {
 
 		// For higher ranks, multiply by extra variables
 		std::vector<Polynomial<double>> conList = conZero;
-		if (level >= 2) {
+		if (level >= 1) {
 			for (int j=0; j<conZero.size(); j++) {
+				if (j == k) {
+					continue;
+				}
 				for (int i1=0; i1<maxVariables; i1++) {
 					conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1}));
 				}
 			}
 		}
+		if (level >= 2) {
+			for (int j=0; j<conZero.size(); j++) {
+				if (j == k) {
+					continue;
+				}
+				for (int i1=0; i1<maxVariables; i1++) {
+					for (int i2=i1; i2<maxVariables; i2++) {
+						conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1, i2}));
+					}
+				}
+			}
+		}
 		if (level >= 3) {
 			for (int j=0; j<conZero.size(); j++) {
+				if (j == k) {
+					continue;
+				}
 				for (int i1=0; i1<maxVariables; i1++) {
-					for (int i2=0; i2<maxVariables; i2++) {
-						conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1, i2}));
+					for (int i2=i1; i2<maxVariables; i2++) {
+						for (int i3=i2; i3<maxVariables; i3++) {
+							conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1, i2, i3}));
+						}
+					}
+				}
+			}
+		}
+		if (level >= 4) {
+			for (int j=0; j<conZero.size(); j++) {
+				if (j == k) {
+					continue;
+				}
+				for (int i1=0; i1<maxVariables; i1++) {
+					for (int i2=i1; i2<maxVariables; i2++) {
+						for (int i3=i2; i3<maxVariables; i3++) {
+							for (int i4=i3; i4<maxVariables; i4++) {
+								conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1, i2, i3, i4}));
+							}
+						}
+					}
+				}
+			}
+		}
+		if (level >= 5) {
+			for (int j=0; j<conZero.size(); j++) {
+				if (j == k) {
+					continue;
+				}
+				for (int i1=0; i1<maxVariables; i1++) {
+					for (int i2=i1; i2<maxVariables; i2++) {
+						for (int i3=i2; i3<maxVariables; i3++) {
+							for (int i4=i3; i4<maxVariables; i4++) {
+								for (int i5=i3; i5<maxVariables; i5++) {
+									conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1, i2, i3, i4, i5}));
+								}
+							}
+						}
 					}
 				}
 			}
@@ -4986,7 +5040,147 @@ public:
 		// Calculate and return the rank of this
 		Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
         solver.compute(A);
-		return solver.rank() - conList.size();
+		return int(solver.rank()) - int(conList.size());
+
+	}
+
+	// Try to find a constraint which is implied by the others TODO
+	int findRedundantEqualityConstraint(int level=0) {
+
+		// Test each equality constraint
+		for (int k=0; k<conZero.size(); k++) {
+
+			// Remove it from the list
+			Polynomial<double> toMake = conZero[k];
+			std::vector<Polynomial<double>> conList = conZero;
+			conList.erase(conList.begin()+k);
+
+			// For higher ranks, multiply by extra variables
+			if (level >= 1) {
+				for (int j=0; j<conZero.size(); j++) {
+					if (j == k) {
+						continue;
+					}
+					for (int i1=0; i1<maxVariables; i1++) {
+						conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1}));
+					}
+				}
+			}
+			if (level >= 2) {
+				for (int j=0; j<conZero.size(); j++) {
+					if (j == k) {
+						continue;
+					}
+					for (int i1=0; i1<maxVariables; i1++) {
+						for (int i2=i1; i2<maxVariables; i2++) {
+							conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1, i2}));
+						}
+					}
+				}
+			}
+			if (level >= 3) {
+				for (int j=0; j<conZero.size(); j++) {
+					if (j == k) {
+						continue;
+					}
+					for (int i1=0; i1<maxVariables; i1++) {
+						for (int i2=i1; i2<maxVariables; i2++) {
+							for (int i3=i2; i3<maxVariables; i3++) {
+								conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1, i2, i3}));
+							}
+						}
+					}
+				}
+			}
+			if (level >= 4) {
+				for (int j=0; j<conZero.size(); j++) {
+					if (j == k) {
+						continue;
+					}
+					for (int i1=0; i1<maxVariables; i1++) {
+						for (int i2=i1; i2<maxVariables; i2++) {
+							for (int i3=i2; i3<maxVariables; i3++) {
+								for (int i4=i3; i4<maxVariables; i4++) {
+									conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1, i2, i3, i4}));
+								}
+							}
+						}
+					}
+				}
+			}
+			if (level >= 5) {
+				for (int j=0; j<conZero.size(); j++) {
+					if (j == k) {
+						continue;
+					}
+					for (int i1=0; i1<maxVariables; i1++) {
+						for (int i2=i1; i2<maxVariables; i2++) {
+							for (int i3=i2; i3<maxVariables; i3++) {
+								for (int i4=i3; i4<maxVariables; i4++) {
+									for (int i5=i3; i5<maxVariables; i5++) {
+										conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1, i2, i3, i4, i5}));
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+
+			// Use an unordered set to get the unique monomial list
+			std::unordered_set<std::string> monomsSet;
+			std::vector<std::string> tempList;
+			tempList = toMake.getMonomials();
+			monomsSet.insert(tempList.begin(), tempList.end());
+			for (int i=0; i<conList.size(); i++) {
+				tempList = conList[i].getMonomials();
+				monomsSet.insert(tempList.begin(), tempList.end());
+			}
+			for (int i=0; i<conPositive.size(); i++) {
+				tempList = conPositive[i].getMonomials();
+				monomsSet.insert(tempList.begin(), tempList.end());
+			}
+
+			// Turn this into a vector
+			std::vector<std::string> monoms;
+			for (const std::string& mon: monomsSet) {
+				monoms.push_back(mon);
+			}
+
+			// Each column is a monomial, each row is an equation
+			std::vector<Eigen::Triplet<double>> triplets;
+			triplets.reserve(conList.size()*10);
+			for (int i=0; i<conList.size(); i++) {
+				for (auto const &pair: conList[i].coeffs) {
+					int loc = std::find(monoms.begin(), monoms.end(), pair.first)-monoms.begin();
+					triplets.push_back(Eigen::Triplet<double>(loc, i, pair.second));
+				}
+			}
+			Eigen::SparseMatrix<double> A(monoms.size(), conList.size());
+			A.setFromTriplets(triplets.begin(), triplets.end());
+
+			// The vector we are trying to make using combinations of the others
+			Eigen::VectorXd b = Eigen::VectorXd::Zero(monoms.size());
+			for (auto const &pair: toMake.coeffs) {
+				int loc = std::find(monoms.begin(), monoms.end(), pair.first)-monoms.begin();
+				b(loc) = pair.second;
+			}
+
+			// See if this is feasible
+			Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> lscg;
+			lscg.compute(A);
+			Eigen::VectorXd x = lscg.solve(b);
+
+			// If feasible, this equation can be in dependant
+			double error = (A*x-b).norm();
+			if (error < 1e-8) {
+				return k;
+			}
+
+		}
+
+		// Otherwise, no equation is dependant at this level
+		return -1;
 
 	}
 

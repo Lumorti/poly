@@ -483,31 +483,41 @@ int main(int argc, char ** argv) {
 	if (task == "feasible") {
 
 		// See if there are any constraints that can be removed without LoG TODO
-		//PolynomialProblem<double> probReduced = prob;
-		//for (int k=0; k<20; k++) {
-			//bool removed = false;
-			//for (int l=0; l<probReduced.conZero.size(); l++) {
-				//int j = int((probReduced.conZero.size()*rand()) / RAND_MAX);
-				//PolynomialProblem<double> probNew = probReduced;
-				//Polynomial<double> removedEqn = probNew.conZero[j];
-				//probNew.conZero.erase(probNew.conZero.begin()+j);
-				//std::vector<double> xNew = probNew.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, 0, 1.0/std::sqrt(d), stabilityTerm);
-				//double maxValNew = -1000;
-				//for (int i=0; i<prob.conZero.size(); i++) {
-					//maxValNew = std::max(maxValNew, std::abs(prob.conZero[i].eval(xNew)));
-				//}
-				//if (maxValNew < 1e-7) {
-					//std::cout << "removed " << removedEqn << " with " << maxValNew << std::endl;
-					//probReduced.conZero.erase(probReduced.conZero.begin()+j);
-					//removed = true;
-					//break;
-				//}
-			//}
-			//if (!removed) {
-				//std::cout << "couldn't find anything to remove" << std::endl;
-				//probReduced = prob;
-				//k = -1;
-			//}
+		PolynomialProblem<double> probCopy = prob;
+		for (int i=0; i<probCopy.conZero.size(); i++) {
+
+			Polynomial<double> toMatch = probCopy.conZero[i];
+
+			// TODO find the minimum set of cons which when optimized always satisfy con i
+
+		}
+
+		//PolynomialProblem<double> probCopy = prob;
+		//int nextRedund = probCopy.findRedundantEqualityConstraint(0);
+		//if (nextRedund < 0) {
+			//nextRedund = probCopy.findRedundantEqualityConstraint(1);
+		//}
+		//if (nextRedund < 0) {
+			//nextRedund = probCopy.findRedundantEqualityConstraint(2);
+		//}
+		//if (nextRedund < 0) {
+			//nextRedund = probCopy.findRedundantEqualityConstraint(3);
+		//}
+		//if (nextRedund < 0) {
+			//nextRedund = probCopy.findRedundantEqualityConstraint(4);
+		//}
+		//if (nextRedund < 0) {
+			//nextRedund = probCopy.findRedundantEqualityConstraint(5);
+		//}
+		//std::cout << "can remove " << nextRedund << std::endl;
+		//return 0;
+		//int totalRemoved = 0;
+		//while (nextRedund >= 0) {
+			//totalRemoved++;
+			//std::cout << probCopy.conZero << std::endl;
+			//std::cout << "removing " << nextRedund << ", total is " << totalRemoved << std::endl;
+			//probCopy.conZero.erase(probCopy.conZero.begin()+nextRedund);
+			//nextRedund = probCopy.findRedundantEqualityConstraint(3);
 		//}
 
 		// Find a feasible point of the equality constraints
