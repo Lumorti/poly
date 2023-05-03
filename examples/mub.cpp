@@ -483,14 +483,62 @@ int main(int argc, char ** argv) {
 	if (task == "feasible") {
 
 		// See if there are any constraints that can be removed without LoG TODO
-		PolynomialProblem<double> probCopy = prob;
-		for (int i=0; i<probCopy.conZero.size(); i++) {
+		for (int i=0; i<prob.conZero.size(); i++) {
 
-			Polynomial<double> toMatch = probCopy.conZero[i];
+			// Get the con to make
+			Polynomial<double> toMatch = prob.conZero[i];
 
-			// TODO find the minimum set of cons which when optimized always satisfy con i
+			// Erase various constraints
+			PolynomialProblem<double> probCopy = prob;
+			probCopy.conZero.erase(probCopy.conZero.begin()+i);
+
+			// Repeat a bunch to make sure it's not a fluke
+			int zeroCount = 0;
+			for (int j=0; j<100; j++) {
+				auto res = probCopy.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, 0, 1.0/std::sqrt(d), stabilityTerm);
+				auto error = std::abs(toMatch.eval(res));
+				if (error < 1e-4) {
+					zeroCount++;
+				}
+			}
+
+			std::cout << "con " << i << " is " << zeroCount << "% redundant" << std::endl;
+
+			//if (zeroCount > 80) {
+
+				//for (int k=0; k<prob.conZero.size(); k++) {
+
+					//// Choose k random cons
+					//probCopy.conZero = {};
+					//std::vector<int> consUsed;
+					//for (int l=0; l<k; l++) {
+						//int r = i;
+						//while (r == i || std::find(consUsed.begin(), consUsed.end(), r) != consUsed.end()) {
+							//r = int(prob.conZero.size()*(double(rand())/(RAND_MAX)));
+						//}
+						//probCopy.conZero.push_back(prob.conZero[r]);
+						//consUsed.push_back(r);
+					//}
+
+					//// See if this works
+					//zeroCount = 0;
+					//for (int j=0; j<100; j++) {
+						//auto res = probCopy.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, 0, 1.0/std::sqrt(d), stabilityTerm);
+						//auto error = std::abs(toMatch.eval(res));
+						//if (error < 1e-5) {
+							//zeroCount++;
+						//}
+					//}
+
+					//std::cout << consUsed << std::endl;
+					//std::cout << "with " << probCopy.conZero.size() << " random cons is " << zeroCount << "% redundant" << std::endl;
+
+				//}
+
+			//}
 
 		}
+		return 0;
 
 		//PolynomialProblem<double> probCopy = prob;
 		//int nextRedund = probCopy.findRedundantEqualityConstraint(0);

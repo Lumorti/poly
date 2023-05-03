@@ -4938,9 +4938,6 @@ public:
 		std::vector<Polynomial<double>> conList = conZero;
 		if (level >= 1) {
 			for (int j=0; j<conZero.size(); j++) {
-				if (j == k) {
-					continue;
-				}
 				for (int i1=0; i1<maxVariables; i1++) {
 					conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1}));
 				}
@@ -4948,9 +4945,6 @@ public:
 		}
 		if (level >= 2) {
 			for (int j=0; j<conZero.size(); j++) {
-				if (j == k) {
-					continue;
-				}
 				for (int i1=0; i1<maxVariables; i1++) {
 					for (int i2=i1; i2<maxVariables; i2++) {
 						conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1, i2}));
@@ -4960,9 +4954,6 @@ public:
 		}
 		if (level >= 3) {
 			for (int j=0; j<conZero.size(); j++) {
-				if (j == k) {
-					continue;
-				}
 				for (int i1=0; i1<maxVariables; i1++) {
 					for (int i2=i1; i2<maxVariables; i2++) {
 						for (int i3=i2; i3<maxVariables; i3++) {
@@ -4974,9 +4965,6 @@ public:
 		}
 		if (level >= 4) {
 			for (int j=0; j<conZero.size(); j++) {
-				if (j == k) {
-					continue;
-				}
 				for (int i1=0; i1<maxVariables; i1++) {
 					for (int i2=i1; i2<maxVariables; i2++) {
 						for (int i3=i2; i3<maxVariables; i3++) {
@@ -4990,14 +4978,11 @@ public:
 		}
 		if (level >= 5) {
 			for (int j=0; j<conZero.size(); j++) {
-				if (j == k) {
-					continue;
-				}
 				for (int i1=0; i1<maxVariables; i1++) {
 					for (int i2=i1; i2<maxVariables; i2++) {
 						for (int i3=i2; i3<maxVariables; i3++) {
 							for (int i4=i3; i4<maxVariables; i4++) {
-								for (int i5=i3; i5<maxVariables; i5++) {
+								for (int i5=i4; i5<maxVariables; i5++) {
 									conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1, i2, i3, i4, i5}));
 								}
 							}
@@ -5117,7 +5102,7 @@ public:
 						for (int i2=i1; i2<maxVariables; i2++) {
 							for (int i3=i2; i3<maxVariables; i3++) {
 								for (int i4=i3; i4<maxVariables; i4++) {
-									for (int i5=i3; i5<maxVariables; i5++) {
+									for (int i5=i4; i5<maxVariables; i5++) {
 										conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1, i2, i3, i4, i5}));
 									}
 								}
