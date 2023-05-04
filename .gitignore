@@ -1,3 +1,4 @@
+*.swp
 examples/mub
 examples/simple
 examples/sos
