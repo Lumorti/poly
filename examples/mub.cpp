@@ -494,15 +494,64 @@ int main(int argc, char ** argv) {
 
 			// Repeat a bunch to make sure it's not a fluke
 			int zeroCount = 0;
-			for (int j=0; j<100; j++) {
-				auto res = probCopy.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, 0, 1.0/std::sqrt(d), stabilityTerm);
-				auto error = std::abs(toMatch.eval(res));
-				if (error < 1e-4) {
-					zeroCount++;
-				}
-			}
+			//for (int j=0; j<100; j++) {
+				//auto res = probCopy.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, 0, 1.0/std::sqrt(d), stabilityTerm);
+				//auto error = std::abs(toMatch.eval(res));
+				//if (error < 1e-4) {
+					//zeroCount++;
+				//}
+			//}
 
 			std::cout << "con " << i << " is " << zeroCount << "% redundant" << std::endl;
+
+			std::vector<int> redundant = {1, 3, 5, 7,14, 15, 16, 17, 18, 21, 23, 25, 32, 33, 34, 35, 36, 39, 41, 48, 49, 51, 52, 55, 62, 63, 64, 65, 66, 74, 75, 76, 77, 78};
+			std::cout << "redundant list = " << redundant << std::endl;
+
+			// Starting with small sets, growing to larger
+			for (int num=2; num<10; num++) {
+
+				// Try a bunch of random selections of the redundants
+				for (int l=0; l<100; l++) {
+
+					// Remove this many of the redundants
+					PolynomialProblem<double> probCopy = prob;
+					std::vector<int> redundantCopy = redundant;
+					std::vector<int> removedConsInds;
+					for (int k=0; k<num; k++) {
+						int r = int(redundantCopy.size()*(double(rand())/(RAND_MAX)));
+						removedConsInds.push_back(redundantCopy[r]);
+						redundantCopy.erase(redundantCopy.begin()+r);
+					}
+
+					// Only copy the ones we want to keep
+					probCopy.conZero = {};
+					std::vector<Polynomial<double>> removedCons;
+					for (int k=0; k<prob.conZero.size(); k++) {
+						if (std::find(removedConsInds.begin(), removedConsInds.end(), k) == removedConsInds.end()) {
+							probCopy.conZero.push_back(prob.conZero[k]);
+						} else {
+							removedCons.push_back(prob.conZero[k]);
+						}
+					}
+
+					// Repeat a bunch to make sure it's not a fluke
+					zeroCount = 0;
+					for (int j=0; j<100; j++) {
+						auto res = probCopy.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, 0, 1.0/std::sqrt(d), stabilityTerm);
+						auto error = 0;
+						for (int k=0; k<removedCons.size(); k++) {
+							error += std::abs(removedCons[k].eval(res));
+						}
+						if (error < 1e-4) {
+							zeroCount++;
+						}
+					}
+
+					std::cout << num << " " << l << " " << zeroCount << " " << removedConsInds << std::endl;
+
+				}
+
+			}
 
 			//if (zeroCount > 80) {
 

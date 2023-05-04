@@ -1,0 +1,27 @@
+set sizes: {6, 5, 2, 1}, vars: 98, vectors: 14, equations: 98
+con 0 is 28% redundant
+con 1 is 98% redundant
+con 2 is 29% redundant
+con 3 is 96% redundant
+con 4 is 32% redundant
+con 5 is 94% redundant
+con 6 is 7% redundant
+con 7 is 3% redundant
+con 8 is 6% redundant
+con 9 is 13% redundant
+con 10 is 3% redundant
+con 11 is 5% redundant
+con 12 is 0% redundant
+con 13 is 0% redundant
+con 14 is 0% redundant
+con 15 is 100% redundant
+con 16 is 97% redundant
+con 17 is 95% redundant
+con 18 is 96% redundant
+con 19 is 99% redundant
+con 20 is 25% redundant
+con 21 is 34% redundant
+con 22 is 86% redundant
+con 23 is 25% redundant
+con 24 is 91% redundant
+con 25 is 12% redundant
