@@ -1,0 +1,7 @@
+set sizes: {6, 5, 3, 1}, vars: 118, vectors: 15, equations: 123
+con 0 is 0% redundant
+con 1 is 0% redundant
+con 2 is 0% redundant
+con 3 is 0% redundant
+con 4 is 0% redundant
+con 5 is 0% redundant

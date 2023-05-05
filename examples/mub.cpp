@@ -6,7 +6,7 @@ int main(int argc, char ** argv) {
 	// Get the problem from the args
 	int d = 2;
 	int n = 4;
-	std::string task = "infeasible";
+	int task = 0;
 	int maxIters = -1;
 	int verbosity = 1;
 	int numToSplit = 0;
@@ -27,6 +27,10 @@ int main(int argc, char ** argv) {
 		if (arg == "-h") {
 			std::cout << " -d [int]    set the dimension" << std::endl;
 			std::cout << " -n [int]    set the number of bases" << std::endl;
+			std::cout << " -m [int]    change the mode:" << std::endl;
+			std::cout << "             0 = try to find a feasible point" << std::endl;
+			std::cout << "             1 = try to prove infeasiblity" << std::endl;
+			std::cout << "             2 = perform a redundancy analysis" << std::endl;
 			std::cout << " -N [str]    set the basis sizes e.g. 2,1,1,1" << std::endl;
 			std::cout << " -l [str]    set the level for the relaxation e.g. 1+2f,3p" << std::endl;
 			std::cout << " -i [int]    set max iterations (-1 for no limit)" << std::endl;
@@ -42,7 +46,6 @@ int main(int argc, char ** argv) {
 			std::cout << " -2          don't assume the first vector of the second basis is uniform" << std::endl;
 			std::cout << " -3          don't assume the first element of each is one" << std::endl;
 			std::cout << " -s          use SCS as the SDP solver insead of Mosek" << std::endl;
-			std::cout << " -f          try to find a feasible point instead of proving infeasiblity" << std::endl;
 			std::cout << " -0          debug flag" << std::endl;
 			return 0;
 		} else if (arg == "-d" && i+1 < argc) {
@@ -81,6 +84,9 @@ int main(int argc, char ** argv) {
 		} else if (arg == "-N" && i+1 < argc) {
 			givenSizes = argv[i+1];
 			i++;
+		} else if (arg == "-m" && i+1 < argc) {
+			task = std::stoi(argv[i+1]);
+			i++;
 		} else if (arg == "-s") {
 			solver = "scs";
 		} else if (arg == "-r") {
@@ -93,10 +99,6 @@ int main(int argc, char ** argv) {
 			firstElementIsOne = false;
 		} else if (arg == "-0") {
 			debugFlag = true;
-		} else if (arg == "-f") {
-			task = "feasible";
-		} else if (arg == "-i") {
-			task = "infeasible";
 		}
 
 	}
@@ -129,7 +131,7 @@ int main(int argc, char ** argv) {
 		} else if (d == 5) {
 			basisSizes = {5, 2, 2, 1, 1, 1, 1};
 		} else if (d == 6) {
-			basisSizes = {6, 5, 3, 1};
+			basisSizes = {6, 6, 3, 1};
 		} else if (d == 7) {
 			basisSizes = {7, 2, 2, 2, 1, 1, 1, 1, 1};
 		} else if (d == 8) {
@@ -421,7 +423,7 @@ int main(int argc, char ** argv) {
 
 	// Convert these symmetries into constraints which break them
 	std::vector<Polynomial<double>> orderingCons;
-	if (task == "infeasible") {
+	if (task == 1) {
 		for (int i=0; i<syms.size(); i++) {
 
 			// If the indices are the same, this means the sum should be positive
@@ -480,142 +482,7 @@ int main(int argc, char ** argv) {
 	}
 
 	// If told to find a feasible point
-	if (task == "feasible") {
-
-		// See if there are any constraints that can be removed without LoG TODO
-		for (int i=0; i<prob.conZero.size(); i++) {
-
-			// Get the con to make
-			Polynomial<double> toMatch = prob.conZero[i];
-
-			// Erase various constraints
-			PolynomialProblem<double> probCopy = prob;
-			probCopy.conZero.erase(probCopy.conZero.begin()+i);
-
-			// Repeat a bunch to make sure it's not a fluke
-			int zeroCount = 0;
-			//for (int j=0; j<100; j++) {
-				//auto res = probCopy.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, 0, 1.0/std::sqrt(d), stabilityTerm);
-				//auto error = std::abs(toMatch.eval(res));
-				//if (error < 1e-4) {
-					//zeroCount++;
-				//}
-			//}
-
-			std::cout << "con " << i << " is " << zeroCount << "% redundant" << std::endl;
-
-			std::vector<int> redundant = {1, 3, 5, 7,14, 15, 16, 17, 18, 21, 23, 25, 32, 33, 34, 35, 36, 39, 41, 48, 49, 51, 52, 55, 62, 63, 64, 65, 66, 74, 75, 76, 77, 78};
-			std::cout << "redundant list = " << redundant << std::endl;
-
-			// Starting with small sets, growing to larger
-			for (int num=2; num<10; num++) {
-
-				// Try a bunch of random selections of the redundants
-				for (int l=0; l<100; l++) {
-
-					// Remove this many of the redundants
-					PolynomialProblem<double> probCopy = prob;
-					std::vector<int> redundantCopy = redundant;
-					std::vector<int> removedConsInds;
-					for (int k=0; k<num; k++) {
-						int r = int(redundantCopy.size()*(double(rand())/(RAND_MAX)));
-						removedConsInds.push_back(redundantCopy[r]);
-						redundantCopy.erase(redundantCopy.begin()+r);
-					}
-
-					// Only copy the ones we want to keep
-					probCopy.conZero = {};
-					std::vector<Polynomial<double>> removedCons;
-					for (int k=0; k<prob.conZero.size(); k++) {
-						if (std::find(removedConsInds.begin(), removedConsInds.end(), k) == removedConsInds.end()) {
-							probCopy.conZero.push_back(prob.conZero[k]);
-						} else {
-							removedCons.push_back(prob.conZero[k]);
-						}
-					}
-
-					// Repeat a bunch to make sure it's not a fluke
-					zeroCount = 0;
-					for (int j=0; j<100; j++) {
-						auto res = probCopy.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, 0, 1.0/std::sqrt(d), stabilityTerm);
-						auto error = 0;
-						for (int k=0; k<removedCons.size(); k++) {
-							error += std::abs(removedCons[k].eval(res));
-						}
-						if (error < 1e-4) {
-							zeroCount++;
-						}
-					}
-
-					std::cout << num << " " << l << " " << zeroCount << " " << removedConsInds << std::endl;
-
-				}
-
-			}
-
-			//if (zeroCount > 80) {
-
-				//for (int k=0; k<prob.conZero.size(); k++) {
-
-					//// Choose k random cons
-					//probCopy.conZero = {};
-					//std::vector<int> consUsed;
-					//for (int l=0; l<k; l++) {
-						//int r = i;
-						//while (r == i || std::find(consUsed.begin(), consUsed.end(), r) != consUsed.end()) {
-							//r = int(prob.conZero.size()*(double(rand())/(RAND_MAX)));
-						//}
-						//probCopy.conZero.push_back(prob.conZero[r]);
-						//consUsed.push_back(r);
-					//}
-
-					//// See if this works
-					//zeroCount = 0;
-					//for (int j=0; j<100; j++) {
-						//auto res = probCopy.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, 0, 1.0/std::sqrt(d), stabilityTerm);
-						//auto error = std::abs(toMatch.eval(res));
-						//if (error < 1e-5) {
-							//zeroCount++;
-						//}
-					//}
-
-					//std::cout << consUsed << std::endl;
-					//std::cout << "with " << probCopy.conZero.size() << " random cons is " << zeroCount << "% redundant" << std::endl;
-
-				//}
-
-			//}
-
-		}
-		return 0;
-
-		//PolynomialProblem<double> probCopy = prob;
-		//int nextRedund = probCopy.findRedundantEqualityConstraint(0);
-		//if (nextRedund < 0) {
-			//nextRedund = probCopy.findRedundantEqualityConstraint(1);
-		//}
-		//if (nextRedund < 0) {
-			//nextRedund = probCopy.findRedundantEqualityConstraint(2);
-		//}
-		//if (nextRedund < 0) {
-			//nextRedund = probCopy.findRedundantEqualityConstraint(3);
-		//}
-		//if (nextRedund < 0) {
-			//nextRedund = probCopy.findRedundantEqualityConstraint(4);
-		//}
-		//if (nextRedund < 0) {
-			//nextRedund = probCopy.findRedundantEqualityConstraint(5);
-		//}
-		//std::cout << "can remove " << nextRedund << std::endl;
-		//return 0;
-		//int totalRemoved = 0;
-		//while (nextRedund >= 0) {
-			//totalRemoved++;
-			//std::cout << probCopy.conZero << std::endl;
-			//std::cout << "removing " << nextRedund << ", total is " << totalRemoved << std::endl;
-			//probCopy.conZero.erase(probCopy.conZero.begin()+nextRedund);
-			//nextRedund = probCopy.findRedundantEqualityConstraint(3);
-		//}
+	if (task == 0) {
 
 		// Find a feasible point of the equality constraints
 		std::cout << std::scientific;
@@ -686,8 +553,88 @@ int main(int argc, char ** argv) {
 
 		}
 
+	// If told to identify redundant constraints
+	} else if (task == 2) {
+
+		// See if there are any constraints that can be removed without LoG TODO
+		std::vector<int> redundantInds;
+		for (int i=0; i<prob.conZero.size(); i++) {
+
+			// Get the con to make
+			Polynomial<double> toMatch = prob.conZero[i];
+
+			// Erase various constraints
+			PolynomialProblem<double> probCopy = prob;
+			probCopy.conZero.erase(probCopy.conZero.begin()+i);
+
+			// Repeat a bunch to make sure it's not a fluke
+			int zeroCount = 0;
+			for (int j=0; j<50; j++) {
+				auto res = probCopy.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, 0, 1.0/std::sqrt(d), stabilityTerm);
+				auto error = std::abs(toMatch.eval(res));
+				if (error < 1e-4) {
+					zeroCount += 2;
+				}
+			}
+
+			// If it's highly redundant, add it to the list
+			std::cout << "con " << i << " is " << zeroCount << "% redundant" << std::endl;
+			if (zeroCount > 90) {
+				redundantInds.push_back(i);
+			}
+
+		}
+
+		std::cout << "redundant list = " << redundantInds << std::endl;
+
+		// Starting with small sets, growing to larger
+		for (int num=2; num<20; num++) {
+
+			// Try a bunch of random selections of the redundants
+			for (int l=0; l<20; l++) {
+
+				// Remove this many of the redundants
+				PolynomialProblem<double> probCopy = prob;
+				std::vector<int> redundantCopy = redundantInds;
+				std::vector<int> removedInds;
+				for (int k=0; k<num; k++) {
+					int r = int(redundantCopy.size()*(double(rand())/(RAND_MAX)));
+					removedInds.push_back(redundantCopy[r]);
+					redundantCopy.erase(redundantCopy.begin()+r);
+				}
+
+				// Only copy the ones we want to keep
+				probCopy.conZero = {};
+				std::vector<Polynomial<double>> removedCons;
+				for (int k=0; k<prob.conZero.size(); k++) {
+					if (std::find(removedInds.begin(), removedInds.end(), k) == removedInds.end()) {
+						probCopy.conZero.push_back(prob.conZero[k]);
+					} else {
+						removedCons.push_back(prob.conZero[k]);
+					}
+				}
+
+				// Repeat a bunch to make sure it's not a fluke
+				int zeroCount = 0;
+				for (int j=0; j<50; j++) {
+					auto res = probCopy.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, 0, 1.0/std::sqrt(d), stabilityTerm);
+					auto error = 0;
+					for (int k=0; k<removedCons.size(); k++) {
+						error += std::abs(removedCons[k].eval(res));
+					}
+					if (error < 1e-6) {
+						zeroCount += 2;
+					}
+				}
+
+				std::cout << num << " " << l << " " << zeroCount << " " << removedInds << std::endl;
+
+			}
+
+		}
+
 	// If told to prove the search space is infeasible
-	} else if (task == "infeasible") {
+	} else if (task == 1) {
 
 		// If we're using a higher level mat, add higher-order cons
 		int ogCons = prob.conZero.size();
