@@ -463,16 +463,24 @@ int main(int argc, char ** argv) {
 		std::cout << "Problem: " << std::endl;
 		std::cout << "---------------------" << std::endl;
 		std::cout << prob << std::endl;
+	}
+	prob = prob.replaceWithVariable(reducedMap);
+	if (verbosity >= 2) {
+		std::cout << "---------------------" << std::endl;
+		std::cout << "Reduced Problem: " << std::endl;
+		std::cout << "---------------------" << std::endl;
+		std::cout << prob << std::endl;
 		std::cout << "---------------------" << std::endl;
 		std::cout << "Summary:" << std::endl;
 		std::cout << "---------------------" << std::endl;
 	}
-	prob = prob.replaceWithVariable(reducedMap);
 	int numVectors = 0;
 	for (int i=0; i<n; i++) {
 		numVectors += basisSizes[i];
 	}
-	std::cout << "set sizes: " << basisSizes << ", vars: " << prob.maxVariables << ", vectors: " << numVectors << ", equations: " << eqns.size() << std::endl;
+	if (verbosity >= 1) {
+		std::cout << "set sizes: " << basisSizes << ", vars: " << prob.maxVariables << ", vectors: " << numVectors << ", equations: " << eqns.size() << std::endl;
+	}
 	if (verbosity >= 2) {
 		std::cout << std::endl;
 		std::cout << "---------------------" << std::endl;
@@ -588,7 +596,7 @@ int main(int argc, char ** argv) {
 		std::cout << "redundant list = " << redundantInds << std::endl;
 
 		// Starting with small sets, growing to larger
-		for (int num=2; num<20; num++) {
+		for (int num=2; num<redundantInds.size(); num++) {
 
 			// Try a bunch of random selections of the redundants
 			for (int l=0; l<20; l++) {
