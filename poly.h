@@ -1819,7 +1819,7 @@ public:
 				break;
 			}
 
-			// Jump if we're stalling a bit TODO
+			// Jump if we're stalling a bit
 			if (precisionIters == 0 && (p.norm() <= 1e-10 || norm > 1e20 || isnan(norm) || iter % 10000 == 0)) {
 				x = maxMag*Eigen::VectorXd::Random(maxVariables);
 			}
@@ -2190,18 +2190,21 @@ public:
 		std::unordered_map<int,int> indMap;
 		int nextInd = 0;
 		for (int i=0; i<maxVariables; i++) {
+			bool foundThis = false;
 
 			// Check the objective
 			if (obj.contains(i)) {
 				indMap[i] = nextInd;
+				foundThis = true;
 				nextInd++;
 			}
 
 			// Check the equality cons if still not found
-			if (indMap.find(i) == indMap.end()) {
+			if (!foundThis) {
 				for (int j=0; j<conZero.size(); j++) {
 					if (conZero[j].contains(i)) {
 						indMap[i] = nextInd;
+						foundThis = true;
 						nextInd++;
 						break;
 					}
@@ -2209,10 +2212,11 @@ public:
 			}
 
 			// Check the inequality cons if still not found
-			if (indMap.find(i) == indMap.end()) {
+			if (!foundThis) {
 				for (int j=0; j<conPositive.size(); j++) {
 					if (conPositive[j].contains(i)) {
 						indMap[i] = nextInd;
+						foundThis = true;
 						nextInd++;
 						break;
 					}
@@ -2220,11 +2224,12 @@ public:
 			}
 
 			// Check the PSD cons if still not found
-			if (indMap.find(i) == indMap.end()) {
+			if (!foundThis) {
 				for (int j=0; j<conPSD.size(); j++) {
 					for (int k=0; k<conPSD[j].size(); k++) {
 						if (conPSD[j][j].contains(i)) {
 							indMap[i] = nextInd;
+							foundThis = true;
 							nextInd++;
 							break;
 						}
@@ -2356,38 +2361,54 @@ public:
 
 	}
 
-	// Convert from a real problem to a binary problem TODO
-	void fromRealProblem(int numBits) {
+	// Convert from a real problem to a +1/-1 binary problem TODO
+	void toBinaryProblem(int numBits) {
 
 		// Now we have more variables
 		int maxVariablesNew = maxVariables + maxVariables*numBits;
 
-		// Want to replace every x with x1+x2*0.5+x3*0.25-1
+		// Want to replace every x with x1*0.5 + x2*0.25 + ...
 		std::vector<int> indsToReplace(maxVariables);
 		std::vector<Polynomial<polyType>> polyToReplace(maxVariables);
 		for (int i=0; i<maxVariables; i++) {
 			indsToReplace[i] = i;
-			polyToReplace[i] = Polynomial<polyType>(maxVariablesNew, -1);
+			polyToReplace[i] = Polynomial<polyType>(maxVariablesNew);
 			for (int j=0; j<numBits; j++) {
-				polyToReplace[i].addTerm(1.0/std::pow(2,j), {maxVariables+numBits*i+j});
+				polyToReplace[i].addTerm(1.0/std::pow(2,j+1), {maxVariables+numBits*i+j});
 			}
 		}
 
+		double error = 1.0/std::pow(2, maxVariables);
+
 		// Perform the replacement
 		obj = obj.replaceWithPoly(indsToReplace, polyToReplace);
-		for (int i=0; i<conZero.size(); i++) {
-			conZero[i] = conZero[i].replaceWithPoly(indsToReplace, polyToReplace);
-		}
 		for (int i=0; i<conPositive.size(); i++) {
-			conPositive[i] = conPositive[i].replaceWithPoly(indsToReplace, polyToReplace);
+			Polynomial<double> newCon = conPositive[i].replaceWithPoly(indsToReplace, polyToReplace);
+			conPositive[i] = newCon - error;
+			std::cout << i << std::endl;
 		}
+		for (int i=0; i<conZero.size(); i++) {
+			Polynomial<double> newCon = conZero[i].replaceWithPoly(indsToReplace, polyToReplace);
+			conPositive.push_back(newCon + error);
+			conPositive.push_back(newCon - error);
+		}
+		conZero = {};
+		maxVariables = maxVariablesNew;
+
+		// Simplify, minimizing the number of indices
+		std::cout << "here" << std::endl;
+		std::unordered_map<int,int> reducedMap = getMinimalMap();
+		std::cout << reducedMap << std::endl;
+		*this = replaceWithVariable(reducedMap);
+		std::cout << "here" << std::endl;
+
 
 		// Set the binary flag
 		isBinary = true;
 
 	}
 
-	// Find the exact solution through brute force
+	// Find the exact solution through brute force TODO
 	std::pair<polyType,std::vector<int>> bruteForce() {
 
 		// If this isn't a binary problem, don't try to treat it like one
@@ -2415,7 +2436,7 @@ public:
 				}
 			}
 
-			// If it satisfies all constraints TODO
+			// If it satisfies all constraints
 			bool meetsCons = true;
 			for (int i=0; i<conZero.size(); i++) {
 				if (std::abs(conZero[i].eval(sol)) > zeroTol) {
@@ -2593,7 +2614,7 @@ public:
 		}
 		toProcess.push_back(varMinMax);
 
-		// If told to start by splitting at various vars TODO MOSEK
+		// If told to start by splitting at various vars
 		if (numVarsToSplit > 0) {
 
 			// Create the lists of vars to split, starting from the end
@@ -2815,8 +2836,6 @@ public:
 		for (int i=0; i<shouldBePSD.size(); i++) {
 			M->constraint(mosek::fusion::Expr::add(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Expr::mul(lambda, identityAsSVec[i])), mosek::fusion::Domain::inSVecPSDCone());
 		}
-
-		// TODO MOSEK adaptive SDP cons
 
 		// Original PSD cons
 		if (conPSDLinear.size() > 0) {
@@ -3175,146 +3194,6 @@ public:
 
 	}
 
-	// Try to find a constraint which is implied by the others TODO
-	int findRedundantEqualityConstraint(int level=0) {
-
-		// Test each equality constraint
-		for (int k=0; k<conZero.size(); k++) {
-
-			// Remove it from the list
-			Polynomial<double> toMake = conZero[k];
-			std::vector<Polynomial<double>> conList = conZero;
-			conList.erase(conList.begin()+k);
-
-			// For higher ranks, multiply by extra variables
-			if (level >= 1) {
-				for (int j=0; j<conZero.size(); j++) {
-					if (j == k) {
-						continue;
-					}
-					for (int i1=0; i1<maxVariables; i1++) {
-						conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1}));
-					}
-				}
-			}
-			if (level >= 2) {
-				for (int j=0; j<conZero.size(); j++) {
-					if (j == k) {
-						continue;
-					}
-					for (int i1=0; i1<maxVariables; i1++) {
-						for (int i2=i1; i2<maxVariables; i2++) {
-							conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1, i2}));
-						}
-					}
-				}
-			}
-			if (level >= 3) {
-				for (int j=0; j<conZero.size(); j++) {
-					if (j == k) {
-						continue;
-					}
-					for (int i1=0; i1<maxVariables; i1++) {
-						for (int i2=i1; i2<maxVariables; i2++) {
-							for (int i3=i2; i3<maxVariables; i3++) {
-								conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1, i2, i3}));
-							}
-						}
-					}
-				}
-			}
-			if (level >= 4) {
-				for (int j=0; j<conZero.size(); j++) {
-					if (j == k) {
-						continue;
-					}
-					for (int i1=0; i1<maxVariables; i1++) {
-						for (int i2=i1; i2<maxVariables; i2++) {
-							for (int i3=i2; i3<maxVariables; i3++) {
-								for (int i4=i3; i4<maxVariables; i4++) {
-									conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1, i2, i3, i4}));
-								}
-							}
-						}
-					}
-				}
-			}
-			if (level >= 5) {
-				for (int j=0; j<conZero.size(); j++) {
-					if (j == k) {
-						continue;
-					}
-					for (int i1=0; i1<maxVariables; i1++) {
-						for (int i2=i1; i2<maxVariables; i2++) {
-							for (int i3=i2; i3<maxVariables; i3++) {
-								for (int i4=i3; i4<maxVariables; i4++) {
-									for (int i5=i4; i5<maxVariables; i5++) {
-										conList.push_back(conZero[j] * Polynomial<double>(maxVariables, 1, {i1, i2, i3, i4, i5}));
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-
-			// Use an unordered set to get the unique monomial list
-			std::unordered_set<std::string> monomsSet;
-			std::vector<std::string> tempList;
-			tempList = toMake.getMonomials();
-			monomsSet.insert(tempList.begin(), tempList.end());
-			for (int i=0; i<conList.size(); i++) {
-				tempList = conList[i].getMonomials();
-				monomsSet.insert(tempList.begin(), tempList.end());
-			}
-			for (int i=0; i<conPositive.size(); i++) {
-				tempList = conPositive[i].getMonomials();
-				monomsSet.insert(tempList.begin(), tempList.end());
-			}
-
-			// Turn this into a vector
-			std::vector<std::string> monoms;
-			for (const std::string& mon: monomsSet) {
-				monoms.push_back(mon);
-			}
-
-			// Each column is a monomial, each row is an equation
-			std::vector<Eigen::Triplet<double>> triplets;
-			triplets.reserve(conList.size()*10);
-			for (int i=0; i<conList.size(); i++) {
-				for (auto const &pair: conList[i].coeffs) {
-					int loc = std::find(monoms.begin(), monoms.end(), pair.first)-monoms.begin();
-					triplets.push_back(Eigen::Triplet<double>(loc, i, pair.second));
-				}
-			}
-			Eigen::SparseMatrix<double> A(monoms.size(), conList.size());
-			A.setFromTriplets(triplets.begin(), triplets.end());
-
-			// The vector we are trying to make using combinations of the others
-			Eigen::VectorXd b = Eigen::VectorXd::Zero(monoms.size());
-			for (auto const &pair: toMake.coeffs) {
-				int loc = std::find(monoms.begin(), monoms.end(), pair.first)-monoms.begin();
-				b(loc) = pair.second;
-			}
-
-			// See if this is feasible
-			Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> lscg;
-			lscg.compute(A);
-			Eigen::VectorXd x = lscg.solve(b);
-
-			// If feasible, this equation can be in dependant
-			double error = (A*x-b).norm();
-			if (error < 1e-8) {
-				return k;
-			}
-
-		}
-
-		// Otherwise, no equation is dependant at this level
-		return -1;
-
-	}
-
 	// Use Hilbert's Nullstellensatz to try to prove infeasiblity
 	void useNull(int level=1, double bounds=1, int maxIters=-1) {
 
@@ -3645,7 +3524,7 @@ public:
 		}
 		toProcess.push_back(varMinMax);
 				
-		// If told to start by splitting at various vars TODO SCS
+		// If told to start by splitting at various vars 
 		if (numVarsToSplit > 0) {
 
 			// Create the lists of vars to split, starting from the end
@@ -3936,7 +3815,7 @@ public:
 		coneSCS->ssize = 1;
 		coneSCS->s = SDPSizes;
 
-		// Solver parameters TODO SCS
+		// Solver parameters
 		scs_set_default_settings(stgs);
 		if (verbosity >= 2) {
 			stgs->verbose = true;
