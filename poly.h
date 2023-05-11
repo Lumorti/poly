@@ -209,47 +209,76 @@ public:
 	std::vector<std::vector<int>> inds;
 	std::vector<polyType> vals;
 
-	// Default constructor
+	// --------------------------------------------
+	//              Constructors
+	// --------------------------------------------
+	
+	// Default constructor (not valid since no variable count given)
 	Polynomial() {
 		isNaN = true;
 	}
 
 	// Simplest constructor
 	Polynomial(int maxVariables_) {
+
+		// Copy metadata
 		maxVariables = maxVariables_;
 		digitsPerInd = std::ceil(std::log10(maxVariables+1));
+
 	}
 
 	// Constructor with a single term
 	Polynomial(int maxVariables_, polyType coeff, std::vector<int> inds) {
+
+		// Copy metadata
 		maxVariables = maxVariables_;
 		digitsPerInd = std::ceil(std::log10(maxVariables+1));
+
+		// Add this one term
 		addTerm(coeff, inds);
+
 	}
 
 	// Constructor with a single term
 	Polynomial(int maxVariables_, polyType coeff, std::initializer_list<int> inds) {
+
+		// Copy metadata
 		maxVariables = maxVariables_;
 		digitsPerInd = std::ceil(std::log10(maxVariables+1));
+
+		// Add this one term
 		addTerm(coeff, inds);
+
 	}
 
 	// Constructor with a single constant term
 	Polynomial(int maxVariables_, polyType coeff) {
+
+		// Copy metadata
 		maxVariables = maxVariables_;
 		digitsPerInd = std::ceil(std::log10(maxVariables+1));
+
+		// Add this one term
 		addTerm(coeff);
+
 	}
 
 	// Constructor with a single term from string index
 	Polynomial(int maxVariables_, polyType coeff, std::string inds) {
+
+		// Copy metadata
 		maxVariables = maxVariables_;
 		digitsPerInd = std::ceil(std::log10(maxVariables+1));
+
+		// Add this one term
 		addTerm(coeff, inds);
+
 	}
 
 	// Constructor from the string form
 	Polynomial(int maxVariables_, std::string asString) {
+
+		// Copy metadata
 		maxVariables = maxVariables_;
 		digitsPerInd = std::ceil(std::log10(maxVariables+1));
 
@@ -282,36 +311,6 @@ public:
 
 	}
 
-	// Change the digits per index
-	Polynomial changeMaxVariables(int newMaxVariables) {
-
-		// If no change, do nothing
-		if (newMaxVariables == maxVariables) {
-			return *this;
-		}
-
-		// For each coefficient
-		Polynomial newPoly(newMaxVariables);
-		for (auto const &pair: coeffs) {
-
-			// Convert to the new size
-			std::string newIndString = "";
-			for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
-				int ind = std::stoi(pair.first.substr(j, digitsPerInd));
-				std::string padded = std::to_string(ind);
-				padded.insert(0, newPoly.digitsPerInd-padded.size(), ' ');
-				newIndString += padded;
-			}
-
-			// Update this coeff
-			newPoly.coeffs[newIndString] = pair.second;
-
-		}
-
-		return newPoly;
-
-	}
-
 	// Constructor from another poly
 	template <typename type2>
 	Polynomial(Polynomial<type2> other) {
@@ -336,6 +335,71 @@ public:
 
 	}
 
+	// --------------------------------------------
+	//              Data retrieval
+	// --------------------------------------------
+	
+	// Size operator (returns number of non-zero monomials)
+	long int size() const {
+		return coeffs.size();
+	}
+
+	// Overload index operator with int index
+	polyType& operator[](std::vector<int> indexAsInts) {
+		std::string index = "";
+		for (int i=0; i<indexAsInts.size(); i++) {
+			std::string indString = std::to_string(indexAsInts[i]);
+			indString.insert(0, digitsPerInd-indString.size(), ' ');
+			index += indString;
+		}
+		return coeffs[index];
+	}
+
+	// Overload index operator with int index
+	polyType& operator[](std::initializer_list<int> initList) {
+		std::vector<int> indexAsInts(initList.size());
+		std::copy(initList.begin(), initList.end(), indexAsInts);
+		std::string index = "";
+		for (int i=0; i<indexAsInts.size(); i++) {
+			std::string indString = std::to_string(indexAsInts[i]);
+			indString.insert(0, digitsPerInd-indString.size(), ' ');
+			index += indString;
+		}
+		return coeffs[index];
+	}
+
+	// Overload index operator with string index
+	polyType& operator[](std::string index) {
+		return coeffs[index];
+	}
+
+	// Return the max power of any monomial
+	int getDegree() const {
+		int maxDegree = 0;
+		for (auto const &pair: coeffs) {
+			maxDegree = std::max(maxDegree, int(pair.first.size()) / digitsPerInd);
+		}
+		return maxDegree;
+	}
+
+	// Return the max power of any variable in any monomial
+	int getDegreePerVariable() const {
+		int maxDegree = 0;
+		for (auto const &pair: coeffs) {
+			int currentDegree = 0;
+			std::string currentVar = "";
+			for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
+				if (pair.first.substr(i, digitsPerInd) == currentVar) {
+					currentDegree += 1;
+				} else {
+					currentDegree = 1;
+					currentVar = pair.first.substr(i, digitsPerInd);
+				}
+				maxDegree = std::max(maxDegree, currentDegree);
+			}
+		}
+		return maxDegree;
+	}
 	// Get a list of all the monomials
 	std::vector<std::string> getMonomials() const {
 		std::vector<std::string> monoms;
@@ -386,22 +450,9 @@ public:
 
 	}
 
-	// Get the output width of the polynomial
-	int getOutputWidth() const {
-
-		// Create a copy of the output stream
-		std::ostringstream streamCopy;
-		streamCopy.copyfmt(std::cout);
-		auto startLoc = streamCopy.tellp();
-
-		// Write the poly to the new stream
-		streamCopy << *this;
-
-		// The output width is the change in length of this
-		auto length = streamCopy.tellp() - startLoc;
-		return length;
-
-	}
+	// --------------------------------------------
+	//              Adding terms
+	// --------------------------------------------
 
 	// Add a term given just a coefficient
 	void addTerm(polyType coeff) {
@@ -490,74 +541,19 @@ public:
 
 	}
 
-	// Return the max power of any monomial
-	int getDegree() const {
-		int maxDegree = 0;
-		for (auto const &pair: coeffs) {
-			maxDegree = std::max(maxDegree, int(pair.first.size()) / digitsPerInd);
-		}
-		return maxDegree;
-	}
+	// --------------------------------------------
+	//              Simplification
+	// --------------------------------------------
 
-	// Return the max power of any variable in any monomial
-	int getDegreePerVariable() const {
-		int maxDegree = 0;
+	// Remove zeros from a polynomial
+	Polynomial prune() {
+		Polynomial newPoly(maxVariables);
 		for (auto const &pair: coeffs) {
-			int currentDegree = 0;
-			std::string currentVar = "";
-			for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
-				if (pair.first.substr(i, digitsPerInd) == currentVar) {
-					currentDegree += 1;
-				} else {
-					currentDegree = 1;
-					currentVar = pair.first.substr(i, digitsPerInd);
-				}
-				maxDegree = std::max(maxDegree, currentDegree);
+			if (std::abs(pair.second) > zeroTol) {
+				newPoly.coeffs[pair.first] = pair.second;
 			}
 		}
-		return maxDegree;
-	}
-
-	// Check if the polynomial can be represented as a sum-of-squares
-	bool isSOS() {
-
-		// Get the degree and half it
-		int d = getDegree();
-		int dHalf = d / 2;
-
-		// Generate the vector of monoms
-		std::vector<int> vars = getVariables();
-		std::vector<Polynomial> x = getAllMonomialsAsPoly(vars.size(), dHalf);
-
-		// Which matrix elements must sum to each coefficient
-		std::unordered_map<std::string,std::vector<std::vector<int>>> cons;
-		for (int i=0; i<x.size(); i++) {
-			for (int j=0; j<x.size(); j++) {
-				cons[(x[i]*x[j]).getMonomials()[0]].push_back({i,j});
-			}
-		}
-
-		// Create a model
-		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
-
-		// Create the variable
-		mosek::fusion::Variable::t xM = M->variable(mosek::fusion::Domain::inPSDCone(x.size()));
-
-		// For each el + el + el = coeff
-		for (auto const &pair: cons) {
-			M->constraint(mosek::fusion::Expr::sum(xM->pick(monty::new_array_ptr(pair.second))), mosek::fusion::Domain::equalsTo(coeffs[pair.first]));
-		}
-
-		// Solve the problem
-		M->solve();
-
-		// If it's infeasible, it's not SOS
-		if (M->getProblemStatus() == mosek::fusion::ProblemStatus::PrimalInfeasible) {
-			return false;
-		} else {
-			return true;
-		}
-
+		return newPoly;
 	}
 
 	// Remove doubles from indices, such that given 0012 -> 12, 233 -> 2
@@ -593,6 +589,10 @@ public:
 		return newPoly;
 
 	}
+
+	// --------------------------------------------
+	//              Replacing
+	// --------------------------------------------
 
 	// Apply an int index to int index mapping
 	Polynomial replaceWithVariable(std::unordered_map<int, int> mapping) {
@@ -893,16 +893,9 @@ public:
 		return newPoly;
 	}
 
-	// Remove zeros from a polynomial
-	Polynomial prune() {
-		Polynomial newPoly(maxVariables);
-		for (auto const &pair: coeffs) {
-			if (std::abs(pair.second) > zeroTol) {
-				newPoly.coeffs[pair.first] = pair.second;
-			}
-		}
-		return newPoly;
-	}
+	// --------------------------------------------
+	//              Integration
+	// --------------------------------------------
 
 	// Differentiate a polynomial with respect to a variable index
 	Polynomial differentiate(int ind) {
@@ -995,6 +988,10 @@ public:
 
 	}
 
+	// --------------------------------------------
+	//               Addition
+	// --------------------------------------------
+
 	// Overload the addition operator with another polynomial
 	Polynomial operator+(const Polynomial& other) const {
 
@@ -1022,42 +1019,23 @@ public:
 		return result;
 
 	}
-
-	// Overload the addition operator with another polynomial
-	Polynomial operator-(const Polynomial& other) const {
-
-		// Start with one equation
-		Polynomial result = other;
-
-		// Reserve some space for the new map
-		result.coeffs.reserve(std::max(coeffs.size(), other.coeffs.size()));
-
-		// For each term of the other
-		for (auto const &pair: coeffs) {
-
-			// If it's new add it, otherwise combine with the existing
-			if (result.coeffs.find(pair.first) != result.coeffs.end()) {
-				result.coeffs[pair.first] -= pair.second;
-				if (std::abs(result.coeffs[pair.first]) < zeroTol) {
-					result.coeffs.erase(pair.first);
-				}
-			} else {
-				result.coeffs[pair.first] = -pair.second;
+	// Overload for addition with constant
+	template <class otherType>
+	Polynomial operator+(const otherType& other) {
+		
+		// If it's new add it, otherwise combine with the existing
+		Polynomial newPoly = *this;
+		if (newPoly.coeffs.find("") != newPoly.coeffs.end()) {
+			newPoly.coeffs[""] += polyType(other);
+			if (std::abs(newPoly.coeffs[""]) < newPoly.zeroTol) {
+				newPoly.coeffs.erase("");
 			}
-
+		} else {
+			newPoly.coeffs[""] = polyType(other);
 		}
 
-		return result;
+		return newPoly;
 
-	}
-
-	// Overload the self-subtraction operator
-	Polynomial operator-() const {
-		Polynomial negPoly(maxVariables);
-		for (auto const &pair: coeffs) {
-			negPoly.coeffs[pair.first] = -pair.second;
-		}
-		return negPoly;
 	}
 
 	// Overload for in-place addition with constant
@@ -1097,6 +1075,65 @@ public:
 		}
 
 		return *this;
+
+	}
+
+	// --------------------------------------------
+	//               Subtraction
+	// --------------------------------------------
+	
+	// Overload the self-subtraction operator
+	Polynomial operator-() const {
+		Polynomial negPoly(maxVariables);
+		for (auto const &pair: coeffs) {
+			negPoly.coeffs[pair.first] = -pair.second;
+		}
+		return negPoly;
+	}
+
+	// Overload the addition operator with another polynomial
+	Polynomial operator-(const Polynomial& other) const {
+
+		// Start with one equation
+		Polynomial result = other;
+
+		// Reserve some space for the new map
+		result.coeffs.reserve(std::max(coeffs.size(), other.coeffs.size()));
+
+		// For each term of the other
+		for (auto const &pair: coeffs) {
+
+			// If it's new add it, otherwise combine with the existing
+			if (result.coeffs.find(pair.first) != result.coeffs.end()) {
+				result.coeffs[pair.first] -= pair.second;
+				if (std::abs(result.coeffs[pair.first]) < zeroTol) {
+					result.coeffs.erase(pair.first);
+				}
+			} else {
+				result.coeffs[pair.first] = -pair.second;
+			}
+
+		}
+
+		return result;
+
+	}
+	// Overload for subtraction with a constant
+	template <class otherType>
+	Polynomial operator-(const otherType& other) {
+		
+		// If it's new add it, otherwise combine with the existing
+		Polynomial newPoly = *this;
+		if (newPoly.coeffs.find("") != newPoly.coeffs.end()) {
+			newPoly.coeffs[""] -= polyType(other);
+			if (std::abs(newPoly.coeffs[""]) < newPoly.zeroTol) {
+				newPoly.coeffs.erase("");
+			}
+		} else {
+			newPoly.coeffs[""] = polyType(other);
+		}
+
+		return newPoly;
 
 	}
 
@@ -1140,7 +1177,11 @@ public:
 
 	}
 
-	// Overload for in-place multiplication
+	// --------------------------------------------
+	//               Multiplication
+	// --------------------------------------------
+
+	// Lazy overload for in-place multiplication
 	template <class otherType>
 	Polynomial& operator*=(const otherType& other) {
 		*this = (*this) * other;
@@ -1151,7 +1192,7 @@ public:
 	template <class otherType>
 	Polynomial operator*(const otherType& other) const {
 
-		// For each term of both equations
+		// For each term of this equation
 		Polynomial result(maxVariables);
 		polyType otherConverted = polyType(other);
 		for (auto const &pair: coeffs) {
@@ -1207,6 +1248,35 @@ public:
 
 	}
 
+	// --------------------------------------------
+	//               Division
+	// --------------------------------------------
+
+	// Lazy overload for in-place division
+	template <class otherType>
+	Polynomial& operator/=(const otherType& other) {
+		*this = (*this) / other;
+		return *this;
+	}
+
+	// Overload the division operator with a constant
+	template <class otherType>
+	Polynomial operator/(const otherType& other) const {
+
+		// For each term of this equation
+		Polynomial result(maxVariables);
+		polyType otherConverted = polyType(other);
+		for (auto const &pair: coeffs) {
+
+			// Multiply by the constant
+			result.coeffs[pair.first] = otherConverted/pair.second;
+
+		}
+
+		return result;
+
+	}
+	
 	// Overload the division operator with another poly
 	Polynomial operator/(const Polynomial& other) const {
 
@@ -1265,6 +1335,10 @@ public:
 		return result;
 
 	}
+
+	// --------------------------------------------
+	//             Evaluation
+	// --------------------------------------------
 
 	// Prepares this equation for rapid eval by caching things
 	void prepareEvalFast() {
@@ -1343,6 +1417,27 @@ public:
 		}
 
 		return soFar;
+
+	}
+
+	// --------------------------------------------
+	//             Output
+	// --------------------------------------------
+
+	// Get the output width of the polynomial
+	int getOutputWidth() const {
+
+		// Create a copy of the output stream
+		std::ostringstream streamCopy;
+		streamCopy.copyfmt(std::cout);
+		auto startLoc = streamCopy.tellp();
+
+		// Write the poly to the new stream
+		streamCopy << *this;
+
+		// The output width is the change in length of this
+		auto length = streamCopy.tellp() - startLoc;
+		return length;
 
 	}
 
@@ -1468,6 +1563,10 @@ public:
 		return output;
 	}
 
+	// --------------------------------------------
+	//         Assigning and Comparison
+	// --------------------------------------------
+
 	// Assigning with a constant
 	Polynomial& operator=(const polyType& other) {
 		coeffs.clear();
@@ -1545,39 +1644,85 @@ public:
 
 	}
 
-	// Size operator (returns number of non-zero monomials)
-	long int size() const {
-		return coeffs.size();
-	}
+	// --------------------------------------------
+	//                  Other 
+	// --------------------------------------------
+	
+	// Change the digits per index
+	Polynomial changeMaxVariables(int newMaxVariables) {
 
-	// Overload index operator with int index
-	polyType& operator[](std::vector<int> indexAsInts) {
-		std::string index = "";
-		for (int i=0; i<indexAsInts.size(); i++) {
-			std::string indString = std::to_string(indexAsInts[i]);
-			indString.insert(0, digitsPerInd-indString.size(), ' ');
-			index += indString;
+		// If no change, do nothing
+		if (newMaxVariables == maxVariables) {
+			return *this;
 		}
-		return coeffs[index];
-	}
 
-	// Overload index operator with int index
-	polyType& operator[](std::initializer_list<int> initList) {
-		std::vector<int> indexAsInts(initList.size());
-		std::copy(initList.begin(), initList.end(), indexAsInts);
-		std::string index = "";
-		for (int i=0; i<indexAsInts.size(); i++) {
-			std::string indString = std::to_string(indexAsInts[i]);
-			indString.insert(0, digitsPerInd-indString.size(), ' ');
-			index += indString;
+		// For each coefficient
+		Polynomial newPoly(newMaxVariables);
+		for (auto const &pair: coeffs) {
+
+			// Convert to the new size
+			std::string newIndString = "";
+			for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
+				int ind = std::stoi(pair.first.substr(j, digitsPerInd));
+				std::string padded = std::to_string(ind);
+				padded.insert(0, newPoly.digitsPerInd-padded.size(), ' ');
+				newIndString += padded;
+			}
+
+			// Update this coeff
+			newPoly.coeffs[newIndString] = pair.second;
+
 		}
-		return coeffs[index];
+
+		return newPoly;
+
 	}
 
-	// Overload index operator with string index
-	polyType& operator[](std::string index) {
-		return coeffs[index];
+	// Check if the polynomial can be represented as a sum-of-squares
+	bool isSOS() {
+
+		// Get the degree and half it
+		int d = getDegree();
+		int dHalf = d / 2;
+
+		// Generate the vector of monoms
+		std::vector<int> vars = getVariables();
+		std::vector<Polynomial> x = getAllMonomialsAsPoly(vars.size(), dHalf);
+
+		// Which matrix elements must sum to each coefficient
+		std::unordered_map<std::string,std::vector<std::vector<int>>> cons;
+		for (int i=0; i<x.size(); i++) {
+			for (int j=0; j<x.size(); j++) {
+				cons[(x[i]*x[j]).getMonomials()[0]].push_back({i,j});
+			}
+		}
+
+		// Create a model
+		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
+
+		// Create the variable
+		mosek::fusion::Variable::t xM = M->variable(mosek::fusion::Domain::inPSDCone(x.size()));
+
+		// For each el + el + el = coeff
+		for (auto const &pair: cons) {
+			M->constraint(mosek::fusion::Expr::sum(xM->pick(monty::new_array_ptr(pair.second))), mosek::fusion::Domain::equalsTo(coeffs[pair.first]));
+		}
+
+		// Solve the problem
+		M->solve();
+
+		// If it's infeasible, it's not SOS
+		if (M->getProblemStatus() == mosek::fusion::ProblemStatus::PrimalInfeasible) {
+			return false;
+		} else {
+			return true;
+		}
+
 	}
+
+	// --------------------------------------------
+	//              Optimization
+	// --------------------------------------------
 
 	// Try to find a root, with one variable being optimized towards zero
 	std::vector<polyType> findRoot(int zeroInd=0, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13, std::vector<polyType> startX={}) {
@@ -1923,6 +2068,7 @@ public:
 	std::vector<Polynomial<polyType>> conPositive;
 	std::vector<std::vector<Polynomial<polyType>>> conPSD;
 	bool isBinary = false;
+	double maxEqnError = 0.0;
 	double zeroTol = 1e-15;
 
 	// Default constructor
@@ -2378,43 +2524,84 @@ public:
 			}
 		}
 
-		double error = 1.0/std::pow(2, maxVariables);
+		// The most a variable could change given infinite bits
+		double errorPerVar = 1.0/std::pow(2, numBits);
+		double highestError = -10000;
 
-		// Perform the replacement
+		// Perform the replacement for the objective
 		obj = obj.replaceWithPoly(indsToReplace, polyToReplace);
+
+		// Perform the replacement for the positive cons
 		for (int i=0; i<conPositive.size(); i++) {
+
+			// Calculate the most this equation could change if we had infinite bits
+			double errorInEquation = 0;
+			for (auto const &pair: conPositive[i].coeffs) {
+				errorInEquation += (pair.second * errorPerVar * pair.first.size()) / conPositive[i].digitsPerInd;
+			}
+			highestError = std::max(highestError, errorInEquation);
+
+			// Replace with binary variables
 			Polynomial<double> newCon = conPositive[i].replaceWithPoly(indsToReplace, polyToReplace);
-			conPositive[i] = newCon - error;
-			std::cout << i << std::endl;
+			conPositive[i] = newCon - errorInEquation;
+
 		}
+
+		std::cout << "replacing variable 0 with the poly " << polyToReplace[0] << std::endl; // TODO
+		std::cout << "error per var: " << errorPerVar << std::endl; // TODO
+
+		// Perform the replacement for the zero cons
 		for (int i=0; i<conZero.size(); i++) {
+
+			// Calculate the most this equation could change if we had infinite bits
+			double errorInEquation = 0;
+			for (auto const &pair: conZero[i].coeffs) {
+				if (pair.first.size() > 0) {
+					// error calculation needs work TODO
+					// x^2 + y^2 - 0.5 = 0
+					// => (x+-e)^2 + (y+-e)^2 - 0.5 = 0
+					// => x^2 + 2xe + e^2 + y^2 + 2ye + e^2 - 0.5 = 0
+					// biggest change is therefore 2xe + 2ye + 2e^2
+					errorInEquation += std::abs(pair.second * std::pow(errorPerVar, (pair.first.size() / conZero[i].digitsPerInd)));
+				}
+			}
+			highestError = std::max(highestError, errorInEquation);
+			std::cout << "error in con " << i << ": " << errorInEquation << std::endl; // TODO
+
+			// Replace with binary variables
 			Polynomial<double> newCon = conZero[i].replaceWithPoly(indsToReplace, polyToReplace);
-			conPositive.push_back(newCon + error);
-			conPositive.push_back(newCon - error);
+			conZero[i] = newCon;
+			//conPositive.push_back(newCon + errorInEquation);
+			//conPositive.push_back((-newCon) - errorInEquation);
+
 		}
-		conZero = {};
+		//conZero = {};
+		std::cout << "max equation error: " << highestError << std::endl; // TODO
+
+		// Update problem metadata
 		maxVariables = maxVariablesNew;
 
 		// Simplify, minimizing the number of indices
-		std::cout << "here" << std::endl;
 		std::unordered_map<int,int> reducedMap = getMinimalMap();
 		std::cout << reducedMap << std::endl;
 		*this = replaceWithVariable(reducedMap);
-		std::cout << "here" << std::endl;
-
+		maxEqnError = highestError;
 
 		// Set the binary flag
 		isBinary = true;
 
 	}
 
-	// Find the exact solution through brute force TODO
+	// Find the exact solution through brute force
 	std::pair<polyType,std::vector<int>> bruteForce() {
 
 		// If this isn't a binary problem, don't try to treat it like one
 		if (!isBinary) {
 			return {10000000, {}};
 		}
+
+		// If there's no objective, just look for a single valid point
+		bool noObj = (obj.size() == 0);
 
 		// Create a vector listing all the variables
 		std::vector<int> inds(maxVariables);
@@ -2426,6 +2613,7 @@ public:
 		int numCombs = std::pow(2, maxVariables);
 		polyType bestVal = 10000000;
 		std::vector<int> bestSol(maxVariables);
+		double minError = 10000000;
 		for (int k=0; k<numCombs; k++) {
 
 			// Convert to -1/1
@@ -2437,21 +2625,36 @@ public:
 			}
 
 			// If it satisfies all constraints
-			bool meetsCons = true;
+			double conError = 0;
 			for (int i=0; i<conZero.size(); i++) {
-				if (std::abs(conZero[i].eval(sol)) > zeroTol) {
-					meetsCons = false;
-				}
+				double error = std::abs(conZero[i].eval(sol));
+				conError = std::max(conError, error);
 			}
 			for (int i=0; i<conPositive.size(); i++) {
-				if (std::abs(conPositive[i].eval(sol)) < 0.0) {
-					meetsCons = false;
-				}
+				double error = -std::min(conPositive[i].eval(sol), 0.0);
+				conError = std::max(conError, error);
 			}
 
+			if (conError < maxEqnError) {
+				for (int i=0; i<conZero.size(); i++) {
+					std::cout << std::abs(conZero[i].eval(sol)) << std::endl; // TODO
+				}
+				for (int i=0; i<conPositive.size(); i++) {
+					std::cout << -std::min(conPositive[i].eval(sol), 0.0) << std::endl; // TODO
+				}
+				std::cout << sol << std::endl; // TODO
+				std::cout << "total error: " << conError << std::endl; // TODO
+			}
+
+			// Keep track of the solution with the minimum error
+			minError = std::min(minError, conError);
+
 			// If it's valid, check if the objective value is better
-			if (meetsCons) {
+			if (minError < zeroTol) {
 				double objVal = obj.eval(sol);
+				if (noObj) {
+					return {objVal, sol};
+				}
 				if (objVal < bestVal) {
 					bestVal = objVal;
 					bestSol = sol;
@@ -2460,11 +2663,19 @@ public:
 
 		}
 
+		std::cout << "min error = " << minError << std::endl; // TODO
+		std::cout << std::endl; // TODO
+
 		return {bestVal, bestSol};
 	
 	}
 
-	// proveInfeasibleBinary TODO
+	// Attempt to find a series of constraints that show this is infeasible TODO
+	void proveInfeasibleBinary(int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="", int verbosity=1, int numVarsToSplit=0) {
+
+
+
+	}
 
 	// Attempt to find a series of constraints that show this is infeasible
 	void proveInfeasible(int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="", int verbosity=1, int numVarsToSplit=0) {

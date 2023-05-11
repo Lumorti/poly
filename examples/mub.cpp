@@ -11,6 +11,7 @@ int main(int argc, char ** argv) {
 	int verbosity = 1;
 	int numToSplit = 0;
 	int cores = 4;
+	int numBits = 4;
 	double stabilityTerm = 1e-20;
 	float alpha = 0.99;
 	double tolerance = 1e-12;
@@ -42,6 +43,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -p [int]    set the number of vars to split initially" << std::endl;
 			std::cout << " -c [int]    set the number of cores to use" << std::endl;
 			std::cout << " -o [str]    log points to a csv file" << std::endl;
+			std::cout << " -B [int]    set number of bits to use for the binarization" << std::endl;
 			std::cout << " -r          use a random seed" << std::endl;
 			std::cout << " -1          don't assume the first basis is the computational" << std::endl;
 			std::cout << " -2          don't assume the first vector of the second basis is uniform" << std::endl;
@@ -75,6 +77,9 @@ int main(int argc, char ** argv) {
 			i++;
 		} else if (arg == "-v" && i+1 < argc) {
 			verbosity = std::stoi(argv[i+1]);
+			i++;
+		} else if (arg == "-B" && i+1 < argc) {
+			numBits = std::stoi(argv[i+1]);
 			i++;
 		} else if (arg == "-c" && i+1 < argc) {
 			cores = std::stoi(argv[i+1]);
@@ -443,8 +448,8 @@ int main(int argc, char ** argv) {
 				Polynomial<double> newCon(numVars);
 				int pow = 0;
 				for (auto const &pair: syms[i]) {
-					newCon.addTerm(std::pow(1, pow), {pair.first});
-					newCon.addTerm(-std::pow(1, pow), {pair.second}); // TODO
+					newCon.addTerm(std::pow(2, pow), {pair.first});
+					newCon.addTerm(-std::pow(2, pow), {pair.second});
 					pow++;
 				}
 				orderingCons.push_back(newCon);
@@ -461,7 +466,7 @@ int main(int argc, char ** argv) {
 	std::unordered_map<int,int> reducedMap = prob.getMinimalMap();
 	if (verbosity >= 2) {
 		std::cout << "---------------------" << std::endl;
-		std::cout << "Problem: " << std::endl;
+		std::cout << "Original Problem: " << std::endl;
 		std::cout << "---------------------" << std::endl;
 		std::cout << prob << std::endl;
 	}
@@ -482,16 +487,17 @@ int main(int argc, char ** argv) {
 	if (verbosity >= 1) {
 		std::cout << "set sizes: " << basisSizes << ", vars: " << prob.maxVariables << ", vectors: " << numVectors << ", equations: " << eqns.size() << std::endl;
 	}
-	if (verbosity >= 2) {
-		std::cout << std::endl;
-		std::cout << "---------------------" << std::endl;
-		std::cout << "Optimization:" << std::endl;
-		std::cout << "---------------------" << std::endl;
-
-	}
 
 	// If told to find a feasible point
 	if (task == 0) {
+
+		// Heading if verbose
+		if (verbosity >= 2) {
+			std::cout << std::endl;
+			std::cout << "---------------------" << std::endl;
+			std::cout << "Optimization:" << std::endl;
+			std::cout << "---------------------" << std::endl;
+		}
 
 		// Find a feasible point of the equality constraints
 		std::cout << std::scientific;
@@ -565,7 +571,7 @@ int main(int argc, char ** argv) {
 	// If told to identify redundant constraints
 	} else if (task == 2) {
 
-		// See if there are any constraints that can be removed without LoG TODO
+		// See if there are any constraints that can be removed without LoG
 		std::vector<int> redundantInds;
 		for (int i=0; i<prob.conZero.size(); i++) {
 
@@ -642,15 +648,16 @@ int main(int argc, char ** argv) {
 
 		}
 
-	// If told to turn it into a binary problem
+	// If told to turn it into a binary problem TODO
 	} else if (task == 3) {
 
 		// Binarize
-		prob.toBinaryProblem(4);
+		prob.toBinaryProblem(numBits);
 
 		if (verbosity >= 2) {
+			std::cout << std::endl;
 			std::cout << "---------------------" << std::endl;
-			std::cout << "Reduced Problem: " << std::endl;
+			std::cout << "Binarized Problem: " << std::endl;
 			std::cout << "---------------------" << std::endl;
 			std::cout << prob << std::endl;
 			std::cout << "---------------------" << std::endl;
@@ -660,9 +667,30 @@ int main(int argc, char ** argv) {
 		if (verbosity >= 1) {
 			std::cout << "binary vars: " << prob.maxVariables << ", equations: " << eqns.size() << std::endl;
 		}
+		if (verbosity >= 2) {
+			std::cout << std::endl;
+			std::cout << "---------------------" << std::endl;
+			std::cout << "Optimisation:" << std::endl;
+			std::cout << "---------------------" << std::endl;
+		}
+
+		// Brute force if it's small enough
+		if (prob.maxVariables < 30) {
+			auto res = prob.bruteForce();
+			std::cout << res.first << std::endl;
+			std::cout << res.second << std::endl;
+		}
 
 	// If told to prove the search space is infeasible
 	} else if (task == 1) {
+
+		// Heading if verbose
+		if (verbosity >= 2) {
+			std::cout << std::endl;
+			std::cout << "---------------------" << std::endl;
+			std::cout << "Optimization:" << std::endl;
+			std::cout << "---------------------" << std::endl;
+		}
 
 		// If we're using a higher level mat, add higher-order cons
 		int ogCons = prob.conZero.size();
