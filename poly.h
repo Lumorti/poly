@@ -1021,7 +1021,7 @@ public:
 	}
 	// Overload for addition with constant
 	template <class otherType>
-	Polynomial operator+(const otherType& other) {
+	Polynomial operator+(const otherType& other) const {
 		
 		// If it's new add it, otherwise combine with the existing
 		Polynomial newPoly = *this;
@@ -1091,6 +1091,25 @@ public:
 		return negPoly;
 	}
 
+	// Overload for subtraction with a constant
+	template <class otherType>
+	Polynomial operator-(const otherType& other) const {
+		
+		// If it's new add it, otherwise combine with the existing
+		Polynomial newPoly = *this;
+		if (newPoly.coeffs.find("") != newPoly.coeffs.end()) {
+			newPoly.coeffs[""] -= polyType(other);
+			if (std::abs(newPoly.coeffs[""]) < newPoly.zeroTol) {
+				newPoly.coeffs.erase("");
+			}
+		} else {
+			newPoly.coeffs[""] = polyType(other);
+		}
+
+		return newPoly;
+
+	}
+
 	// Overload the addition operator with another polynomial
 	Polynomial operator-(const Polynomial& other) const {
 
@@ -1116,24 +1135,6 @@ public:
 		}
 
 		return result;
-
-	}
-	// Overload for subtraction with a constant
-	template <class otherType>
-	Polynomial operator-(const otherType& other) {
-		
-		// If it's new add it, otherwise combine with the existing
-		Polynomial newPoly = *this;
-		if (newPoly.coeffs.find("") != newPoly.coeffs.end()) {
-			newPoly.coeffs[""] -= polyType(other);
-			if (std::abs(newPoly.coeffs[""]) < newPoly.zeroTol) {
-				newPoly.coeffs.erase("");
-			}
-		} else {
-			newPoly.coeffs[""] = polyType(other);
-		}
-
-		return newPoly;
 
 	}
 
@@ -2068,7 +2069,6 @@ public:
 	std::vector<Polynomial<polyType>> conPositive;
 	std::vector<std::vector<Polynomial<polyType>>> conPSD;
 	bool isBinary = false;
-	double maxEqnError = 0.0;
 	double zeroTol = 1e-15;
 
 	// Default constructor
@@ -2508,84 +2508,109 @@ public:
 	}
 
 	// Convert from a real problem to a +1/-1 binary problem TODO
-	void toBinaryProblem(int numBits) {
+	void toBinaryProblem(int numBits, double maxVal) {
 
-		// Now we have more variables
-		int maxVariablesNew = maxVariables + maxVariables*numBits;
+		// Now we have more variables (numBits per var, plus an extra for error)
+		int maxVariablesNew = maxVariables + maxVariables*(numBits+1);
+		int firstErrorInd = maxVariables + maxVariables*numBits;
 
 		// Want to replace every x with x1*0.5 + x2*0.25 + ...
 		std::vector<int> indsToReplace(maxVariables);
 		std::vector<Polynomial<polyType>> polyToReplace(maxVariables);
+		std::vector<Polynomial<polyType>> polyToReplaceWithError(maxVariables);
 		for (int i=0; i<maxVariables; i++) {
 			indsToReplace[i] = i;
 			polyToReplace[i] = Polynomial<polyType>(maxVariablesNew);
 			for (int j=0; j<numBits; j++) {
 				polyToReplace[i].addTerm(1.0/std::pow(2,j+1), {maxVariables+numBits*i+j});
 			}
+			polyToReplaceWithError[i] = Polynomial<polyType>(maxVariablesNew, 1, {i});
+			polyToReplaceWithError[i].addTerm(1.0, {firstErrorInd+i});
+			std::cout << "replacing variable " << i << " with the poly " << polyToReplace[i] << std::endl; // TODO
+			std::cout << "replacing variable " << i << " with the error " << polyToReplaceWithError[i] << std::endl; // TODO
 		}
 
 		// The most a variable could change given infinite bits
 		double errorPerVar = 1.0/std::pow(2, numBits);
-		double highestError = -10000;
 
 		// Perform the replacement for the objective
 		obj = obj.replaceWithPoly(indsToReplace, polyToReplace);
 
 		// Perform the replacement for the positive cons
-		for (int i=0; i<conPositive.size(); i++) {
+		//for (int i=0; i<conPositive.size(); i++) {
 
-			// Calculate the most this equation could change if we had infinite bits
-			double errorInEquation = 0;
-			for (auto const &pair: conPositive[i].coeffs) {
-				errorInEquation += (pair.second * errorPerVar * pair.first.size()) / conPositive[i].digitsPerInd;
-			}
-			highestError = std::max(highestError, errorInEquation);
+			//// Calculate the most this equation could change if we had infinite bits
+			//double errorInEquation = 0;
+			//for (auto const &pair: conPositive[i].coeffs) {
+				//errorInEquation += (pair.second * errorPerVar * pair.first.size()) / conPositive[i].digitsPerInd;
+			//}
 
-			// Replace with binary variables
-			Polynomial<double> newCon = conPositive[i].replaceWithPoly(indsToReplace, polyToReplace);
-			conPositive[i] = newCon - errorInEquation;
+			//// Replace with binary variables
+			//Polynomial<double> newCon = conPositive[i].replaceWithPoly(indsToReplace, polyToReplace);
+			//conPositive[i] = newCon - errorInEquation;
 
-		}
+		//}
 
-		std::cout << "replacing variable 0 with the poly " << polyToReplace[0] << std::endl; // TODO
 		std::cout << "error per var: " << errorPerVar << std::endl; // TODO
 
 		// Perform the replacement for the zero cons
 		for (int i=0; i<conZero.size(); i++) {
 
-			// Calculate the most this equation could change if we had infinite bits
-			double errorInEquation = 0;
-			for (auto const &pair: conZero[i].coeffs) {
-				if (pair.first.size() > 0) {
-					// error calculation needs work TODO
-					// x^2 + y^2 - 0.5 = 0
-					// => (x+-e)^2 + (y+-e)^2 - 0.5 = 0
-					// => x^2 + 2xe + e^2 + y^2 + 2ye + e^2 - 0.5 = 0
-					// biggest change is therefore 2xe + 2ye + 2e^2
-					errorInEquation += std::abs(pair.second * std::pow(errorPerVar, (pair.first.size() / conZero[i].digitsPerInd)));
-				}
-			}
-			highestError = std::max(highestError, errorInEquation);
-			std::cout << "error in con " << i << ": " << errorInEquation << std::endl; // TODO
+			//for (auto const &pair: conZero[i].coeffs) {
+				//if (pair.first.size() > 0) {
+					//// error calculation needs work TODO
+					//// x^2 + y^2 - 0.5 = 0
+					//// => (x+-e)^2 + (y+-e)^2 - 0.5 = 0
+					//// => x^2 + 2xe + e^2 + y^2 + 2ye + e^2 - 0.5 = 0
+					//// biggest change is therefore 2xe + 2ye + 2e^2
+					//errorInEquation += std::abs(pair.second * std::pow(errorPerVar, (pair.first.size() / conZero[i].digitsPerInd)));
+				//}
+			//}
 
 			// Replace with binary variables
 			Polynomial<double> newCon = conZero[i].replaceWithPoly(indsToReplace, polyToReplace);
+
+			// Calculate the most this equation could change if we had infinite bits
+			double errorInEquation = 0;
+			Polynomial<double> errorAsPoly = conZero[i] - conZero[i].replaceWithPoly(indsToReplace, polyToReplaceWithError); // TODO
+			std::cout << "error in con " << i << ": " << errorAsPoly << std::endl;
+			for (auto const &pair: conZero[i].coeffs) {
+				double errorTerm = std::abs(pair.second);
+
+				// Get each index from this term in the equation
+				for (int j=0; j<pair.first.size(); j+=conZero[i].digitsPerInd) {
+					int ind = std::stoi(pair.first.substr(j,digitsPerInd));
+
+					// Take the highest possible value for epsilon or x
+					if (ind < firstErrorInd) {
+						errorTerm *= errorPerVar;
+					} else {
+						errorTerm *= maxVal;
+					}
+
+				}
+
+				// Update the total error for this equation
+				errorInEquation += errorTerm;
+
+			}
+
+			std::cout << "error in con " << i << ": " << errorInEquation << std::endl;
+
+			// Update the con list
 			conZero[i] = newCon;
 			//conPositive.push_back(newCon + errorInEquation);
 			//conPositive.push_back((-newCon) - errorInEquation);
 
 		}
 		//conZero = {};
-		std::cout << "max equation error: " << highestError << std::endl; // TODO
 
 		// Update problem metadata
 		maxVariables = maxVariablesNew;
 
 		// Simplify, minimizing the number of indices
 		std::unordered_map<int,int> reducedMap = getMinimalMap();
-		std::cout << reducedMap << std::endl;
 		*this = replaceWithVariable(reducedMap);
-		maxEqnError = highestError;
 
 		// Set the binary flag
 		isBinary = true;
@@ -2635,7 +2660,7 @@ public:
 				conError = std::max(conError, error);
 			}
 
-			if (conError < maxEqnError) {
+			if (conError < 100) {
 				for (int i=0; i<conZero.size(); i++) {
 					std::cout << std::abs(conZero[i].eval(sol)) << std::endl; // TODO
 				}

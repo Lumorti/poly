@@ -652,7 +652,7 @@ int main(int argc, char ** argv) {
 	} else if (task == 3) {
 
 		// Binarize
-		prob.toBinaryProblem(numBits);
+		prob.toBinaryProblem(numBits, 1.0/std::sqrt(d));
 
 		if (verbosity >= 2) {
 			std::cout << std::endl;
