@@ -649,7 +649,7 @@ int main(int argc, char ** argv) {
 		}
 
 	// If told to turn it into a binary problem TODO
-	} else if (task == 3) {
+	} else if (task == 3 || task == 4) {
 
 		// Binarize
 		prob.toBinaryProblem(numBits, 1.0/std::sqrt(d));
@@ -675,7 +675,7 @@ int main(int argc, char ** argv) {
 		}
 
 		// Brute force if it's small enough
-		if (prob.maxVariables < 30) {
+		if (task == 4) {
 			auto res = prob.bruteForce();
 			std::cout << res.first << std::endl;
 			std::cout << res.second << std::endl;
