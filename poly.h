@@ -2508,7 +2508,7 @@ public:
 	}
 
 	// Convert from a real problem to a +1/-1 binary problem
-	void toBinaryProblem(int numBits, double maxVal) {
+	void toBinaryProblem(int numBits=4, double maxVal=1, int verbosity=1) {
 
 		// Now we have more variables (numBits per var, plus an extra for error)
 		int maxVariablesNew = maxVariables + maxVariables*(numBits+1);
@@ -2526,34 +2526,38 @@ public:
 			}
 			polyToReplaceWithError[i] = Polynomial<polyType>(maxVariablesNew, 1, {i});
 			polyToReplaceWithError[i].addTerm(1.0, {firstErrorInd+i});
-			std::cout << "replacing variable " << i << " with the poly " << polyToReplace[i] << std::endl; // TODO
-			std::cout << "replacing variable " << i << " with the error " << polyToReplaceWithError[i] << std::endl; // TODO
+			if (verbosity >= 2) {
+				std::cout << "replacing variable " << i << " with the poly " << polyToReplace[i] << std::endl;
+				std::cout << "replacing variable " << i << " with the error " << polyToReplaceWithError[i] << std::endl;
+			}
 		}
 
 		// The most a variable could change given infinite bits
 		double errorPerVar = maxVal/std::pow(2, numBits);
+		if (verbosity >= 2) {
+			std::cout << "error per var: " << errorPerVar << std::endl;
+			std::cout << "max val per var: " << maxVal << std::endl;
+		}
 
 		// Perform the replacement for the objective
 		obj = obj.replaceWithPoly(indsToReplace, polyToReplace);
 
-		// Perform the replacement for the positive cons TODO
-
-		std::cout << "error per var: " << errorPerVar << std::endl; // TODO
-		std::cout << "max val per var: " << maxVal << std::endl; // TODO
-
-		// Perform the replacement for the zero cons
-		for (int i=0; i<conZero.size(); i++) {
+		// Perform the replacement for the positive cons
+		int ogCons = conPositive.size();
+		for (int i=0; i<ogCons; i++) {
 
 			// Replace with binary variables
-			Polynomial<double> newCon = conZero[i].changeMaxVariables(maxVariablesNew);
-			Polynomial<double> newConWithError = conZero[i].replaceWithPoly(indsToReplace, polyToReplaceWithError).changeMaxVariables(maxVariablesNew);
-			Polynomial<double> newConAsBinary = conZero[i].replaceWithPoly(indsToReplace, polyToReplace).changeMaxVariables(maxVariablesNew);
+			Polynomial<double> newCon = conPositive[i].changeMaxVariables(maxVariablesNew);
+			Polynomial<double> newConWithError = conPositive[i].replaceWithPoly(indsToReplace, polyToReplaceWithError).changeMaxVariables(maxVariablesNew);
+			Polynomial<double> newConAsBinary = conPositive[i].replaceWithPoly(indsToReplace, polyToReplace).changeMaxVariables(maxVariablesNew);
 
 			// Calculate the most this equation could change if we had infinite bits
 			double errorInEquation = 0;
 			Polynomial<double> errorAsPoly = newCon - newConWithError;
-			std::cout << "con " << i << ": " << newCon << std::endl;
-			std::cout << "max allowed error in con " << i << ": " << errorAsPoly << std::endl;
+			if (verbosity >= 2) {
+				std::cout << "con " << i << ": " << newCon << std::endl;
+				std::cout << "max allowed error in con " << i << ": " << errorAsPoly << std::endl;
+			}
 			for (auto const &pair: errorAsPoly.coeffs) {
 
 				// Start with just the coefficient
@@ -2577,8 +2581,59 @@ public:
 
 			}
 
-			std::cout << "max allowed error in con " << i << ": " << errorInEquation << std::endl;
-			std::cout << std::endl;
+			if (verbosity >= 2) {
+				std::cout << "max allowed error in con " << i << ": " << errorInEquation << std::endl;
+				std::cout << std::endl;
+			}
+
+			// Update the con list
+			conPositive[i] = newConAsBinary + errorInEquation;
+			conPositive.push_back(newConAsBinary - errorInEquation);
+
+		}
+
+		// Perform the replacement for the zero cons
+		for (int i=0; i<conZero.size(); i++) {
+
+			// Replace with binary variables
+			Polynomial<double> newCon = conZero[i].changeMaxVariables(maxVariablesNew);
+			Polynomial<double> newConWithError = conZero[i].replaceWithPoly(indsToReplace, polyToReplaceWithError).changeMaxVariables(maxVariablesNew);
+			Polynomial<double> newConAsBinary = conZero[i].replaceWithPoly(indsToReplace, polyToReplace).changeMaxVariables(maxVariablesNew);
+
+			// Calculate the most this equation could change if we had infinite bits
+			double errorInEquation = 0;
+			Polynomial<double> errorAsPoly = newCon - newConWithError;
+			if (verbosity >= 2) {
+				std::cout << "con " << i << ": " << newCon << std::endl;
+				std::cout << "max allowed error in con " << i << ": " << errorAsPoly << std::endl;
+			}
+			for (auto const &pair: errorAsPoly.coeffs) {
+
+				// Start with just the coefficient
+				double errorTerm = std::abs(pair.second);
+
+				// Get each index from this term in the equation
+				for (int j=0; j<pair.first.size(); j+=errorAsPoly.digitsPerInd) {
+					int ind = std::stoi(pair.first.substr(j, errorAsPoly.digitsPerInd));
+
+					// Take the highest possible value for epsilon or x
+					if (ind >= firstErrorInd) {
+						errorTerm *= errorPerVar;
+					} else {
+						errorTerm *= maxVal;
+					}
+
+				}
+
+				// Update the total error for this equation
+				errorInEquation += errorTerm;
+
+			}
+
+			if (verbosity >= 2) {
+				std::cout << "max allowed error in con " << i << ": " << errorInEquation << std::endl;
+				std::cout << std::endl;
+			}
 
 			// Update the con list
 			conPositive.push_back(newConAsBinary + errorInEquation);
@@ -2681,7 +2736,7 @@ public:
 	
 	}
 
-	// Attempt to find a series of constraints that show this is infeasible TODO
+	// Attempt to find a series of constraints that show this is infeasible
 	void proveInfeasibleBinary(int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="", int verbosity=1, int numVarsToSplit=0) {
 
 		// Get the monomial list and sort it
@@ -2704,28 +2759,6 @@ public:
 		}
 		monoms.insert(monoms.begin(), "");
 
-		// Add all square monoms
-		if (degree >= 2) {
-			for (int i=0; i<maxVariables; i++) {
-				std::string newInd = std::to_string(i);
-				newInd.insert(0, digitsPerInd-newInd.size(), ' ');
-				if (std::find(monoms.begin(), monoms.end(), newInd+newInd) == monoms.end()) {
-					monoms.push_back(newInd+newInd);
-				}
-			}
-		}
-
-		// Add all quartic monoms
-		if (degree >= 4) {
-			for (int i=0; i<maxVariables; i++) {
-				std::string newInd = std::to_string(i);
-				newInd.insert(0, digitsPerInd-newInd.size(), ' ');
-				if (std::find(monoms.begin(), monoms.end(), newInd+newInd+newInd+newInd) == monoms.end()) {
-					monoms.push_back(newInd+newInd+newInd+newInd);
-				}
-			}
-		}
-		
 		// Create the mapping from monomials to indices (to linearize)
 		int numOGMonoms = monoms.size();
 		std::unordered_map<std::string,std::string> mapping;
@@ -2822,6 +2855,7 @@ public:
 		std::vector<std::vector<int>> toProcess;
 		std::vector<int> startingState(obj.maxVariables, 0);
 		toProcess.push_back(startingState);
+		double maxArea = std::pow(2, startingState.size());
 
 		// Verbose output
 		if (verbosity >= 2) {
@@ -2888,8 +2922,8 @@ public:
 		}
 
 		// Get the inds of the first order monomials and their squares
-		std::vector<int> firstMonomInds(varMinMax.size(), -1);
-		std::vector<std::vector<int>> quadraticMonomInds(varMinMax.size(), std::vector<int>(varMinMax.size(), 1));
+		std::vector<int> firstMonomInds(startingState.size(), -1);
+		std::vector<std::vector<int>> quadraticMonomInds(startingState.size(), std::vector<int>(startingState.size(), 1));
 		for (int i=0; i<monoms.size(); i++) {
 			if (monoms[i].size() == digitsPerInd) {
 				firstMonomInds[std::stoi(monoms[i])] = i;
@@ -2947,6 +2981,9 @@ public:
 			}
 		}
 
+
+		// Since it's binary we have linear constraints rather than SDP TODO
+
 		// Convert the linear PSD constraints to MOSEK form
 		int upperTriangSize = (conPSDLinear.size()*(conPSDLinear.size()+1)) / 2;
 		std::vector<std::vector<int>> psdLocs(numMatsToSum, std::vector<int>(upperTriangSize, oneIndex));
@@ -2987,22 +3024,28 @@ public:
 		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
 
 		// Create the variable
-		mosek::fusion::Variable::t xM = M->variable(varsTotal);
+		mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(-1, 1));
 
 		// Use an extra variable to minimize violation of SD
-		mosek::fusion::Variable::t lambda = M->variable();
+		//mosek::fusion::Variable::t lambda = M->variable();
 
-		// Parameterized linear positivity constraints
-		int numParamCons = maxVariables;
+		// Parameterized equality constraints
+		int numParamCons = maxVariables + maxVariables*maxVariables;
 		std::vector<long> sparsity;
-		for (int i=0; i<toProcess[0].size(); i++) {
+		for (int i=0; i<maxVariables; i++) {
 			sparsity.push_back(i*varsTotal + firstMonomInds[i]);
-			sparsity.push_back(i*varsTotal + quadraticMonomInds[i][i]);
 			sparsity.push_back(i*varsTotal + oneIndex);
 		}
+		//for (int i=0; i<maxVariables; i++) {
+			//for (int j=0; j<maxVariables; j++) {
+				//sparsity.push_back(maxVariables*varsTotal + i*varsTotal + j + quadraticMonomInds[i][j]);
+				//sparsity.push_back(i*varsTotal + oneIndex);
+			//}
+		//}
 		std::sort(sparsity.begin(), sparsity.end());
-		mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
-		M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::greaterThan(0));
+		//mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
+		mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}));
+		M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::equalsTo(0.0));
 
 		// The first element of the vector should be one
 		M->constraint(xM->index(oneIndex), mosek::fusion::Domain::equalsTo(1.0));
@@ -3014,11 +3057,12 @@ public:
 		M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(0));
 
 		// Try to violate the SDP constraints the least
-		M->objective(mosek::fusion::ObjectiveSense::Minimize, lambda);
+		//M->objective(mosek::fusion::ObjectiveSense::Minimize, lambda);
 
 		// SDP constraints
 		for (int i=0; i<shouldBePSD.size(); i++) {
-			M->constraint(mosek::fusion::Expr::add(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Expr::mul(lambda, identityAsSVec[i])), mosek::fusion::Domain::inSVecPSDCone());
+			//M->constraint(mosek::fusion::Expr::add(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Expr::mul(lambda, identityAsSVec[i])), mosek::fusion::Domain::inSVecPSDCone());
+			M->constraint(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Domain::inSVecPSDCone());
 		}
 
 		// Original PSD cons
@@ -3061,27 +3105,68 @@ public:
 			// The area taken up by this section
 			areaCovered = 1;
 			for (int k=0; k<toProcess[0].size(); k++) {
-				areaCovered *= toProcess[0][k].second - toProcess[0][k].first;
+				if (toProcess[0][k] == 0) {
+					areaCovered *= 2;
+				}
 			}
 
 			// The new parameterized constraint vector and objective
 			std::vector<std::vector<double>> newD(numParamCons, std::vector<double>(varsTotal, 0));
 
-			// Update the linear constraints on the quadratics
+			// Update the linear constraints fixing certain variables TODO
 			int nextInd = 0;
 			for (int i=0; i<toProcess[0].size(); i++) {
 
-				// Given two points, find ax+by+c=0
-				std::vector<double> point1 = {toProcess[0][i].first, toProcess[0][i].first*toProcess[0][i].first};
-				std::vector<double> point2 = {toProcess[0][i].second, toProcess[0][i].second*toProcess[0][i].second};
-				std::vector<double> coeffs = getLineFromPoints(point1, point2);
+				// If this is zero, the variable is unconstrained
+				if (toProcess[0][i] == 0) {
+					newD[nextInd][firstMonomInds[i]] = 0;
+					newD[nextInd][oneIndex] = 0;
+					nextInd++;
 
-				// Add this as a linear pos con
-				newD[nextInd][oneIndex] = coeffs[0];
-				newD[nextInd][firstMonomInds[i]] = coeffs[1];
-				newD[nextInd][quadraticMonomInds[i][i]] = coeffs[2];
-				nextInd++;
+				// Otherwise it is constrained to the value
+				} else {
+					newD[nextInd][firstMonomInds[i]] = 1;
+					newD[nextInd][oneIndex] = -toProcess[0][i];
+					nextInd++;
+				}
 
+			}
+			for (int i=0; i<toProcess[0].size(); i++) {
+				for (int j=0; j<toProcess[0].size(); j++) {
+
+					// The square terms are one
+					if (i == j) {
+						newD[nextInd][quadraticMonomInds[i][j]] = 1;
+						newD[nextInd][oneIndex] = -1;
+						nextInd++;
+
+					// If either is zero, we can't fix a specific value
+					} else if (toProcess[0][i] == 0 && toProcess[0][j] == 0) {
+						newD[nextInd][quadraticMonomInds[i][j]] = 0;
+						newD[nextInd][oneIndex] = 0;
+						nextInd++;
+
+					// If both of the terms are fixed
+					} else if (toProcess[0][i] != 0 && toProcess[0][j] != 0) {
+						newD[nextInd][quadraticMonomInds[i][j]] = 1;
+						newD[nextInd][oneIndex] = -toProcess[0][i]*toProcess[0][j];
+						nextInd++;
+
+					// If one of the terms is fixed
+					} else if (toProcess[0][i] == 0 && toProcess[0][j] != 0) {
+						newD[nextInd][quadraticMonomInds[i][j]] = -1;
+						newD[nextInd][firstMonomInds[i]] = toProcess[0][j];
+						nextInd++;
+
+					// If one of the terms is fixed
+					} else if (toProcess[0][i] != 0 && toProcess[0][j] == 0) {
+						newD[nextInd][quadraticMonomInds[i][j]] = -1;
+						newD[nextInd][firstMonomInds[j]] = toProcess[0][i];
+						nextInd++;
+
+					}
+
+				}
 			}
 
 			// Solve the problem
@@ -3091,7 +3176,7 @@ public:
 			auto statSol = M->getPrimalSolutionStatus();
 
 			// If infeasible, good
-			if (statProb == mosek::fusion::ProblemStatus::PrimalInfeasible || statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown || M->dualObjValue() > 1e-7) {
+			if (statProb == mosek::fusion::ProblemStatus::PrimalInfeasible || statProb == mosek::fusion::ProblemStatus::DualInfeasible || statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown) {
 
 				// Keep track of how many were ill-posed
 				if (statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown) {
@@ -3129,14 +3214,21 @@ public:
 					solVec[i] = sol[i];
 				}
 
-				// Check the resulting vector for a good place to split 
+				// Output each monom along with it's solution value
+				if (verbosity >= 2) {
+					for (int i=0; i<monoms.size(); i++) {
+						std::cout << monoms[i] << ": " << solVec[i] << std::endl;
+					}
+				}
+
+				// Check the resulting vector for a good place to split
 				std::vector<double> errors(maxVariables);
 				for (int i=0; i<monoms.size(); i++) {
 					if (monoms[i].size() == 2*digitsPerInd) {
 						int ind1 = std::stoi(monoms[i].substr(0, digitsPerInd));
 						int ind2 = std::stoi(monoms[i].substr(digitsPerInd, digitsPerInd));
-						errors[ind1] += std::pow(solVec[i] - solVec[firstMonomInds[ind1]]*solVec[firstMonomInds[ind2]], 2);
-						errors[ind2] += std::pow(solVec[i] - solVec[firstMonomInds[ind1]]*solVec[firstMonomInds[ind2]], 2);
+						errors[ind1] += std::abs(solVec[i] - solVec[firstMonomInds[ind1]]*solVec[firstMonomInds[ind2]]);
+						errors[ind2] += std::abs(solVec[i] - solVec[firstMonomInds[ind1]]*solVec[firstMonomInds[ind2]]);
 					}
 				}
 
@@ -3148,6 +3240,11 @@ public:
 						biggestError = errors[i];
 						bestInd = i;
 					}
+				}
+
+				// Output the largest error
+				if (verbosity >= 2) {
+					std::cout << "    biggest error: " << biggestError << " at index " << bestInd << std::endl;
 				}
 
 				// If we've converged
@@ -3176,19 +3273,13 @@ public:
 				} else {
 
 					// Split it 
-					double minPoint = toProcess[0][bestInd].first;
-					double maxPoint = toProcess[0][bestInd].second;
-					double midPoint = (minPoint + maxPoint) / 2.0;
-					double mostFeasiblePoint = solVec[firstMonomInds[bestInd]];
-					double distanceBetween = mostFeasiblePoint - midPoint;
-					double splitPoint = mostFeasiblePoint;
 					if (verbosity >= 2) {
-						std::cout << "    splitting var " << bestInd << " at " << splitPoint << std::endl;
+						std::cout << "    splitting var " << bestInd << std::endl;
 					}
 					auto copyLeft = toProcess[0];
 					auto copyRight = toProcess[0];
-					copyLeft[bestInd].second = splitPoint;
-					copyRight[bestInd].first = splitPoint;
+					copyLeft[bestInd] = 1;
+					copyRight[bestInd] = -1;
 
 					// Add the new paths to the queue
 					toProcess.insert(toProcess.begin()+1, copyLeft);
