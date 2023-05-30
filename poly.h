@@ -2743,9 +2743,6 @@ public:
 		std::vector<std::string> monoms = getMonomials();
 		std::sort(monoms.begin(), monoms.end(), [](const std::string& first, const std::string& second){return first.size() < second.size();});
 
-		// List of semdefinite matrices
-		std::vector<std::vector<Polynomial<polyType>>> monomProducts;
-
 		// Get the order of the set of equations
 		int degree = getDegree();
 
@@ -2787,137 +2784,121 @@ public:
 			}
 		}
 
-		// Process the level string e.g. "1+2f,3p"
-		std::vector<int> levelsToInclude = {};
-		std::string currentThing = "";
-		for (int i=0; i<level.size(); i++) {
-
-			// For multiple levels e.g. 1+2
-			if (level[i] == '+') {
-				levelsToInclude.push_back(std::stoi(currentThing));
-				currentThing = "";
-
-			// p for a partial level
-			} else if (level[i] == 'p') {
-
-				// Add whatever numbers are left
-				levelsToInclude.push_back(std::stoi(currentThing));
-
-				// Get the list monomials that can appear on the top row
-				std::vector<std::string> possibleMonoms;
-				for (int j=0; j<levelsToInclude.size(); j++) {
-					addMonomsOfOrder(possibleMonoms, levelsToInclude[j]);
-				}
-
-				// Get all combinations of 3x3 moment matrices
-				for (int j=0; j<possibleMonoms.size(); j++) {
-					for (int k=j+1; k<possibleMonoms.size(); k++) {
-						monomProducts.push_back({Polynomial<polyType>(maxVariables, 1), Polynomial<polyType>(maxVariables, 1, possibleMonoms[j]), Polynomial<polyType>(maxVariables, 1, possibleMonoms[k])});
-					}
-				}
-
-				// Reset stuff
-				currentThing = "";
-				levelsToInclude = {};
-
-			// f for a full level
-			} else if (level[i] == 'f') {
-
-				// Add whatever numbers are left
-				levelsToInclude.push_back(std::stoi(currentThing));
-
-				// Get the list monomials that can appear on the top row
-				std::vector<std::string> possibleMonoms;
-				for (int j=0; j<levelsToInclude.size(); j++) {
-					addMonomsOfOrder(possibleMonoms, levelsToInclude[j]);
-				}
-
-				// Add these all to the top row of a moment matrix
-				std::vector<Polynomial<double>> toAdd;
-				toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
-				for (int j=0; j<possibleMonoms.size(); j++) {
-					toAdd.push_back(Polynomial<polyType>(maxVariables, 1, possibleMonoms[j]));
-				}
-				monomProducts.push_back(toAdd);
-
-				// Reset stuff
-				currentThing = "";
-				levelsToInclude = {};
-
-			// Otherwise add this (probably digit) to the string to process
-			} else if (level[i] != ',' && level[i] != ' ') {
-				currentThing += level[i];
-			}
-
-		}
-
 		// Start with the most general area
 		std::vector<std::vector<int>> toProcess;
 		std::vector<int> startingState(obj.maxVariables, 0);
 		toProcess.push_back(startingState);
 		double maxArea = std::pow(2, startingState.size());
 
-		// Verbose output
-		if (verbosity >= 2) {
-			std::cout << "extra PSD matrices: " << std::endl;
-			for (int i=0; i<monomProducts.size(); i++) {
-				std::cout << monomProducts[i] << std::endl;
+		// Since it's binary we have linear constraints rather than SDP
+		std::vector<std::string> toMaybeAdd;
+		if (level == "1f") {
+			addMonomsOfOrder(toMaybeAdd, 2);
+		} else if (level == "2f") {
+			addMonomsOfOrder(toMaybeAdd, 3);
+		} else if (level == "3f") {
+			addMonomsOfOrder(toMaybeAdd, 4);
+		}
+
+		// Don't use monoms with duplicates
+		std::vector<std::string> monomsToMakeMats;
+		for (int i=0; i<toMaybeAdd.size(); i++) {
+			bool valid = true;
+			for (int j=0; j<toMaybeAdd[i].size()-digitsPerInd; j+=digitsPerInd) {
+				if (toMaybeAdd[i].substr(j, digitsPerInd) == toMaybeAdd[i].substr(j+digitsPerInd, digitsPerInd)) {
+					valid = false;
+					break;
+				}
+			}
+			if (valid) {
+				monomsToMakeMats.push_back(toMaybeAdd[i]);
 			}
 		}
 
-		// Create the PSD matrices from this list
-		std::vector<std::shared_ptr<monty::ndarray<int,1>>> shouldBePSD;
-		std::vector<std::shared_ptr<monty::ndarray<double,1>>> shouldBePSDCoeffs;
-		std::vector<std::shared_ptr<monty::ndarray<double,1>>> identityAsSVec;
-		std::vector<double> idenCoeffs;
-		std::vector<double> monCoeffs;
-		std::vector<int> monLocs;
+		// Create a hash table of the monoms for better performance
 		std::unordered_map<std::string,int> monomsInverted;
 		for (int j=0; j<monoms.size(); j++) {
 			monomsInverted[monoms[j]] = j;
 		}
-		for (int j=0; j<monomProducts.size(); j++) {
 
-			// Get the list of all monomial locations for the PSD matrix
-			monLocs = {};
-			monCoeffs = {};
-			idenCoeffs = {};
-			for (int i=0; i<monomProducts[j].size(); i++) {
-				for (int k=i; k<monomProducts[j].size(); k++) {
+		// Create the linear cons from this list TODO
+		for (int j=0; j<monomsToMakeMats.size(); j++) {
 
-					// Calculate the product
-					std::string monString = (monomProducts[j][i]*monomProducts[j][k]).removeDuplicates().getMonomials()[0];
+			// For each combination of the components of this monom
+			std::vector<std::string> baseComponents;
+			for (int i=0; i<monomsToMakeMats[j].size(); i+=digitsPerInd) {
+				baseComponents.push_back(monomsToMakeMats[j].substr(i, digitsPerInd));
+			}
 
-					// Find this in the monomial list
-					auto loc = monomsInverted.find(monString);
-					if (loc != monomsInverted.end()) {
-						monLocs.push_back(monomsInverted[monString]);
-					} else {
-						monomsInverted[monString] = monoms.size();
-						monLocs.push_back(monoms.size());
-						monoms.push_back(monString);
+			// Now add the various combinations of these base components
+			std::vector<std::string> monomialsToAffect = baseComponents;
+			monomialsToAffect.insert(monomialsToAffect.begin(), "");
+			if (monomsToMakeMats[j].size() >= 2*digitsPerInd) {
+				for (int i1=0; i1<baseComponents.size(); i1++) {
+					for (int i2=i1+1; i2<baseComponents.size(); i2++) {
+						monomialsToAffect.push_back(baseComponents[i1] + baseComponents[i2]);
 					}
-
-					// The coeff for mosek's svec
-					if (i != k) {
-						monCoeffs.push_back(std::sqrt(2.0));
-						idenCoeffs.push_back(0.0);
-					} else {
-						monCoeffs.push_back(1.0);
-						idenCoeffs.push_back(1.0);
+				}
+			}
+			if (monomsToMakeMats[j].size() >= 3*digitsPerInd) {
+				for (int i1=0; i1<baseComponents.size(); i1++) {
+					for (int i2=i1+1; i2<baseComponents.size(); i2++) {
+						for (int i3=i2+1; i3<baseComponents.size(); i3++) {
+							monomialsToAffect.push_back(baseComponents[i1] + baseComponents[i2] + baseComponents[i3]);
+						}
 					}
-
+				}
+			}
+			if (monomsToMakeMats[j].size() >= 4*digitsPerInd) {
+				for (int i1=0; i1<baseComponents.size(); i1++) {
+					for (int i2=i1+1; i2<baseComponents.size(); i2++) {
+						for (int i3=i2+1; i3<baseComponents.size(); i3++) {
+							for (int i4=i3+1; i4<baseComponents.size(); i4++) {
+								monomialsToAffect.push_back(baseComponents[i1] + baseComponents[i2] + baseComponents[i3] + baseComponents[i4]);
+							}
+						}
+					}
 				}
 			}
 
-			// This (when reformatted) should be positive-semidefinite
-			shouldBePSD.push_back(monty::new_array_ptr<int>(monLocs));
-			shouldBePSDCoeffs.push_back(monty::new_array_ptr<double>(monCoeffs));
-			identityAsSVec.push_back(monty::new_array_ptr<double>(idenCoeffs));
+			// Make sure these are all present in the monoms list
+			for (int k=0; k<monomialsToAffect.size(); k++) {
+				if (monomsInverted.find(monomialsToAffect[k]) == monomsInverted.end()) {
+					monomsInverted[monomialsToAffect[k]] = monoms.size();
+					monoms.push_back(monomialsToAffect[k]);
+				}
+			}
 
-			// Clear some memory
-			monomProducts.erase(monomProducts.begin());
-			j--;
+			// Iterate over all of the base components
+			int numCombs = std::pow(2, baseComponents.size());
+			for (int k=0; k<numCombs; k++) {
+
+				// The base components should iterate over -1/+1
+				std::vector<int> coeffs(monomialsToAffect.size(), -1);
+				coeffs[0] = 1;
+				for (int i=0; i<baseComponents.size(); i++) {
+					if ((k >> i) & 1) {
+						coeffs[1+baseComponents.size()-i-1] = 1;
+					}
+				}
+
+				// Then everything else should be formed based on these
+				for (int i=1+baseComponents.size(); i<monomialsToAffect.size(); i++) {
+					coeffs[i] = 1;
+					for (int l=0; l<monomialsToAffect[i].size(); l+=digitsPerInd) {
+						int ind = std::stoi(monomialsToAffect[i].substr(l, digitsPerInd));
+						coeffs[i] *= coeffs[1+ind];
+					}
+				}
+
+				// Add this constraint, pre-linearized
+				Polynomial<polyType> newCon(monoms.size());
+				for (int i=0; i<monomialsToAffect.size(); i++) {
+					newCon.addTerm(coeffs[i], {monomsInverted[monomialsToAffect[i]]});
+				}
+				conPositiveLinear.push_back(newCon);
+
+			}
 
 		}
 
@@ -2981,9 +2962,6 @@ public:
 			}
 		}
 
-
-		// Since it's binary we have linear constraints rather than SDP TODO
-
 		// Convert the linear PSD constraints to MOSEK form
 		int upperTriangSize = (conPSDLinear.size()*(conPSDLinear.size()+1)) / 2;
 		std::vector<std::vector<int>> psdLocs(numMatsToSum, std::vector<int>(upperTriangSize, oneIndex));
@@ -3026,26 +3004,24 @@ public:
 		// Create the variable
 		mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(-1, 1));
 
-		// Use an extra variable to minimize violation of SD
-		//mosek::fusion::Variable::t lambda = M->variable();
-
 		// Parameterized equality constraints
-		int numParamCons = maxVariables + maxVariables*maxVariables;
-		std::vector<long> sparsity;
-		for (int i=0; i<maxVariables; i++) {
-			sparsity.push_back(i*varsTotal + firstMonomInds[i]);
-			sparsity.push_back(i*varsTotal + oneIndex);
-		}
+		//int numParamCons = maxVariables;
+		//int numParamCons = maxVariables + maxVariables*maxVariables;
+		//std::vector<long> sparsity;
+		//for (int i=0; i<maxVariables; i++) {
+			//sparsity.push_back(i*varsTotal + firstMonomInds[i]);
+			//sparsity.push_back(i*varsTotal + oneIndex);
+		//}
 		//for (int i=0; i<maxVariables; i++) {
 			//for (int j=0; j<maxVariables; j++) {
 				//sparsity.push_back(maxVariables*varsTotal + i*varsTotal + j + quadraticMonomInds[i][j]);
 				//sparsity.push_back(i*varsTotal + oneIndex);
 			//}
 		//}
-		std::sort(sparsity.begin(), sparsity.end());
+		//std::sort(sparsity.begin(), sparsity.end());
 		//mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
-		mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}));
-		M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::equalsTo(0.0));
+		//mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}));
+		//M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::equalsTo(0.0));
 
 		// The first element of the vector should be one
 		M->constraint(xM->index(oneIndex), mosek::fusion::Domain::equalsTo(1.0));
@@ -3056,16 +3032,7 @@ public:
 		// Linear positivity constraints
 		M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(0));
 
-		// Try to violate the SDP constraints the least
-		//M->objective(mosek::fusion::ObjectiveSense::Minimize, lambda);
-
-		// SDP constraints
-		for (int i=0; i<shouldBePSD.size(); i++) {
-			//M->constraint(mosek::fusion::Expr::add(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Expr::mul(lambda, identityAsSVec[i])), mosek::fusion::Domain::inSVecPSDCone());
-			M->constraint(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Domain::inSVecPSDCone());
-		}
-
-		// Original PSD cons
+		// Linear PSD constraints
 		if (conPSDLinear.size() > 0) {
 			mosek::fusion::Expression::t matSum = mosek::fusion::Expr::mulElm(psdCoeffsM[0], xM->pick(psdLocsM[0]));
 			for (int i=1; i<numMatsToSum; i++) {
@@ -3095,6 +3062,7 @@ public:
 		auto end = std::chrono::steady_clock::now();
 		double secondsPerIter = 0;
 		int numIllPosed = 0;
+		std::vector<monty::rc_ptr<mosek::fusion::Constraint>> fixingCons;
 		while (toProcess.size() > 0) {
 
 			// Debug output
@@ -3111,66 +3079,60 @@ public:
 			}
 
 			// The new parameterized constraint vector and objective
-			std::vector<std::vector<double>> newD(numParamCons, std::vector<double>(varsTotal, 0));
+			//std::vector<std::vector<double>> newD(numParamCons, std::vector<double>(varsTotal, 0));
 
 			// Update the linear constraints fixing certain variables TODO
 			int nextInd = 0;
-			for (int i=0; i<toProcess[0].size(); i++) {
-
-				// If this is zero, the variable is unconstrained
-				if (toProcess[0][i] == 0) {
-					newD[nextInd][firstMonomInds[i]] = 0;
-					newD[nextInd][oneIndex] = 0;
-					nextInd++;
-
-				// Otherwise it is constrained to the value
-				} else {
-					newD[nextInd][firstMonomInds[i]] = 1;
-					newD[nextInd][oneIndex] = -toProcess[0][i];
-					nextInd++;
-				}
-
+			for (int i=0; i<fixingCons.size(); i++) {
+				fixingCons[i]->remove();
 			}
-			for (int i=0; i<toProcess[0].size(); i++) {
-				for (int j=0; j<toProcess[0].size(); j++) {
+			fixingCons = {};
+			//for (int i=0; i<toProcess[0].size(); i++) {
+				//if (toProcess[0][i] != 0) {
+					//fixingCons.push_back(M->constraint(xM->index(firstMonomInds[i]), mosek::fusion::Domain::equalsTo(toProcess[0][i])));
+				//}
+			//}
 
-					// The square terms are one
-					if (i == j) {
-						newD[nextInd][quadraticMonomInds[i][j]] = 1;
-						newD[nextInd][oneIndex] = -1;
-						nextInd++;
+			//for (int i=0; i<toProcess[0].size(); i++) {
+				//for (int j=0; j<toProcess[0].size(); j++) {
 
-					// If either is zero, we can't fix a specific value
-					} else if (toProcess[0][i] == 0 && toProcess[0][j] == 0) {
-						newD[nextInd][quadraticMonomInds[i][j]] = 0;
-						newD[nextInd][oneIndex] = 0;
-						nextInd++;
+					//// The square terms are one
+					//if (i == j) {
+						//newD[nextInd][quadraticMonomInds[i][j]] = 1;
+						//newD[nextInd][oneIndex] = -1;
+						//nextInd++;
 
-					// If both of the terms are fixed
-					} else if (toProcess[0][i] != 0 && toProcess[0][j] != 0) {
-						newD[nextInd][quadraticMonomInds[i][j]] = 1;
-						newD[nextInd][oneIndex] = -toProcess[0][i]*toProcess[0][j];
-						nextInd++;
+					//// If either is zero, we can't fix a specific value
+					//} else if (toProcess[0][i] == 0 && toProcess[0][j] == 0) {
+						//newD[nextInd][quadraticMonomInds[i][j]] = 0;
+						//newD[nextInd][oneIndex] = 0;
+						//nextInd++;
 
-					// If one of the terms is fixed
-					} else if (toProcess[0][i] == 0 && toProcess[0][j] != 0) {
-						newD[nextInd][quadraticMonomInds[i][j]] = -1;
-						newD[nextInd][firstMonomInds[i]] = toProcess[0][j];
-						nextInd++;
+					//// If both of the terms are fixed
+					//} else if (toProcess[0][i] != 0 && toProcess[0][j] != 0) {
+						//newD[nextInd][quadraticMonomInds[i][j]] = 1;
+						//newD[nextInd][oneIndex] = -toProcess[0][i]*toProcess[0][j];
+						//nextInd++;
 
-					// If one of the terms is fixed
-					} else if (toProcess[0][i] != 0 && toProcess[0][j] == 0) {
-						newD[nextInd][quadraticMonomInds[i][j]] = -1;
-						newD[nextInd][firstMonomInds[j]] = toProcess[0][i];
-						nextInd++;
+					//// If one of the terms is fixed
+					//} else if (toProcess[0][i] == 0 && toProcess[0][j] != 0) {
+						//newD[nextInd][quadraticMonomInds[i][j]] = -1;
+						//newD[nextInd][firstMonomInds[i]] = toProcess[0][j];
+						//nextInd++;
 
-					}
+					//// If one of the terms is fixed
+					//} else if (toProcess[0][i] != 0 && toProcess[0][j] == 0) {
+						//newD[nextInd][quadraticMonomInds[i][j]] = -1;
+						//newD[nextInd][firstMonomInds[j]] = toProcess[0][i];
+						//nextInd++;
 
-				}
-			}
+					//}
+
+				//}
+			//}
 
 			// Solve the problem
-			DM->setValue(monty::new_array_ptr<double>(newD));
+			//DM->setValue(monty::new_array_ptr<double>(newD));
 			M->solve();
 			auto statProb = M->getProblemStatus();
 			auto statSol = M->getPrimalSolutionStatus();
@@ -3181,6 +3143,8 @@ public:
 				// Keep track of how many were ill-posed
 				if (statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown) {
 					numIllPosed++;
+					std::cout << "stopped due to ill-posed problem" << std::endl;
+					return;
 				}
 
 				// Write to a file if told to
@@ -3236,7 +3200,7 @@ public:
 				double biggestError = -10000;
 				int bestInd = -1;
 				for (int i=0; i<maxVariables; i++) {
-					if (errors[i] > biggestError) {
+					if (errors[i] > biggestError && toProcess[0][i] == 0) {
 						biggestError = errors[i];
 						bestInd = i;
 					}
@@ -3687,12 +3651,12 @@ public:
 		// Try to violate the SDP constraints the least
 		M->objective(mosek::fusion::ObjectiveSense::Minimize, lambda);
 
-		// SDP constraints
+		// Moment matrix constraints
 		for (int i=0; i<shouldBePSD.size(); i++) {
 			M->constraint(mosek::fusion::Expr::add(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Expr::mul(lambda, identityAsSVec[i])), mosek::fusion::Domain::inSVecPSDCone());
 		}
 
-		// Original PSD cons
+		// Linear PSD constraints
 		if (conPSDLinear.size() > 0) {
 			mosek::fusion::Expression::t matSum = mosek::fusion::Expr::mulElm(psdCoeffsM[0], xM->pick(psdLocsM[0]));
 			for (int i=1; i<numMatsToSum; i++) {
