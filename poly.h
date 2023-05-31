@@ -2793,7 +2793,15 @@ public:
 		// Since it's binary we have linear constraints rather than SDP
 		std::vector<std::string> toMaybeAdd;
 		if (level == "1f") {
-			addMonomsOfOrder(toMaybeAdd, 2);
+			//addMonomsOfOrder(toMaybeAdd, 2);
+
+			// Go through the monom list and add all monoms with size 2 
+			for (int i=0; i<monoms.size(); i++) {
+				if (monoms[i].size() == 2*digitsPerInd) {
+					toMaybeAdd.push_back(monoms[i]);
+				}
+			}	
+
 		} else if (level == "2f") {
 			addMonomsOfOrder(toMaybeAdd, 3);
 		} else if (level == "3f") {
@@ -2821,7 +2829,10 @@ public:
 			monomsInverted[monoms[j]] = j;
 		}
 
-		// Create the linear cons from this list TODO
+		// TODO ./mub -m 5 -d 3 -N 3,1,1,1,1 -B 5 -v 1 -l 0
+		// try to speed up with higher levels or something
+
+		// Create the linear cons from this list
 		for (int j=0; j<monomsToMakeMats.size(); j++) {
 
 			// For each combination of the components of this monom
@@ -2886,8 +2897,9 @@ public:
 				for (int i=1+baseComponents.size(); i<monomialsToAffect.size(); i++) {
 					coeffs[i] = 1;
 					for (int l=0; l<monomialsToAffect[i].size(); l+=digitsPerInd) {
-						int ind = std::stoi(monomialsToAffect[i].substr(l, digitsPerInd));
-						coeffs[i] *= coeffs[1+ind];
+						std::string indString = monomialsToAffect[i].substr(l, digitsPerInd);
+						int loc = std::find(monomialsToAffect.begin(), monomialsToAffect.end(), indString) - monomialsToAffect.begin();
+						coeffs[i] *= coeffs[loc];
 					}
 				}
 
@@ -2898,19 +2910,26 @@ public:
 				}
 				conPositiveLinear.push_back(newCon);
 
+				//Output this new constraint, but in the original monom form TODO
+				//std::cout << "Constraint " << conPositiveLinear.size() << ": ";
+				//for (int i=0; i<monomialsToAffect.size(); i++) {
+					//std::cout << coeffs[i] << "*" << monomialsToAffect[i] << " + ";
+				//}
+				//std::cout << " >= 0" << std::endl;
+
 			}
 
 		}
 
 		// Get the inds of the first order monomials and their squares
 		std::vector<int> firstMonomInds(startingState.size(), -1);
-		std::vector<std::vector<int>> quadraticMonomInds(startingState.size(), std::vector<int>(startingState.size(), 1));
+		std::vector<std::vector<int>> quadraticMonomInds(startingState.size(), std::vector<int>(startingState.size(), -1));
 		for (int i=0; i<monoms.size(); i++) {
 			if (monoms[i].size() == digitsPerInd) {
 				firstMonomInds[std::stoi(monoms[i])] = i;
 			} else if (monoms[i].size() == 2*digitsPerInd) {
-				int ind1 = std::stoi(monoms[i].substr(0,digitsPerInd));
-				int ind2 = std::stoi(monoms[i].substr(digitsPerInd,digitsPerInd));
+				int ind1 = std::stoi(monoms[i].substr(0, digitsPerInd));
+				int ind2 = std::stoi(monoms[i].substr(digitsPerInd, digitsPerInd));
 				quadraticMonomInds[ind1][ind2] = i;
 				quadraticMonomInds[ind2][ind1] = i;
 			}
@@ -3004,6 +3023,11 @@ public:
 		// Create the variable
 		mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(-1, 1));
 
+		// If asking for everything
+		if (verbosity >= 3) {
+			M->setLogHandler([=](const std::string & msg) { std::cout << msg << std::flush; } );
+		}
+
 		// Parameterized equality constraints
 		//int numParamCons = maxVariables;
 		//int numParamCons = maxVariables + maxVariables*maxVariables;
@@ -3030,7 +3054,10 @@ public:
 		M->constraint(mosek::fusion::Expr::mul(AM, xM), mosek::fusion::Domain::equalsTo(0.0));
 
 		// Linear positivity constraints
-		M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(0));
+		M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(0.0));
+
+		// Seems to help TODO
+		M->objective(mosek::fusion::ObjectiveSense::Maximize, mosek::fusion::Expr::sum(xM));
 
 		// Linear PSD constraints
 		if (conPSDLinear.size() > 0) {
@@ -3081,17 +3108,48 @@ public:
 			// The new parameterized constraint vector and objective
 			//std::vector<std::vector<double>> newD(numParamCons, std::vector<double>(varsTotal, 0));
 
-			// Update the linear constraints fixing certain variables TODO
+			// Update the linear constraints fixing certain variables
 			int nextInd = 0;
 			for (int i=0; i<fixingCons.size(); i++) {
 				fixingCons[i]->remove();
 			}
 			fixingCons = {};
-			//for (int i=0; i<toProcess[0].size(); i++) {
-				//if (toProcess[0][i] != 0) {
-					//fixingCons.push_back(M->constraint(xM->index(firstMonomInds[i]), mosek::fusion::Domain::equalsTo(toProcess[0][i])));
-				//}
-			//}
+			for (int i=0; i<toProcess[0].size(); i++) {
+				if (toProcess[0][i] != 0) {
+					fixingCons.push_back(M->constraint(xM->index(firstMonomInds[i]), mosek::fusion::Domain::equalsTo(toProcess[0][i])));
+				}
+			}
+			for (int i=0; i<toProcess[0].size(); i++) {
+				for (int j=i; j<toProcess[0].size(); j++) {
+
+					// Only constrain terms we actually reference
+					if (quadraticMonomInds[i][j] < 0) {
+						continue;
+					}
+
+					// The square terms are one
+					if (i == j) {
+						fixingCons.push_back(M->constraint(xM->index(quadraticMonomInds[i][j]), mosek::fusion::Domain::equalsTo(1.0)));
+
+					// If fixing one variable, then the quadratic is equal to the non-fixed variable
+					} else if (toProcess[0][i] == 1 && toProcess[0][j] == 0) {
+						fixingCons.push_back(M->constraint(mosek::fusion::Expr::sub(xM->index(quadraticMonomInds[i][j]), xM->index(firstMonomInds[j])), mosek::fusion::Domain::equalsTo(0.0)));
+					} else if (toProcess[0][i] == -1 && toProcess[0][j] == 0) {
+						fixingCons.push_back(M->constraint(mosek::fusion::Expr::add(xM->index(quadraticMonomInds[i][j]), xM->index(firstMonomInds[j])), mosek::fusion::Domain::equalsTo(0.0)));
+
+					// If fixing one variable, then the quadratic is equal to the non-fixed variable
+					} else if (toProcess[0][i] == 0 && toProcess[0][j] == 1) {
+						fixingCons.push_back(M->constraint(mosek::fusion::Expr::sub(xM->index(quadraticMonomInds[i][j]), xM->index(firstMonomInds[i])), mosek::fusion::Domain::equalsTo(0.0)));
+					} else if (toProcess[0][i] == 0 && toProcess[0][j] == -1) {
+						fixingCons.push_back(M->constraint(mosek::fusion::Expr::add(xM->index(quadraticMonomInds[i][j]), xM->index(firstMonomInds[i])), mosek::fusion::Domain::equalsTo(0.0)));
+
+					// If fixing both variables, then the quadratic is equal to the product
+					} else if (toProcess[0][i] != 0 && toProcess[0][j] != 0) {
+						fixingCons.push_back(M->constraint(xM->index(quadraticMonomInds[i][j]), mosek::fusion::Domain::equalsTo(toProcess[0][i]*toProcess[0][j])));
+					}
+
+				}
+			}
 
 			//for (int i=0; i<toProcess[0].size(); i++) {
 				//for (int j=0; j<toProcess[0].size(); j++) {
@@ -3138,14 +3196,7 @@ public:
 			auto statSol = M->getPrimalSolutionStatus();
 
 			// If infeasible, good
-			if (statProb == mosek::fusion::ProblemStatus::PrimalInfeasible || statProb == mosek::fusion::ProblemStatus::DualInfeasible || statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown) {
-
-				// Keep track of how many were ill-posed
-				if (statSol == mosek::fusion::SolutionStatus::Undefined || statSol == mosek::fusion::SolutionStatus::Unknown) {
-					numIllPosed++;
-					std::cout << "stopped due to ill-posed problem" << std::endl;
-					return;
-				}
+			if (statProb == mosek::fusion::ProblemStatus::PrimalInfeasible) {
 
 				// Write to a file if told to
 				if (logFileName.size() > 0 && statSol != mosek::fusion::SolutionStatus::Undefined && statSol != mosek::fusion::SolutionStatus::Unknown && statProb != mosek::fusion::ProblemStatus::PrimalInfeasible) {
@@ -3198,11 +3249,15 @@ public:
 
 				// Find the biggest error
 				double biggestError = -10000;
+				double smallestError = 10000;
 				int bestInd = -1;
 				for (int i=0; i<maxVariables; i++) {
 					if (errors[i] > biggestError && toProcess[0][i] == 0) {
 						biggestError = errors[i];
 						bestInd = i;
+					}
+					if (errors[i] < smallestError && toProcess[0][i] == 0) {
+						smallestError = errors[i];
 					}
 				}
 
