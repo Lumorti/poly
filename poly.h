@@ -2793,15 +2793,7 @@ public:
 		// Since it's binary we have linear constraints rather than SDP
 		std::vector<std::string> toMaybeAdd;
 		if (level == "1f") {
-			//addMonomsOfOrder(toMaybeAdd, 2);
-
-			// Go through the monom list and add all monoms with size 2 
-			for (int i=0; i<monoms.size(); i++) {
-				if (monoms[i].size() == 2*digitsPerInd) {
-					toMaybeAdd.push_back(monoms[i]);
-				}
-			}	
-
+			addMonomsOfOrder(toMaybeAdd, 2);
 		} else if (level == "2f") {
 			addMonomsOfOrder(toMaybeAdd, 3);
 		} else if (level == "3f") {
@@ -2829,7 +2821,9 @@ public:
 			monomsInverted[monoms[j]] = j;
 		}
 
-		// TODO ./mub -m 5 -d 3 -N 3,1,1,1,1 -B 5 -v 1 -l 0
+		// TODO 
+		// ./mub -m 5 -d 2 -N 2,1,1,1 -B 4 -v 1 -l 0
+		// ./mub -m 5 -d 3 -N 3,1,1,1,1 -B 5 -v 1 -l 0
 		// try to speed up with higher levels or something
 
 		// Create the linear cons from this list
@@ -2909,13 +2903,6 @@ public:
 					newCon.addTerm(coeffs[i], {monomsInverted[monomialsToAffect[i]]});
 				}
 				conPositiveLinear.push_back(newCon);
-
-				//Output this new constraint, but in the original monom form TODO
-				//std::cout << "Constraint " << conPositiveLinear.size() << ": ";
-				//for (int i=0; i<monomialsToAffect.size(); i++) {
-					//std::cout << coeffs[i] << "*" << monomialsToAffect[i] << " + ";
-				//}
-				//std::cout << " >= 0" << std::endl;
 
 			}
 
@@ -3028,25 +3015,6 @@ public:
 			M->setLogHandler([=](const std::string & msg) { std::cout << msg << std::flush; } );
 		}
 
-		// Parameterized equality constraints
-		//int numParamCons = maxVariables;
-		//int numParamCons = maxVariables + maxVariables*maxVariables;
-		//std::vector<long> sparsity;
-		//for (int i=0; i<maxVariables; i++) {
-			//sparsity.push_back(i*varsTotal + firstMonomInds[i]);
-			//sparsity.push_back(i*varsTotal + oneIndex);
-		//}
-		//for (int i=0; i<maxVariables; i++) {
-			//for (int j=0; j<maxVariables; j++) {
-				//sparsity.push_back(maxVariables*varsTotal + i*varsTotal + j + quadraticMonomInds[i][j]);
-				//sparsity.push_back(i*varsTotal + oneIndex);
-			//}
-		//}
-		//std::sort(sparsity.begin(), sparsity.end());
-		//mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
-		//mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamCons, varsTotal}));
-		//M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::equalsTo(0.0));
-
 		// The first element of the vector should be one
 		M->constraint(xM->index(oneIndex), mosek::fusion::Domain::equalsTo(1.0));
 
@@ -3056,7 +3024,7 @@ public:
 		// Linear positivity constraints
 		M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(0.0));
 
-		// Seems to help TODO
+		// Seems to help
 		M->objective(mosek::fusion::ObjectiveSense::Maximize, mosek::fusion::Expr::sum(xM));
 
 		// Linear PSD constraints
@@ -3151,46 +3119,9 @@ public:
 				}
 			}
 
-			//for (int i=0; i<toProcess[0].size(); i++) {
-				//for (int j=0; j<toProcess[0].size(); j++) {
-
-					//// The square terms are one
-					//if (i == j) {
-						//newD[nextInd][quadraticMonomInds[i][j]] = 1;
-						//newD[nextInd][oneIndex] = -1;
-						//nextInd++;
-
-					//// If either is zero, we can't fix a specific value
-					//} else if (toProcess[0][i] == 0 && toProcess[0][j] == 0) {
-						//newD[nextInd][quadraticMonomInds[i][j]] = 0;
-						//newD[nextInd][oneIndex] = 0;
-						//nextInd++;
-
-					//// If both of the terms are fixed
-					//} else if (toProcess[0][i] != 0 && toProcess[0][j] != 0) {
-						//newD[nextInd][quadraticMonomInds[i][j]] = 1;
-						//newD[nextInd][oneIndex] = -toProcess[0][i]*toProcess[0][j];
-						//nextInd++;
-
-					//// If one of the terms is fixed
-					//} else if (toProcess[0][i] == 0 && toProcess[0][j] != 0) {
-						//newD[nextInd][quadraticMonomInds[i][j]] = -1;
-						//newD[nextInd][firstMonomInds[i]] = toProcess[0][j];
-						//nextInd++;
-
-					//// If one of the terms is fixed
-					//} else if (toProcess[0][i] != 0 && toProcess[0][j] == 0) {
-						//newD[nextInd][quadraticMonomInds[i][j]] = -1;
-						//newD[nextInd][firstMonomInds[j]] = toProcess[0][i];
-						//nextInd++;
-
-					//}
-
-				//}
-			//}
+			// TODO constrain higher order moments
 
 			// Solve the problem
-			//DM->setValue(monty::new_array_ptr<double>(newD));
 			M->solve();
 			auto statProb = M->getProblemStatus();
 			auto statSol = M->getPrimalSolutionStatus();
@@ -3260,6 +3191,8 @@ public:
 						smallestError = errors[i];
 					}
 				}
+
+				// TODO maybe eval all cons and see which has the worst?
 
 				// Output the largest error
 				if (verbosity >= 2) {
