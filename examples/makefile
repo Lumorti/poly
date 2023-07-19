@@ -8,22 +8,13 @@ LIBSMOSEK= -I${MSKHOME}/h -L${MSKHOME}/bin -Wl,-rpath-link,${MSKHOME}/bin -Wl,-r
 LIBSOPTIM= -I${OPTIMHOME}/include/ -L${OPTIMHOME} -loptim
 LIBS=$(LIBSEIGEN) $(LIBSOPTIM) $(LIBSMOSEK) $(LIBSSCS) $(LIBSOMP)
 
-all: mub simple matrices sos ising
+all: mub simple sos ising
 
 mubdebug:
 	$(CXX) $(DEBUGFLAGS) -o mub mub.cpp $(LIBS) 
 
 mub:
 	$(CXX) $(CXXFLAGS) -o mub mub.cpp $(LIBS) 
-
-mubComplex:
-	$(CXX) $(CXXFLAGS) -o mubComplex mubComplex.cpp $(LIBS) 
-
-testing:
-	$(CXX) $(CXXFLAGS) -o testing testing.cpp $(LIBS) 
-
-testingdebug:
-	$(CXX) $(DEBUGFLAGS) -o testing testing.cpp $(LIBS) 
 
 simple:
 	$(CXX) $(CXXFLAGS) -o simple simple.cpp $(LIBS) 

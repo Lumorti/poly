@@ -32,7 +32,7 @@ int main(int argc, char ** argv) {
 			std::cout << "             0 = try to find a feasible point" << std::endl;
 			std::cout << "             1 = try to prove infeasiblity" << std::endl;
 			std::cout << "             2 = perform a redundancy analysis" << std::endl;
-			std::cout << "             3 = testing binarization" << std::endl;
+			std::cout << "             3/4/5 = testing binarization" << std::endl;
 			std::cout << " -N [str]    set the basis sizes e.g. 2,1,1,1" << std::endl;
 			std::cout << " -l [str]    set the level for the relaxation e.g. 1+2f,3p" << std::endl;
 			std::cout << " -i [int]    set max iterations (-1 for no limit)" << std::endl;
