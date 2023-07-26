@@ -2503,6 +2503,20 @@ public:
 			zeroInd = poly.maxVariables-1;
 		}
 
+		// If verbose, print the polynomial
+		if (verbosity >= 2) {
+			std::cout << "---------------------" << std::endl;
+			std::cout << "As single polynomial:" << std::endl;
+			std::cout << "---------------------" << std::endl;
+			std::cout << std::endl;
+			std::cout << poly << " = 0" << std::endl;
+			std::cout << std::endl;
+			std::cout << "---------------------" << std::endl;
+			std::cout << "Optimization:" << std::endl;
+			std::cout << "---------------------" << std::endl;
+			std::cout << std::endl;
+		}
+
 		// Find a root of this polynomial
 		return poly.findRoot(zeroInd, alpha, tolerance, maxIters, threads, verbosity, maxMag, stabilityTerm, startX);
 		

@@ -19,6 +19,7 @@ int main(int argc, char ** argv) {
 	bool firstIsComputational = true;
 	bool secondIsUniform = true;
 	bool firstElementIsOne = true;
+	bool noNorm = false;
 	std::string givenSizes = "";
 	std::string solver = "mosek";
 	std::string level = "1f";
@@ -48,6 +49,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -1          don't assume the first basis is the computational" << std::endl;
 			std::cout << " -2          don't assume the first vector of the second basis is uniform" << std::endl;
 			std::cout << " -3          don't assume the first element of each is one" << std::endl;
+			std::cout << " -4          remove the normalisation conditions" << std::endl;
 			std::cout << " -s          use SCS as the SDP solver insead of Mosek" << std::endl;
 			std::cout << " -0          debug flag" << std::endl;
 			return 0;
@@ -103,6 +105,8 @@ int main(int argc, char ** argv) {
 			secondIsUniform = false;
 		} else if (arg == "-3") {
 			firstElementIsOne = false;
+		} else if (arg == "-4") {
+			noNorm = true;
 		} else if (arg == "-0") {
 			debugFlag = true;
 		}
@@ -238,6 +242,11 @@ int main(int argc, char ** argv) {
 			for (int j=i; j<n; j++) {
 				for (int l=0; l<basisSizes[j]; l++) {
 
+					// If told to ignore normalization conditions
+					if (noNorm && i == j && k == l) {
+						continue;
+					}
+
 					// Prevent repeat equations
 					if (i == j && l <= k) {
 						continue;
@@ -271,11 +280,13 @@ int main(int argc, char ** argv) {
 						eqn.addTerm(-1i, {newVarInd+1});
 
 						// Constrain that this new complex should have mag 1/sqrt(d)
-						Polynomial<double> extraEqn(numVars);
-						extraEqn.addTerm(1, {newVarInd,newVarInd});
-						extraEqn.addTerm(1, {newVarInd+1,newVarInd+1});
-						extraEqn.addTerm(-1.0/d, {});
-						eqns.push_back(extraEqn);
+						if (!noNorm) {
+							Polynomial<double> extraEqn(numVars);
+							extraEqn.addTerm(1, {newVarInd,newVarInd});
+							extraEqn.addTerm(1, {newVarInd+1,newVarInd+1});
+							extraEqn.addTerm(-1.0/d, {});
+							eqns.push_back(extraEqn);
+						}
 						newVarInd += 2;
 
 					}
@@ -296,7 +307,7 @@ int main(int argc, char ** argv) {
 			}
 
 			// All should have mag 1/sqrt(d) (since we're setting first basis to the comp)
-			if (firstIsComputational) {
+			if (firstIsComputational && !noNorm) {
 				int startInd = 0;
 				if (firstElementIsOne) {
 					startInd = 1;
@@ -313,7 +324,7 @@ int main(int argc, char ** argv) {
 			}
 
 			// If we don't have implict normalization, need to add
-			if (!firstIsComputational || basisSizes[0] < d) {
+			if ((!firstIsComputational || basisSizes[0] < d) && !noNorm) {
 				Polynomial<std::complex<double>> extraEqn(numVars);
 				int startInd = 0;
 				if (firstElementIsOne) {
@@ -468,6 +479,7 @@ int main(int argc, char ** argv) {
 		std::cout << "---------------------" << std::endl;
 		std::cout << "Original Problem: " << std::endl;
 		std::cout << "---------------------" << std::endl;
+		std::cout << std::endl;
 		std::cout << prob << std::endl;
 	}
 	prob = prob.replaceWithVariable(reducedMap);
@@ -475,10 +487,12 @@ int main(int argc, char ** argv) {
 		std::cout << "---------------------" << std::endl;
 		std::cout << "Reduced Problem: " << std::endl;
 		std::cout << "---------------------" << std::endl;
+		std::cout << std::endl;
 		std::cout << prob << std::endl;
 		std::cout << "---------------------" << std::endl;
 		std::cout << "Summary:" << std::endl;
 		std::cout << "---------------------" << std::endl;
+		std::cout << std::endl;
 	}
 	int numVectors = 0;
 	for (int i=0; i<n; i++) {
@@ -491,12 +505,9 @@ int main(int argc, char ** argv) {
 	// If told to find a feasible point
 	if (task == 0) {
 
-		// Heading if verbose
+		// Spacing if verbose
 		if (verbosity >= 2) {
 			std::cout << std::endl;
-			std::cout << "---------------------" << std::endl;
-			std::cout << "Optimization:" << std::endl;
-			std::cout << "---------------------" << std::endl;
 		}
 
 		// Find a feasible point of the equality constraints
