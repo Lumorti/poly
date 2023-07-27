@@ -1530,6 +1530,100 @@ public:
 
 	}
 
+	// Output, transforming into a trig poly of a single variable TODO
+	// (Requires that each pair of variables has a fixed magnitude)
+	std::string asMonovariableTrig(std::vector<std::tuple<int,int,double>> norms) {
+
+		// The mapping to transform the vars to trig functions
+		std::unordered_map<std::string, std::string> varToTrig;
+		std::unordered_map<std::string, double> varMags;
+		for (int i=0; i<norms.size(); i++) {
+
+			// One variable will become sin
+			std::string padded1 = std::to_string(std::get<0>(norms[i]));
+			padded1.insert(0, digitsPerInd-padded1.size(), ' ');
+			if (i == 0) {
+				varToTrig[padded1] = "sin(x)";
+			} else if (i == 1) {
+				varToTrig[padded1] = "sin(x*w)";
+			} else {
+				varToTrig[padded1] = "sin(x*w**"+std::to_string(i)+")";
+			}
+			varMags[padded1] = std::sqrt(std::get<2>(norms[i]));
+
+			// The other will become cos
+			std::string padded2 = std::to_string(std::get<1>(norms[i]));
+			padded2.insert(0, digitsPerInd-padded2.size(), ' ');
+			if (i == 0) {
+				varToTrig[padded2] = "cos(x)";
+			} else if (i == 1) {
+				varToTrig[padded2] = "cos(x*w)";
+			} else {
+				varToTrig[padded2] = "cos(x*w**"+std::to_string(i)+")";
+			}
+			varMags[padded2] = std::sqrt(std::get<2>(norms[i]));
+
+		}
+
+		// For each term
+		std::stringstream toReturn;
+		toReturn << std::setprecision(16);
+		int numSoFar = 0;
+		for (auto const &pair: coeffs) {
+
+			std::string vars = "";
+			double coeff = pair.second;
+
+			// Loop through each variable
+			for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
+
+				// Get the variable
+				std::string var = pair.first.substr(i, digitsPerInd);
+
+				// If it's not the constant
+				if (var != "") {
+
+					// Get the trig function
+					std::string trig = varToTrig[var];
+
+					// Get the magnitude
+					double mag = varMags[var];
+
+					// Update everything
+					vars += trig;
+					if (i < pair.first.size()-digitsPerInd) {
+						vars += "*";
+					}
+					coeff *= mag;
+
+				}
+
+			}
+
+			// Only output if the coeff is non-zero
+			numSoFar += 1;
+			if (std::abs(coeff) > 1e-13) {
+
+				// The coeff and the indices
+				if (vars.size() == 0) {
+					toReturn << coeff;
+				} else {
+					toReturn << coeff << "*" << vars;
+				}
+
+				// Output an addition on everything but the last
+				if (numSoFar < coeffs.size()) {
+					toReturn << " + ";
+				}
+
+			}
+
+		}
+
+		return toReturn.str();
+
+	}
+
 	// When doing std::cout << Polynomial
 	friend std::ostream &operator<<(std::ostream &output, const Polynomial &other) {
 		output << other.asString();

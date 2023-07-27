@@ -34,6 +34,7 @@ int main(int argc, char ** argv) {
 			std::cout << "             1 = try to prove infeasiblity" << std::endl;
 			std::cout << "             2 = perform a redundancy analysis" << std::endl;
 			std::cout << "             3/4/5 = testing binarization" << std::endl;
+			std::cout << "             6 = trig poly test" << std::endl;
 			std::cout << " -N [str]    set the basis sizes e.g. 2,1,1,1" << std::endl;
 			std::cout << " -l [str]    set the level for the relaxation e.g. 1+2f,3p" << std::endl;
 			std::cout << " -i [int]    set max iterations (-1 for no limit)" << std::endl;
@@ -49,7 +50,6 @@ int main(int argc, char ** argv) {
 			std::cout << " -1          don't assume the first basis is the computational" << std::endl;
 			std::cout << " -2          don't assume the first vector of the second basis is uniform" << std::endl;
 			std::cout << " -3          don't assume the first element of each is one" << std::endl;
-			std::cout << " -4          remove the normalisation conditions" << std::endl;
 			std::cout << " -s          use SCS as the SDP solver insead of Mosek" << std::endl;
 			std::cout << " -0          debug flag" << std::endl;
 			return 0;
@@ -578,6 +578,62 @@ int main(int argc, char ** argv) {
 			std::cout << gramMat << std::endl;
 
 		}
+
+	// If told to find the trig poly TODO
+	} else if (task == 6) {
+
+		// Spacing if verbose
+		if (verbosity >= 2) {
+			std::cout << std::endl;
+		}
+
+		// Loop through the constraints and remove all the norms
+		std::vector<std::tuple<int,int,double>> norms;
+		for (int i=0; i<prob.conZero.size(); i++) {
+
+			// If the constraint is a norm
+			if (prob.conZero[i].size() == 3) {
+
+				// Loop through the coefficients and find the two indices
+				int ind1 = -1;
+				int ind2 = -1;
+				double val = 0;
+				for (auto const &pair: prob.conZero[i].coeffs) {
+					if (pair.first != "") {
+						if (pair.first.substr(0, prob.conZero[i].digitsPerInd) != pair.first.substr(prob.conZero[i].digitsPerInd, prob.conZero[i].digitsPerInd)) {
+							break;
+						}
+						if (ind1 == -1) {
+							ind1 = std::stoi(pair.first.substr(0, prob.conZero[i].digitsPerInd));
+						} else {
+							ind2 = std::stoi(pair.first.substr(0, prob.conZero[i].digitsPerInd));
+						}
+					} else {
+						val = -pair.second;
+					}
+				}
+
+				// Add to the norm list
+				if (ind1 != -1 && ind2 != -1) {
+					norms.push_back(std::make_tuple(ind1, ind2, val));
+					prob.conZero.erase(prob.conZero.begin()+i);
+					i--;
+				}
+
+			}
+		}
+
+		// Square and sum all of the remaining constraints
+		Polynomial<double> poly(prob.maxVariables);
+		for (int i=0; i<prob.conZero.size(); i++) {
+			poly += prob.conZero[i]*prob.conZero[i];
+		}
+
+		// Output this polynomial
+		std::cout << std::endl;
+		std::cout << poly << std::endl;
+		std::cout << std::endl;
+		std::cout << poly.asMonovariableTrig(norms) << std::endl;
 
 	// If told to identify redundant constraints
 	} else if (task == 2) {
