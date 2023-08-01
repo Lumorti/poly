@@ -20,6 +20,7 @@ int main(int argc, char ** argv) {
 	bool secondIsUniform = true;
 	bool firstElementIsOne = true;
 	bool noNorm = false;
+	double addConstant = 0.0;
 	std::string givenSizes = "";
 	std::string solver = "mosek";
 	std::string level = "1f";
@@ -41,6 +42,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -t [dbl]    set the tolerance" << std::endl;
 			std::cout << " -a [dbl]    set the scaling for the feasible check" << std::endl;
 			std::cout << " -b [dbl]    set the stability term to be added to the Hessian" << std::endl;
+			std::cout << " -A [dbl]    add a constant to the equality equation" << std::endl;
 			std::cout << " -v [int]    set the verbosity level (0,1,2)" << std::endl;
 			std::cout << " -p [int]    set the number of vars to split initially" << std::endl;
 			std::cout << " -c [int]    set the number of cores to use" << std::endl;
@@ -67,6 +69,9 @@ int main(int argc, char ** argv) {
 			i++;
 		} else if (arg == "-b" && i+1 < argc) {
 			stabilityTerm = std::stod(argv[i+1]);
+			i++;
+		} else if (arg == "-A" && i+1 < argc) {
+			addConstant = std::stod(argv[i+1]);
 			i++;
 		} else if (arg == "-t" && i+1 < argc) {
 			tolerance = std::stod(argv[i+1]);
@@ -130,6 +135,13 @@ int main(int argc, char ** argv) {
 		basisSizes.push_back(std::stoi(currentNum));
 		n = basisSizes.size();
 
+		// If any of the sizes are larger than d, then we need to set d
+		for (int i=0; i<basisSizes.size(); i++) {
+			if (basisSizes[i] > d) {
+				d = basisSizes[i];
+			}
+		}
+
 	// Otherwise use sizes based on dimension
 	} else {
 		if (d == 2) {
@@ -139,9 +151,9 @@ int main(int argc, char ** argv) {
 		} else if (d == 4) {
 			basisSizes = {4, 2, 1, 1, 1, 1};
 		} else if (d == 5) {
-			basisSizes = {5, 2, 2, 1, 1, 1, 1};
+			basisSizes = {5, 3, 1, 1, 1, 1, 1};
 		} else if (d == 6) {
-			basisSizes = {6, 6, 3, 1};
+			basisSizes = {6, 3, 3, 3};
 		} else if (d == 7) {
 			basisSizes = {7, 2, 2, 2, 1, 1, 1, 1, 1};
 		} else if (d == 8) {
@@ -513,7 +525,7 @@ int main(int argc, char ** argv) {
 		// Find a feasible point of the equality constraints
 		std::cout << std::scientific;
 		std::vector<double> x;
-		x = prob.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, verbosity, 1.0/std::sqrt(d), stabilityTerm);
+		x = prob.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, verbosity, 1.0/std::sqrt(d), stabilityTerm, {}, addConstant);
 		double maxVal = -1000;
 		for (int i=0; i<prob.conZero.size(); i++) {
 			maxVal = std::max(maxVal, std::abs(prob.conZero[i].eval(x)));
@@ -670,7 +682,8 @@ int main(int argc, char ** argv) {
 		std::cout << "redundant list = " << redundantInds << std::endl;
 
 		// Starting with small sets, growing to larger
-		for (int num=2; num<redundantInds.size(); num++) {
+		//for (int num=2; num<redundantInds.size(); num++) {
+		for (int num=redundantInds.size(); num>=2; num--) {
 
 			// Try a bunch of random selections of the redundants
 			for (int l=0; l<20; l++) {
@@ -709,7 +722,8 @@ int main(int argc, char ** argv) {
 					}
 				}
 
-				std::cout << num << " " << l << " " << zeroCount << " " << removedInds << std::endl;
+				//std::cout << num << " " << l << " " << zeroCount << " " << removedInds << std::endl;
+				std::cout << "the group " << removedInds << " is " << zeroCount << "% redundant" << std::endl;
 
 			}
 

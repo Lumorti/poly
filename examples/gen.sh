@@ -79,12 +79,15 @@ iters=100000
 #./mub -f -c ${cores} -d 6 -N 6,2,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N6211.log
 #./mub -f -c ${cores} -d 6 -N 3,3,3,2 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N3332.log
 #./mub -f -c ${cores} -d 6 -N 6,3,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N6311.log
+#./mub -f -c ${cores} -d 6 -N 6,3,3,2 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N6332.log
+#./mub -f -c ${cores} -d 6 -N 6,3,3,3 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N6333.log
 #./mub -f -c ${cores} -d 6 -N 3,3,3,3 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N3333.log
 #./mub -f -c ${cores} -d 6 -N 6,4,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N6411.log
 #./mub -f -c ${cores} -d 6 -N 4,3,3,3 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N4333.log
 #./mub -f -c ${cores} -d 6 -N 6,5,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N6511.log
 #./mub -f -c ${cores} -d 6 -N 4,4,3,3 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N4433.log
 #./mub -f -c ${cores} -d 6 -N 6,6,1,1 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N6611.log
+./mub -f -c ${cores} -d 6 -N 6,6,2,1 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N6621.log
 #./mub -f -c ${cores} -d 6 -N 4,4,4,3 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N4443.log
 #./mub -f -c ${cores} -d 6 -N 6,6,2,1 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N6621.log
 #./mub -f -c ${cores} -d 6 -N 4,4,4,4 -v 2 -i ${iters} -a 0.9 -b 1e-10 | tee data/d6N4444.log
@@ -274,10 +277,10 @@ iters=100000
 #./mub -f -c ${cores} -d 20 -n 4 -v 2 -i ${iters} -a 0.9 -b 1e-15 | tee data/d20n4.log
 
 # Read all log files in the data directory
-for file in $(ls data/d6N*.log | sort); do
-    if [ -f "$file" ]; then
-        grep -H "vars" "$file"
-        grep -H "iteration" "$file"
-    fi
-done
+#for file in $(ls data/d6N*.log | sort); do
+    #if [ -f "$file" ]; then
+        #grep -H "vars" "$file"
+        #grep -H "iteration" "$file"
+    #fi
+#done
 

@@ -2583,13 +2583,14 @@ public:
 	
 
 	// Attempt find a feasible point of this problem
-	std::vector<polyType> findFeasibleEqualityPoint(int zeroInd=-1, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13, std::vector<polyType> startX={}) {
+	std::vector<polyType> findFeasibleEqualityPoint(int zeroInd=-1, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13, std::vector<polyType> startX={}, double addConstant=0.0) {
 
 		// Combine these to create a single polynomial
 		Polynomial<polyType> poly(maxVariables);
 		for (int i=0; i<conZero.size(); i++) {
 			poly += conZero[i]*conZero[i];
 		}
+		poly += addConstant;
 
 		// If no index specified, add a var and use that
 		if (zeroInd == -1) {
