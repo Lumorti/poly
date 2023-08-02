@@ -20,6 +20,7 @@ int main(int argc, char ** argv) {
 	bool secondIsUniform = true;
 	bool firstElementIsOne = true;
 	bool noNorm = false;
+	bool noNormExtra = false;
 	double addConstant = 0.0;
 	std::string givenSizes = "";
 	std::string solver = "mosek";
@@ -52,6 +53,8 @@ int main(int argc, char ** argv) {
 			std::cout << " -1          don't assume the first basis is the computational" << std::endl;
 			std::cout << " -2          don't assume the first vector of the second basis is uniform" << std::endl;
 			std::cout << " -3          don't assume the first element of each is one" << std::endl;
+			std::cout << " -4          don't require normalisation" << std::endl;
+			std::cout << " -5          don't require normalisation of the extra variables" << std::endl;
 			std::cout << " -s          use SCS as the SDP solver insead of Mosek" << std::endl;
 			std::cout << " -0          debug flag" << std::endl;
 			return 0;
@@ -112,6 +115,8 @@ int main(int argc, char ** argv) {
 			firstElementIsOne = false;
 		} else if (arg == "-4") {
 			noNorm = true;
+		} else if (arg == "-5") {
+			noNormExtra = true;
 		} else if (arg == "-0") {
 			debugFlag = true;
 		}
@@ -192,6 +197,8 @@ int main(int argc, char ** argv) {
 	int numVarsNonConj = n*d*d;
 	int numVars = 2*numVarsNonConj+1000;
 	int conjDelta = numVarsNonConj;
+	std::vector<int> normList;
+	std::vector<int> normListExtras;
 
 	// List the bases and the variables indices
 	if (verbosity >= 2) {
@@ -297,6 +304,8 @@ int main(int argc, char ** argv) {
 							extraEqn.addTerm(1, {newVarInd,newVarInd});
 							extraEqn.addTerm(1, {newVarInd+1,newVarInd+1});
 							extraEqn.addTerm(-1.0/d, {});
+							normList.push_back(eqns.size());
+							normListExtras.push_back(eqns.size());
 							eqns.push_back(extraEqn);
 						}
 						newVarInd += 2;
@@ -331,6 +340,7 @@ int main(int argc, char ** argv) {
 					extraEqn.addTerm(1, {var1,var1});
 					extraEqn.addTerm(1, {var2,var2});
 					extraEqn.addTerm(-1.0/d, {});
+					normList.push_back(eqns.size());
 					eqns.push_back(extraEqn);
 				}
 			}
@@ -350,6 +360,7 @@ int main(int argc, char ** argv) {
 					extraEqn.addTerm(1.0, {var2, var2});
 				}
 				extraEqn.addTerm(-1.0);
+				normList.push_back(eqns.size());
 				eqns.push_back(std::real<double>(extraEqn));
 			}
 
@@ -512,6 +523,7 @@ int main(int argc, char ** argv) {
 	}
 	if (verbosity >= 1) {
 		std::cout << "set sizes: " << basisSizes << ", vars: " << prob.maxVariables << ", vectors: " << numVectors << ", equations: " << eqns.size() << std::endl;
+		std::cout << "num norm eqns: " << normList.size() << ", num extra norm eqns: " << normListExtras.size() << std::endl;
 	}
 
 	// If told to find a feasible point
@@ -525,7 +537,20 @@ int main(int argc, char ** argv) {
 		// Find a feasible point of the equality constraints
 		std::cout << std::scientific;
 		std::vector<double> x;
-		x = prob.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, verbosity, 1.0/std::sqrt(d), stabilityTerm, {}, addConstant);
+		if (noNormExtra) {
+			PolynomialProblem<double> probCopy = prob;
+			probCopy.conZero = {};
+			for (int k=0; k<prob.conZero.size(); k++) {
+				if (std::find(normListExtras.begin(), normListExtras.end(), k) == normListExtras.end()) {
+					probCopy.conZero.push_back(prob.conZero[k]);
+				}
+			}
+			x = probCopy.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, verbosity, 1.0/std::sqrt(d), stabilityTerm, {}, addConstant);
+	   	} else {
+			x = prob.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, verbosity, 1.0/std::sqrt(d), stabilityTerm, {}, addConstant);
+		}
+
+		// Check the max violation of the constraints
 		double maxVal = -1000;
 		for (int i=0; i<prob.conZero.size(); i++) {
 			maxVal = std::max(maxVal, std::abs(prob.conZero[i].eval(x)));
@@ -650,6 +675,41 @@ int main(int argc, char ** argv) {
 	// If told to identify redundant constraints
 	} else if (task == 2) {
 
+		// Now without the extra norms
+		{
+
+			// Copy the problem
+			PolynomialProblem<double> probCopy = prob;
+
+			// Only copy the ones we want to keep
+			probCopy.conZero = {};
+			std::vector<Polynomial<double>> removedCons;
+			for (int k=0; k<prob.conZero.size(); k++) {
+				if (std::find(normListExtras.begin(), normListExtras.end(), k) == normListExtras.end()) {
+					probCopy.conZero.push_back(prob.conZero[k]);
+				} else {
+					removedCons.push_back(prob.conZero[k]);
+				}
+			}
+
+			// Repeat a bunch to make sure it's not a fluke
+			int zeroCount = 0;
+			for (int j=0; j<50; j++) {
+				auto res = probCopy.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, 0, 1.0/std::sqrt(d), stabilityTerm);
+				double error = 0;
+				for (int k=0; k<prob.conZero.size(); k++) {
+					error += std::abs(prob.conZero[k].eval(res));
+				}
+				if (error < 1e-6) {
+					zeroCount += 2;
+				}
+			}
+
+			// Output the result
+			std::cout << "The extra norms are " << zeroCount << "% redundant" << std::endl;
+
+		}
+
 		// See if there are any constraints that can be removed without LoG
 		std::vector<int> redundantInds;
 		for (int i=0; i<prob.conZero.size(); i++) {
@@ -665,24 +725,30 @@ int main(int argc, char ** argv) {
 			int zeroCount = 0;
 			for (int j=0; j<50; j++) {
 				auto res = probCopy.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, 0, 1.0/std::sqrt(d), stabilityTerm);
-				auto error = std::abs(toMatch.eval(res));
-				if (error < 1e-4) {
+				double error = 0;
+				for (int k=0; k<prob.conZero.size(); k++) {
+					error += std::abs(prob.conZero[k].eval(res));
+				}
+				if (error < 1e-6) {
 					zeroCount += 2;
 				}
 			}
 
 			// If it's highly redundant, add it to the list
 			std::cout << "con " << i << " is " << zeroCount << "% redundant" << std::endl;
-			if (zeroCount > 90) {
+			if (zeroCount > 95) {
 				redundantInds.push_back(i);
+				if (verbosity >= 2) {
+					std::cout << toMatch << std::endl;
+				}
 			}
 
 		}
 
 		std::cout << "redundant list = " << redundantInds << std::endl;
+		std::cout << "num redundant = " << redundantInds.size() << std::endl;
 
-		// Starting with small sets, growing to larger
-		//for (int num=2; num<redundantInds.size(); num++) {
+		// Starting with larger sets, growing smaller
 		for (int num=redundantInds.size(); num>=2; num--) {
 
 			// Try a bunch of random selections of the redundants
@@ -713,9 +779,9 @@ int main(int argc, char ** argv) {
 				int zeroCount = 0;
 				for (int j=0; j<50; j++) {
 					auto res = probCopy.findFeasibleEqualityPoint(-1, alpha, tolerance, maxIters, cores, 0, 1.0/std::sqrt(d), stabilityTerm);
-					auto error = 0;
-					for (int k=0; k<removedCons.size(); k++) {
-						error += std::abs(removedCons[k].eval(res));
+					double error = 0;
+					for (int k=0; k<prob.conZero.size(); k++) {
+						error += std::abs(prob.conZero[k].eval(res));
 					}
 					if (error < 1e-6) {
 						zeroCount += 2;
@@ -723,7 +789,7 @@ int main(int argc, char ** argv) {
 				}
 
 				//std::cout << num << " " << l << " " << zeroCount << " " << removedInds << std::endl;
-				std::cout << "the group " << removedInds << " is " << zeroCount << "% redundant" << std::endl;
+				std::cout << "the group (of size " << num << ") " << removedInds << " is " << zeroCount << "% redundant" << std::endl;
 
 			}
 
