@@ -1,4 +1,5 @@
 *.swp
+-copilot.log
 examples/mub
 examples/simple
 examples/sos
