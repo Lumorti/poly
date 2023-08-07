@@ -158,22 +158,21 @@ class Polynomial {
 
 private:
 
-	// Return combinations with repeats
-	// choose 2 from {0,1} = 00, 01, 10, 11, 0, 1
-	std::vector<std::vector<int>> getAllMonomials(int numVars, int dimension) {
+	// Return combinations 
+	std::vector<std::vector<int>> getAllMonomials(int startingVar, int maxVar, int dimension) {
 
 		// Stop when asking for single order monomials
 		std::vector<std::vector<int>> toReturn;
 		if (dimension == 1) {
-			for (int i=0; i<numVars; i++) {
+			for (int i=startingVar; i<maxVar; i++) {
 				toReturn.push_back({i});
 			}
 			return toReturn;
 		}
 
 		// For each var, consider this var as the first and then recurse
-		for (int i=0; i<numVars; i++) {
-			std::vector<std::vector<int>> y = getAllMonomials(numVars, dimension-1);
+		for (int i=startingVar; i<maxVar; i++) {
+			std::vector<std::vector<int>> y = getAllMonomials(i, maxVar, dimension-1);
 			for (int j=0; j<y.size(); j++) {
 				y[j].insert(y[j].begin(), i);
 			}
@@ -190,7 +189,7 @@ private:
 		// Get the monomials
 		std::vector<std::vector<int>> toReturn;
 		for (int d=1; d<=dimension; d++) {
-			std::vector<std::vector<int>> nextDim = getAllMonomials(numVars, d);
+			std::vector<std::vector<int>> nextDim = getAllMonomials(0, numVars, d);
 			toReturn.insert(toReturn.end(), nextDim.begin(), nextDim.end());
 		}
 
@@ -1530,7 +1529,7 @@ public:
 
 	}
 
-	// Output, transforming into a trig poly of a single variable TODO
+	// Output, transforming into a trig poly of a single variable
 	// (Requires that each pair of variables has a fixed magnitude)
 	std::string asMonovariableTrig(std::vector<std::tuple<int,int,double>> norms) {
 
@@ -1622,6 +1621,12 @@ public:
 
 		return toReturn.str();
 
+	}
+
+	// Turn the polynomial into a trig polynomial and then check for SOS
+	// TODO
+	bool checkMonovariableTrigSOS(std::vector<std::tuple<int,int,double>> norms) {
+		return false;
 	}
 
 	// When doing std::cout << Polynomial
@@ -1746,7 +1751,7 @@ public:
 	}
 
 	// Check if the polynomial can be represented as a sum-of-squares
-	bool isSOS() {
+	bool isSOS(int verbosity=1) {
 
 		// Get the degree and half it
 		int d = getDegree();
@@ -1755,12 +1760,33 @@ public:
 		// Generate the vector of monoms
 		std::vector<int> vars = getVariables();
 		std::vector<Polynomial> x = getAllMonomialsAsPoly(vars.size(), dHalf);
+		x.insert(x.begin(), Polynomial(maxVariables, 0));
+		if (verbosity >= 2) {
+			std::cout << x << std::endl;
+		}
 
 		// Which matrix elements must sum to each coefficient
 		std::unordered_map<std::string,std::vector<std::vector<int>>> cons;
+		std::vector<std::vector<int>> cons2(x.size(), std::vector<int>(x.size(), 0));
 		for (int i=0; i<x.size(); i++) {
 			for (int j=0; j<x.size(); j++) {
 				cons[(x[i]*x[j]).getMonomials()[0]].push_back({i,j});
+				cons2[i][j] += coeffs[(x[i]*x[j]).getMonomials()[0]];
+			}
+		}
+
+		// Print the constraints
+		if (verbosity >= 1) {
+			std::cout << "sdp size: " << x.size() << " by " << x.size() << std::endl;
+			std::cout << "num constraints: " << cons.size() << std::endl;
+		}
+		if (verbosity >= 2) {
+			for (auto const &pair: cons) {
+				std::cout << "the sum of ";
+				for (auto const &pair2: pair.second) {
+					std::cout << "(" << pair2[0] << "," << pair2[1] << ") + ";
+				}
+				std::cout << " must equal " << coeffs[pair.first] << std::endl;
 			}
 		}
 
@@ -1769,20 +1795,49 @@ public:
 
 		// Create the variable
 		mosek::fusion::Variable::t xM = M->variable(mosek::fusion::Domain::inPSDCone(x.size()));
+		mosek::fusion::Variable::t lambda = M->variable(mosek::fusion::Domain::greaterThan(0.0));
 
 		// For each el + el + el = coeff
 		for (auto const &pair: cons) {
-			M->constraint(mosek::fusion::Expr::sum(xM->pick(monty::new_array_ptr(pair.second))), mosek::fusion::Domain::equalsTo(coeffs[pair.first]));
+			if (pair.first == "") {
+				M->constraint(mosek::fusion::Expr::add(lambda, mosek::fusion::Expr::sum(xM->pick(monty::new_array_ptr(pair.second)))), mosek::fusion::Domain::equalsTo(coeffs[pair.first]));
+			} else {
+				M->constraint(mosek::fusion::Expr::sum(xM->pick(monty::new_array_ptr(pair.second))), mosek::fusion::Domain::equalsTo(coeffs[pair.first]));
+			}
 		}
+
+		// Objective is to see how big a term we can add
+		M->objective(mosek::fusion::ObjectiveSense::Maximize, lambda);
 
 		// Solve the problem
 		M->solve();
 
 		// If it's infeasible, it's not SOS
-		if (M->getProblemStatus() == mosek::fusion::ProblemStatus::PrimalInfeasible) {
+		if (M->getProblemStatus() == mosek::fusion::ProblemStatus::PrimalInfeasible || M->getProblemStatus() == mosek::fusion::ProblemStatus::DualInfeasible) {
 			return false;
 		} else {
+
+			// Ouput lambda
+			auto lambdaLevel = *(lambda->level());
+			if (verbosity >= 1) {
+				std::cout << "lower bound of poly: " << lambdaLevel[0] << std::endl;
+			}
+
+			// Output the matrix
+			if (verbosity >= 2) {
+				auto sol = *(xM->level());
+				std::vector<std::vector<double>> sol2(x.size(), std::vector<double>(x.size(), 0));
+				for (int i=0; i<x.size(); i++) {
+					for (int j=0; j<x.size(); j++) {
+						sol2[i][j] = sol[i*x.size()+j];
+					}
+				}
+				std::cout << sol2 << std::endl;
+			}
+
+			// Original poly was SOS
 			return true;
+
 		}
 
 	}
@@ -2210,39 +2265,13 @@ private:
 		}
 	}
 
-	// Return combinations with repeats
-	// choose 2 from {0,1} = 00, 01, 10, 11, 0, 1
-	std::vector<std::vector<int>> getAllMonomials(int numVars, int dimension) {
-
-		// Stop when asking for single order monomials
-		std::vector<std::vector<int>> toReturn;
-		if (dimension == 1) {
-			for (int i=0; i<numVars; i++) {
-				toReturn.push_back({i});
-			}
-			return toReturn;
-		}
-
-		// For each var, consider this var as the first and then recurse
-		for (int i=0; i<numVars; i++) {
-			std::vector<std::vector<int>> y = getAllMonomials(numVars, dimension-1);
-			for (int j=0; j<y.size(); j++) {
-				y[j].insert(y[j].begin(), i);
-			}
-			toReturn.insert(toReturn.end(), y.begin(), y.end());
-		}
-
-		return toReturn;
-
-	}
-
 	// Same as above but converts to Polynomial
 	std::vector<Polynomial<double>> getAllMonomialsAsPoly(int numVars, int dimension) {
 
 		// Get the monomials
 		std::vector<std::vector<int>> toReturn;
 		for (int d=1; d<=dimension; d++) {
-			std::vector<std::vector<int>> nextDim = getAllMonomials(numVars, d);
+			std::vector<std::vector<int>> nextDim = getAllMonomials(0, numVars, d);
 			toReturn.insert(toReturn.end(), nextDim.begin(), nextDim.end());
 		}
 

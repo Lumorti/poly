@@ -616,7 +616,7 @@ int main(int argc, char ** argv) {
 
 		}
 
-	// If told to find the trig poly TODO
+	// If told to find the trig poly
 	} else if (task == 6) {
 
 		// Spacing if verbose
@@ -653,8 +653,8 @@ int main(int argc, char ** argv) {
 				// Add to the norm list
 				if (ind1 != -1 && ind2 != -1) {
 					norms.push_back(std::make_tuple(ind1, ind2, val));
-					prob.conZero.erase(prob.conZero.begin()+i);
-					i--;
+					//prob.conZero.erase(prob.conZero.begin()+i);
+					//i--;
 				}
 
 			}
@@ -666,11 +666,17 @@ int main(int argc, char ** argv) {
 			poly += prob.conZero[i]*prob.conZero[i];
 		}
 
-		// Output this polynomial
+		// Output this polynomial TODO
+		//poly = Polynomial<double>(2,"2*{0000}+5*{1111}-1*{0011}+2*{0001}");
 		std::cout << std::endl;
 		std::cout << poly << std::endl;
+		//std::cout << std::endl;
+		//poly.isSOS(1);
+
 		std::cout << std::endl;
 		std::cout << poly.asMonovariableTrig(norms) << std::endl;
+		//std::cout << std::endl;
+		//std::cout << poly.checkMonovariableTrigSOS(norms) << std::endl;
 
 	// If told to identify redundant constraints
 	} else if (task == 2) {
@@ -795,7 +801,7 @@ int main(int argc, char ** argv) {
 
 		}
 
-	// If told to turn it into a binary problem TODO
+	// If told to turn it into a binary problem
 	} else if (task == 3 || task == 4 || task == 5) {
 
 		// Binarize
