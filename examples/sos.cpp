@@ -24,8 +24,8 @@ int main(int argc, char ** argv) {
 
 	// Check to make sure we're right
 	std::cout << polySOS << std::endl;
-	std::cout << "should be 1: " << polySOS.isSOS() << std::endl;
-	std::cout << "should be 0: " << polyNotSOS.isSOS() << std::endl;
+	std::cout << "should be 1: " << polySOS.isSOS(0) << std::endl;
+	std::cout << "should be 0: " << polyNotSOS.isSOS(0) << std::endl;
 
 }
 

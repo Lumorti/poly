@@ -147,55 +147,15 @@ int main(int argc, char ** argv) {
 			}
 		}
 
-	// Otherwise use sizes based on dimension
+	// Otherwise use the maximal sizes
 	} else {
-		if (d == 2) {
-			basisSizes = {2, 1, 1, 1};
-		} else if (d == 3) {
-			basisSizes = {3, 1, 1, 1, 1};
-		} else if (d == 4) {
-			basisSizes = {4, 2, 1, 1, 1, 1};
-		} else if (d == 5) {
-			basisSizes = {5, 3, 1, 1, 1, 1, 1};
-		} else if (d == 6) {
-			basisSizes = {6, 3, 3, 3};
-		} else if (d == 7) {
-			basisSizes = {7, 2, 2, 2, 1, 1, 1, 1, 1};
-		} else if (d == 8) {
-			basisSizes = {8, 2, 2, 2, 2, 1, 1, 1, 1, 1};
-		} else if (d == 9) {
-			basisSizes = {3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2};
-		} else if (d == 10) {
-			basisSizes = {6, 6, 6, 6};
-		} else if (d == 11) {
-			basisSizes = {3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2};
-		} else if (d == 12) {
-			basisSizes = {12, 6, 6, 6};
-		} else if (d == 13) {
-			basisSizes = {3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2};
-		} else if (d == 14) {
-			basisSizes = {14, 7, 7, 7};
-		} else if (d == 15) {
-			basisSizes = {10, 10, 10, 7};
-		} else if (d == 16) {
-			basisSizes = {16, 14, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
-		} else if (d == 17) {
-			basisSizes = {17, 15, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
-		} else if (d == 18) {
-			basisSizes = {18, 9, 9, 9};
-		} else if (d == 19) {
-			basisSizes = {19, 17, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
-		} else if (d == 20) {
-			basisSizes = {20, 10, 10, 10};
-		} else {
-			basisSizes = std::vector<int>(n, d);
-		}
+		basisSizes = std::vector<int>(n, d);
 
 	}
 
 	// Useful quantities
 	int numVarsNonConj = n*d*d;
-	int numVars = 2*numVarsNonConj+1000;
+	int numVars = 2*numVarsNonConj+numVarsNonConj*numVarsNonConj;
 	int conjDelta = numVarsNonConj;
 	std::vector<int> normList;
 	std::vector<int> normListExtras;
@@ -534,6 +494,69 @@ int main(int argc, char ** argv) {
 			std::cout << std::endl;
 		}
 
+		// If told to start from the eigenbases of X,Z,XZ etc. TODO
+		if (debugFlag) {
+
+			// Create the X operator
+			Eigen::MatrixXcd X = Eigen::MatrixXcd::Zero(d,d);
+			for (int i=0; i<d-1; i++) {
+				X(i+1,i) = 1;
+			}
+			X(0,d-1) = 1;
+
+			// Create the Z operator
+			Eigen::MatrixXcd Z = Eigen::MatrixXcd::Zero(d,d);
+			std::complex<double> omega = std::exp(2.0*M_PI*std::complex<double>(0,1)/double(d));
+			for (int i=0; i<d; i++) {
+				Z(i,i) = std::pow(omega, i);
+			}
+
+			// Create the various operators (X, Z, XZ, X^2Z, etc.)
+			std::vector<Eigen::MatrixXcd> ops = {Z, X};
+			for (int i=0; i<n-2; i++) {
+				Eigen::MatrixXcd newOp = Z;
+				for (int j=0; j<i; j++) {
+					newOp = Z*newOp;
+				}
+				ops.push_back(X*newOp);
+			}
+
+			// Get the eigenbases of each operator
+			std::vector<std::vector<Eigen::VectorXcd>> eigenbases;
+			for (int i=0; i<ops.size(); i++) {
+				Eigen::ComplexEigenSolver<Eigen::MatrixXcd> es(ops[i]);
+				std::vector<Eigen::VectorXcd> newBasis;
+				for (int j=0; j<d; j++) {
+					newBasis.push_back(es.eigenvectors().col(j));
+				}
+				eigenbases.push_back(newBasis);
+			}
+
+			// Create the map from variable to real value
+			std::unordered_map<int, double> varMap;
+			for (int i=0; i<n; i++) {
+				for (int j=0; j<d; j++) {
+					for (int k=0; k<d; k++) {
+						varMap[reducedMap[i*d*d + j*d + k]] = std::real(eigenbases[i][j](k));
+						varMap[reducedMap[i*d*d + j*d + k + conjDelta]] = std::imag(eigenbases[i][j](k));
+					}
+				}
+			}
+
+			// Apply the map to the problem
+			prob = prob.replaceWithValue(varMap);
+			prob = prob.removeLinear();
+			if (verbosity >= 2) {
+				std::cout << "---------------------" << std::endl;
+				std::cout << "Problem with eigenbases:" << std::endl;
+				std::cout << "---------------------" << std::endl;
+				std::cout << std::endl;
+				std::cout << prob << std::endl;
+				std::cout << std::endl;
+			}
+
+		}
+
 		// Find a feasible point of the equality constraints
 		std::cout << std::scientific;
 		std::vector<double> x;
@@ -666,13 +689,9 @@ int main(int argc, char ** argv) {
 			poly += prob.conZero[i]*prob.conZero[i];
 		}
 
-		// Output this polynomial TODO
-		//poly = Polynomial<double>(2,"2*{0000}+5*{1111}-1*{0011}+2*{0001}");
+		// Output this polynomial
 		std::cout << std::endl;
 		std::cout << poly << std::endl;
-		//std::cout << std::endl;
-		//poly.isSOS(1);
-
 		std::cout << std::endl;
 		std::cout << poly.asMonovariableTrig(norms) << std::endl;
 		//std::cout << std::endl;

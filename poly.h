@@ -2360,29 +2360,29 @@ public:
 
 	// Given a list of var indices and values, replace everything
 	template <typename otherType>
-	PolynomialProblem replaceWithValue(std::vector<int> indsToReplace, std::vector<otherType> valsToReplace) {
+	PolynomialProblem replaceWithValue(std::unordered_map<int,otherType> map) {
 
-		// Convert the list to the correct type
-		std::vector<polyType> convertedList(valsToReplace.size());
-		for (int i=0; i<valsToReplace.size(); i++) {
-			convertedList[i] = polyType(valsToReplace[i]);
+		// Convert the map to the correct type
+		std::unordered_map<int,polyType> convertedMap;
+		for (auto it=map.begin(); it!=map.end(); it++) {
+			convertedMap[it->first] = polyType(it->second);
 		}
 
 		// Copy each equation, substituting
-		Polynomial<polyType> newObj = obj.replaceWithValue(indsToReplace, convertedList);
+		Polynomial<polyType> newObj = obj.replaceWithValue(convertedMap);
 		std::vector<Polynomial<polyType>> newConsZero;
 		for (int i=0; i<conZero.size(); i++) {
-			newConsZero.push_back(conZero[i].replaceWithValue(indsToReplace, convertedList));
+			newConsZero.push_back(conZero[i].replaceWithValue(convertedMap));
 		}
 		std::vector<Polynomial<polyType>> newConsPositive;
 		for (int i=0; i<conPositive.size(); i++) {
-			newConsPositive.push_back(conPositive[i].replaceWithValue(indsToReplace, convertedList));
+			newConsPositive.push_back(conPositive[i].replaceWithValue(convertedMap));
 		}
 		std::vector<std::vector<Polynomial<polyType>>> newConsPSD;
 		for (int i=0; i<conPSD.size(); i++) {
 			newConsPSD.push_back({});
 			for (int j=0; j<conPSD[i].size(); j++) {
-				newConsPSD[i].push_back(conPSD[i][j].replaceWithValue(indsToReplace, convertedList));
+				newConsPSD[i].push_back(conPSD[i][j].replaceWithValue(convertedMap));
 			}
 		}
 
@@ -2534,11 +2534,14 @@ public:
 				}
 
 				// Replace this
+				std::unordered_map<std::string,Polynomial<polyType>> map;
+				map[varToRemove] = equalPoly;
+				newProb.obj = newProb.obj.replaceWithPoly(map);
 				for (int j=0; j<newProb.conZero.size(); j++) {
-					newProb.conZero[j] = newProb.conZero[j].replaceWithPoly(varToRemove, equalPoly);
+					newProb.conZero[j] = newProb.conZero[j].replaceWithPoly(map);
 				}
 				for (int j=0; j<newProb.conPositive.size(); j++) {
-					newProb.conPositive[j] = newProb.conPositive[j].replaceWithPoly(varToRemove, equalPoly);
+					newProb.conPositive[j] = newProb.conPositive[j].replaceWithPoly(map);
 				}
 
 			}
