@@ -153,6 +153,94 @@ int main(int argc, char ** argv) {
 
 	}
 
+	// If told to start from the eigenbases of X,Z,XZ etc. TODO
+	if (debugFlag) {
+
+		// Find the prime factorisation of d
+		std::vector<int> primeFactors;
+		int minPrime = d;
+		int temp = d;
+		for (int i=2; i<=d; i++) {
+			while (temp % i == 0) {
+				primeFactors.push_back(i);
+				if (i < minPrime) {
+					minPrime = i;
+				}
+				temp /= i;
+			}
+		}
+
+		// Create the X operator
+		Eigen::MatrixXcd X = Eigen::MatrixXcd::Zero(d,d);
+		for (int i=0; i<d-1; i++) {
+			X(i+1,i) = 1;
+		}
+		X(0,d-1) = 1;
+
+		// Create the Z operator
+		Eigen::MatrixXcd Z = Eigen::MatrixXcd::Zero(d,d);
+		std::complex<double> omega = std::exp(2.0*M_PI*std::complex<double>(0,1)/double(d));
+		for (int i=0; i<d; i++) {
+			Z(i,i) = std::pow(omega, i);
+		}
+
+		// Create the various operators (X, Z, XZ, XZZ, etc.)
+		if (verbosity >= 2) {
+			std::cout << "Constructing operators..." << std::endl;
+		}
+		std::vector<Eigen::MatrixXcd> ops = {Z, X};
+		for (int i=0; i<n-2; i++) {
+			Eigen::MatrixXcd newOp = Z;
+			for (int j=0; j<i; j++) {
+				newOp = Z*newOp;
+			}
+			ops.push_back(X*newOp);
+		}
+
+		// Get the eigenbases of each operator
+		if (verbosity >= 2) {
+			std::cout << "Getting eigenbases..." << std::endl;
+		}
+		std::vector<std::vector<Eigen::VectorXcd>> eigenbases;
+		for (int i=0; i<ops.size(); i++) {
+			std::cout << "Basis " << i << ":" << std::endl;
+			Eigen::ComplexEigenSolver<Eigen::MatrixXcd> es(ops[i]);
+			std::vector<Eigen::VectorXcd> newBasis;
+			for (int j=0; j<d; j++) {
+				newBasis.push_back(es.eigenvectors().col(j));
+				std::cout << "Vector " << j << ": " << newBasis[j].transpose() << std::endl;
+				std::cout << "Eigenvalue: " << es.eigenvalues()[j] << std::endl;
+			}
+			std::cout << std::endl << std::endl;
+			eigenbases.push_back(newBasis);
+		}
+
+		// For each vector in each basis
+		if (verbosity >= 2) {
+			std::cout << "Calculating error..." << std::endl;
+		}
+		double maxError = 0;
+		for (int i=0; i<n; i++) {
+			for (int k=0; k<basisSizes[i]; k++) {
+
+				// For each other vector in each basis
+				for (int j=i+1; j<n; j++) {
+					for (int l=0; l<basisSizes[j]; l++) {
+
+						// Calculate the error
+						maxError = std::max(maxError, std::abs(std::abs(eigenbases[i][k].dot(eigenbases[j][l]))-1.0/std::sqrt(double(d))));
+
+					}
+				}
+
+			}
+		}
+		std::cout << "d=" << d << " n=" << n << " f=" << minPrime << " error=" << maxError << std::endl;
+
+		return 0;
+
+	}
+
 	// Useful quantities
 	int numVarsNonConj = n*d*d;
 	int numVars = 2*numVarsNonConj+numVarsNonConj*numVarsNonConj;
@@ -492,69 +580,6 @@ int main(int argc, char ** argv) {
 		// Spacing if verbose
 		if (verbosity >= 2) {
 			std::cout << std::endl;
-		}
-
-		// If told to start from the eigenbases of X,Z,XZ etc. TODO
-		if (debugFlag) {
-
-			// Create the X operator
-			Eigen::MatrixXcd X = Eigen::MatrixXcd::Zero(d,d);
-			for (int i=0; i<d-1; i++) {
-				X(i+1,i) = 1;
-			}
-			X(0,d-1) = 1;
-
-			// Create the Z operator
-			Eigen::MatrixXcd Z = Eigen::MatrixXcd::Zero(d,d);
-			std::complex<double> omega = std::exp(2.0*M_PI*std::complex<double>(0,1)/double(d));
-			for (int i=0; i<d; i++) {
-				Z(i,i) = std::pow(omega, i);
-			}
-
-			// Create the various operators (X, Z, XZ, X^2Z, etc.)
-			std::vector<Eigen::MatrixXcd> ops = {Z, X};
-			for (int i=0; i<n-2; i++) {
-				Eigen::MatrixXcd newOp = Z;
-				for (int j=0; j<i; j++) {
-					newOp = Z*newOp;
-				}
-				ops.push_back(X*newOp);
-			}
-
-			// Get the eigenbases of each operator
-			std::vector<std::vector<Eigen::VectorXcd>> eigenbases;
-			for (int i=0; i<ops.size(); i++) {
-				Eigen::ComplexEigenSolver<Eigen::MatrixXcd> es(ops[i]);
-				std::vector<Eigen::VectorXcd> newBasis;
-				for (int j=0; j<d; j++) {
-					newBasis.push_back(es.eigenvectors().col(j));
-				}
-				eigenbases.push_back(newBasis);
-			}
-
-			// Create the map from variable to real value
-			std::unordered_map<int, double> varMap;
-			for (int i=0; i<n; i++) {
-				for (int j=0; j<d; j++) {
-					for (int k=0; k<d; k++) {
-						varMap[reducedMap[i*d*d + j*d + k]] = std::real(eigenbases[i][j](k));
-						varMap[reducedMap[i*d*d + j*d + k + conjDelta]] = std::imag(eigenbases[i][j](k));
-					}
-				}
-			}
-
-			// Apply the map to the problem
-			prob = prob.replaceWithValue(varMap);
-			prob = prob.removeLinear();
-			if (verbosity >= 2) {
-				std::cout << "---------------------" << std::endl;
-				std::cout << "Problem with eigenbases:" << std::endl;
-				std::cout << "---------------------" << std::endl;
-				std::cout << std::endl;
-				std::cout << prob << std::endl;
-				std::cout << std::endl;
-			}
-
 		}
 
 		// Find a feasible point of the equality constraints
