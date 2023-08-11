@@ -17,7 +17,7 @@ def findOperator(eigenvecs, eigenvals):
 # Given an operator, find the eigenvectors
 def findEigenvectors(M):
     eigenvals, eigenvecs = np.linalg.eig(M)
-    return eigenvecs.T
+    return eigenvecs
 
 # Create the X operator
 def genX():
@@ -51,18 +51,17 @@ Z = genZ(1)
 def genH(theta=1):
     H = np.zeros((d, d), dtype=complex)
     omega = np.exp(theta * 2.0 * np.pi * 1j / float(d))
-    factor = 1.0 / np.sqrt(d)
     for i in range(d):
         for j in range(d):
-            H[i, j] = factor * np.power(omega, i * j)
+            H[i, j] = np.power(omega, i * j)
     return H
 
 # The identity
 I = np.eye(d, dtype=complex)
 
 # The operator pool
-operatorPool = [I, genX(), genY(), genZ(), genH()]
-stringPool = ["I", "X", "Y", "Z", "H"]
+operatorPool = [genX(), genZ(1)]
+stringPool = ["X", "Z1"]
 numOps = len(operatorPool)
 
 # Given a number, using ternary representation to generate the matrix
@@ -83,83 +82,23 @@ def stringFromNumber(num):
         num = num // numOps
     return string
 
-vals = [1, -1, 1j, -1j]
-M_1 = np.array([
+print(genH())
+
+vecs = [
     [0.5, 0.5, 0.5, 0.5],
     [0.5, 0.5, -0.5, -0.5],
     [0.5, -0.5, -0.5, 0.5],
     [0.5, -0.5, 0.5, -0.5]
-])
-M_2 = 0.5 * np.array([
-    [1, -1, -1j, -1j],
-    [1, -1, 1j, 1j],
-    [1, 1, 1j, -1j],
-    [1, 1, -1j, 1j]
-])
-M_3 = 0.5 * np.array([
-    [1, -1j, -1j, -1],
-    [1, -1j, 1j, 1],
-    [1, 1j, 1j, -1],
-    [1, 1j, -1j, 1]
-])
-M_4 = 0.5 * np.array([
-    [1, -1j, -1, -1j],
-    [1, -1j, 1, 1j],
-    [1, 1j, -1, 1j],
-    [1, 1j, 1, -1j]
-])
+        ]
+vecs = np.array(vecs).T
+vals = [1, -1, 1j, -1j]
 
-opToFind1 = findOperator(M_1, vals)
-opToFind2 = findOperator(M_2, vals)
-opToFind3 = findOperator(M_3, vals)
-opToFind4 = findOperator(M_4, vals)
+opToFind = findOperator(vecs, vals)
+print("matrix to find:")
+print(opToFind)
 
-print("Original vectors:")
-print(M_1)
-print("Operator:")
-print(opToFind1)
-print("Eigenvectors:")
-print(findEigenvectors(opToFind1))
-print("Eigenvalues:")
-print(np.linalg.eig(opToFind1)[0])
-print()
-
-print("Original vectors:")
-print(M_2)
-print("Desired eigenvalues:")
-print(vals)
-print("Operator:")
-print(opToFind2)
-print("Eigenvectors:")
-print(findEigenvectors(opToFind2))
-print("Eigenvalues:")
-print(np.linalg.eig(opToFind2)[0])
-print("Back as an operator:")
-print(findOperator(findEigenvectors(opToFind2), np.linalg.eig(opToFind2)[0]))
-print()
-
-print("Original vectors:")
-print(M_3)
-print("Operator:")
-print(opToFind3)
-print("Eigenvectors:")
-print(findEigenvectors(opToFind3))
-print()
-
-print("Original vectors:")
-print(M_4)
-print("Operator:")
-print(opToFind4)
-print("Eigenvectors:")
-print(findEigenvectors(opToFind4))
-print()
-
-exit()
-
-for matNum in range(1, 100):
+for matNum in range(1, 1000):
     M = matrixFromNumber(matNum)
-    print(matNum, stringFromNumber(matNum))
-    print(M)
     if np.allclose(M, opToFind):
         print(matNum)
         print("Found it!")
