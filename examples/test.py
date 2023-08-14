@@ -4,7 +4,7 @@ import numpy as np
 np.set_printoptions(precision=3, suppress=True)
 
 # Define the dimension d
-d = 4
+d = 3
 
 # Given a list of vectors and eigenvalues, find the operator that has them as eigenvectors
 def findOperator(eigenvecs, eigenvals):
@@ -19,200 +19,195 @@ def findEigenvectors(M):
     eigenvals, eigenvecs = np.linalg.eig(M)
     return eigenvecs.T
 
+# Create the identity operator
+def genI(d):
+    return np.eye(d, dtype=complex)
+I = genI(d)
+
 # Create the X operator
-def genX():
+def genX(d):
     X = np.zeros((d, d), dtype=complex)
     for i in range(d - 1):
         X[i + 1, i] = 1
     X[0, d - 1] = 1
     return X
-X = genX()
-
-# Create the Y operator
-def genY(theta=1):
-    Y = np.zeros((d, d), dtype=complex)
-    omega = np.exp(theta * 2.0 * np.pi * 1j / float(d))
-    for i in range(d - 1):
-        Y[i + 1, i] = 1j * np.power(omega, i)
-    Y[0, d - 1] = 1j * np.power(omega, d - 1)
-    return Y
-Y = genY(1)
+X = genX(d)
 
 # Create the Z operator
-def genZ(theta=1):
+def genZ(d):
     Z = np.zeros((d, d), dtype=complex)
-    omega = np.exp(theta * 2.0 * np.pi * 1j / float(d))
+    omega = np.exp(2.0 * np.pi * 1j / float(d))
     for i in range(d):
         Z[i, i] = np.power(omega, i)
     return Z
-Z = genZ(1)
+Z = genZ(d)
 
-# Create the H operator
-def genH(theta=1):
-    H = np.zeros((d, d), dtype=complex)
-    omega = np.exp(theta * 2.0 * np.pi * 1j / float(d))
-    factor = 1.0 / np.sqrt(d)
-    for i in range(d):
-        for j in range(d):
-            H[i, j] = factor * np.power(omega, i * j)
-    return H
+# Function that checks if a list of matrices are mutually unbiased
+def checkMutualUnbiasedness(Ms):
+    for i in range(len(Ms)):
+        for j in range(i+1, len(Ms)):
+            for k in range(len(Ms[i])):
+                for l in range(len(Ms[j])):
+                    innerProd = np.abs(np.dot(Ms[i][k], Ms[j][l].conj()))
+                    if np.abs(innerProd - 1.0/np.sqrt(d)) > 1e-8:
+                        return False
+    return True
 
-# The identity
-I = np.eye(d, dtype=complex)
+# Dim 3
+opsToFind = []
+if d == 3:
+    opsToFind.append(Z)
+    opsToFind.append(X)
+    opsToFind.append(X @ Z)
+    opsToFind.append(X @ (Z @ Z))
 
-# The operator pool
-operatorPool = [I, genX(), genY(), genZ(), genH()]
-stringPool = ["I", "X", "Y", "Z", "H"]
-numOps = len(operatorPool)
+    # Print each set of eigenvalues
+    for i in range(len(opsToFind)):
+        print("Operator " + str(i) + ":")
+        eigenvals, eigenvecs = np.linalg.eig(opsToFind[i])
+        print(eigenvals)
+        print()
 
-# Given a number, using ternary representation to generate the matrix
-def matrixFromNumber(num):
-    M = I
+# Dim 4
+elif d == 4:
+    vals = [1, -1, 1j, -1j]
+    M_0 = np.array([
+        [1, 0, 0, 0],
+        [0, 1, 0, 0],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1]
+    ])
+    M_1 = np.array([
+        [0.5, 0.5, 0.5, 0.5],
+        [0.5, 0.5, -0.5, -0.5],
+        [0.5, -0.5, -0.5, 0.5],
+        [0.5, -0.5, 0.5, -0.5]
+    ])
+    M_2 = 0.5 * np.array([
+        [1, -1, -1j, -1j],
+        [1, -1, 1j, 1j],
+        [1, 1, 1j, -1j],
+        [1, 1, -1j, 1j]
+    ])
+    M_3 = 0.5 * np.array([
+        [1, -1j, -1j, -1],
+        [1, -1j, 1j, 1],
+        [1, 1j, 1j, -1],
+        [1, 1j, -1j, 1]
+    ])
+    M_4 = 0.5 * np.array([
+        [1, -1j, -1, -1j],
+        [1, -1j, 1, 1j],
+        [1, 1j, -1, 1j],
+        [1, 1j, 1, -1j]
+    ])
+    opsToFind.append(findOperator(M_0, vals))
+    opsToFind.append(findOperator(M_1, vals))
+    opsToFind.append(findOperator(M_2, vals))
+    opsToFind.append(findOperator(M_3, vals))
+    opsToFind.append(findOperator(M_4, vals))
+
+# Print each operator
+for i in range(len(opsToFind)):
+    print("Operator " + str(i) + ":")
+    print(opsToFind[i])
+    print()
+
+# Find the eigenvectors of each operator
+vecs = [findEigenvectors(op) for op in opsToFind]
+
+# See if the eigenvectors are mutually unbiased
+print("Unbiased: ", checkMutualUnbiasedness(vecs))
+
+exit()
+
+# Iterate over all combinations of sums of paulis and phases given
+def sumOfPaulisAndPhases(num, paulis, phases):
+
+    # Generate the combinations of paulis and phases
+    combs = []
+    for i in range(len(paulis)):
+        for k in range(len(paulis)):
+            for j in range(len(phases)):
+                combs.append(phases[j] * np.kron(paulis[i], paulis[k]))
+
+    # Start with a blank matrix
+    matDim = len(paulis[0]) ** 2
+    M = np.zeros((matDim, matDim), dtype=np.complex128)
+
+    # If the number is 0, return the first
+    if num == 0:
+        return M + combs[0]
+
+    # Iterate over the number in ternary representation
     while num > 0:
-        rem = num % numOps
-        M = operatorPool[rem] @ M
-        num = num // numOps
+        rem = num % len(combs)
+        M = M + combs[rem]
+        num = num // len(combs)
+
     return M
 
-# Given a number, using ternary representation to generate the string
-def stringFromNumber(num):
-    string = ""
+# Same as the above function but with strings
+def sumOfPaulisAndPhasesString(num, paulis, phases):
+    
+    # Generate the combinations of paulis and phases
+    combs = []
+    for i in range(len(paulis)):
+        for k in range(len(paulis)):
+            for j in range(len(phases)):
+                combs.append(phases[j] + " " + paulis[i] + "(x)" + paulis[k])
+
+    # Start with a blank string
+    M = ""
+
+    # If the number is 0, return the first
+    if num == 0:
+        return M + combs[0]
+
+    # Iterate over the number in ternary representation
     while num > 0:
-        rem = num % numOps
-        string = stringPool[rem] + string
-        num = num // numOps
-    return string
+        rem = num % len(combs)
+        M = M + combs[rem]
+        num = num // len(combs)
+        if num > 0:
+            M = M + " + "
 
-vals = [1, -1, 1j, -1j]
-M_1 = np.array([
-    [0.5, 0.5, 0.5, 0.5],
-    [0.5, 0.5, -0.5, -0.5],
-    [0.5, -0.5, -0.5, 0.5],
-    [0.5, -0.5, 0.5, -0.5]
-])
-M_2 = 0.5 * np.array([
-    [1, -1, -1j, -1j],
-    [1, -1, 1j, 1j],
-    [1, 1, 1j, -1j],
-    [1, 1, -1j, 1j]
-])
-M_3 = 0.5 * np.array([
-    [1, -1j, -1j, -1],
-    [1, -1j, 1j, 1],
-    [1, 1j, 1j, -1],
-    [1, 1j, -1j, 1]
-])
-M_4 = 0.5 * np.array([
-    [1, -1j, -1, -1j],
-    [1, -1j, 1, 1j],
-    [1, 1j, -1, 1j],
-    [1, 1j, 1, -1j]
-])
+    return M
 
-opToFind1 = findOperator(M_1, vals)
-opToFind2 = findOperator(M_2, vals)
-opToFind3 = findOperator(M_3, vals)
-opToFind4 = findOperator(M_4, vals)
+# Mat1 = 1108 (0.5+0.5j) X(x)X + (0.5-0.5j) X(x)I
+# Mat2 = 1774 (-0.5+0.5j) Y(x)Z + (-0.5-0.5j) X(x)Y
+# Mat3 =
+# Mat4 =
 
-print("Original vectors:")
-print(M_1)
-print("Operator:")
-print(opToFind1)
-print("Eigenvectors:")
-print(findEigenvectors(opToFind1))
-print("Eigenvalues:")
-print(np.linalg.eig(opToFind1)[0])
+mat1Inds = []
+mat2Inds = []
+mat3Inds = []
+mat4Inds = []
+X2 = genX(2)
+for matNum in range(0, 3000):
+    M = sumOfPaulisAndPhases(matNum, [genI(2), genX(2), genY(2), genZ(2)], [0.5+0.5j, 0.5-0.5j, -0.5+0.5j, -0.5-0.5j])
+    MString = sumOfPaulisAndPhasesString(matNum, ["I", "X", "Y", "Z"], ["(0.5+0.5j)", "(0.5-0.5j)", "(-0.5+0.5j)", "(-0.5-0.5j)"])
+    expanded = M
+    if len(mat1Inds) == 0:
+        if np.allclose(expanded, opToFind1):
+            mat1Inds.append(matNum)
+            print("Found mat1: ", matNum, MString)
+    if len(mat2Inds) == 0:
+        if np.allclose(expanded, opToFind2):
+            mat2Inds.append(matNum)
+            print("Found mat2: ", matNum, MString)
+    if len(mat3Inds) == 0:
+        if np.allclose(expanded, opToFind3):
+            mat3Inds.append(matNum)
+            print("Found mat3: ", matNum, MString)
+    if len(mat4Inds) == 0:
+        if np.allclose(expanded, opToFind4):
+            mat4Inds.append(matNum)
+            print("Found mat4: ", matNum, MString)
+
 print()
-
-print("Original vectors:")
-print(M_2)
-print("Desired eigenvalues:")
-print(vals)
-print("Operator:")
-print(opToFind2)
-print("Eigenvectors:")
-print(findEigenvectors(opToFind2))
-print("Eigenvalues:")
-print(np.linalg.eig(opToFind2)[0])
-print("Back as an operator:")
-print(findOperator(findEigenvectors(opToFind2), np.linalg.eig(opToFind2)[0]))
-print()
-
-print("Original vectors:")
-print(M_3)
-print("Operator:")
-print(opToFind3)
-print("Eigenvectors:")
-print(findEigenvectors(opToFind3))
-print()
-
-print("Original vectors:")
-print(M_4)
-print("Operator:")
-print(opToFind4)
-print("Eigenvectors:")
-print(findEigenvectors(opToFind4))
-print()
-
-exit()
-
-for matNum in range(1, 100):
-    M = matrixFromNumber(matNum)
-    print(matNum, stringFromNumber(matNum))
-    print(M)
-    if np.allclose(M, opToFind):
-        print(matNum)
-        print("Found it!")
-        break
-
-exit()
-
-minOverall = 1000
-maxNum = 30
-# for matNum1 in range(1, maxNum):
-for matNum1 in range(1):
-    # for matNum2 in range(1, maxNum):
-    for matNum2 in range(1):
-        # for matNum3 in range(1, maxNum):
-        for matNum3 in range(1):
-            # for matNum4 in range(1, maxNum):
-            for matNum4 in range(1):
-
-                # Define the M matrix list
-                M = []
-                M.append(Z)
-                M.append(X)
-                M.append(Z@X)
-                M.append(Z@Z@X)
-                # M.append(Z@(Z@(Z@X)))
-                # M.append(Z@(Z@(Z@(X@(Z@(Z@Z))))))
-                # M.append(matrixFromNumber(matNum1))
-                # M.append(matrixFromNumber(matNum2))
-                # M.append(matrixFromNumber(matNum3))
-                # M.append(matrixFromNumber(matNum4))
-                n = len(M)
-
-                # Print the eigenvectors
-                # print()
-                eigenvecs = [None] * n
-                for i in range(n):
-                    eigenvecs[i] = np.linalg.eig(M[i])[1]
-                    # for j in range(d):
-                        # print(eigenvecs[i][:, j])
-
-                # Calculate the inner products
-                maxError = 0
-                for i in range(n):
-                    for j in range(i+1, n):
-                        for k in range(d):
-                            for l in range(d):
-                                innerProduct = np.dot(eigenvecs[i][:, k], eigenvecs[j][:, l])
-                                innerProduct = np.abs(innerProduct) - 1.0 / np.sqrt(d)
-                                if innerProduct > maxError:
-                                    maxError = innerProduct
-
-                print("Max error: ", maxError)
-                minOverall = min(minOverall, maxError)
-
-print("Min overall: ", minOverall)
+print("Mat1: ", mat1Inds)
+print("Mat2: ", mat2Inds)
+print("Mat3: ", mat3Inds)
+print("Mat4: ", mat4Inds)
 
