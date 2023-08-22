@@ -4073,26 +4073,44 @@ public:
 
 		// Add these all to the top row of a moment matrix
 		std::vector<Polynomial<double>> toAdd;
-		toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
-		for (int j=0; j<possibleMonoms.size(); j++) {
-			toAdd.push_back(Polynomial<polyType>(maxVariables, 1, possibleMonoms[j]));
+		if (possibleMonoms.size() > 0) {
+			toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
+			for (int j=0; j<possibleMonoms.size(); j++) {
+				toAdd.push_back(Polynomial<polyType>(maxVariables, 1, possibleMonoms[j]));
+			}
+			monomProducts.push_back(toAdd);
 		}
-		monomProducts.push_back(toAdd);
+
+		// Determine the outer bound for all variables
+		std::pair<double,double> generalBounds = {0,0};
+		for (int i=0; i<obj.maxVariables; i++) {
+			if (varBounds[i].second > generalBounds.second) {
+				generalBounds.second = varBounds[i].second;
+			}
+			if (varBounds[i].first < generalBounds.first) {
+				generalBounds.first = varBounds[i].first;
+			}
+		}
 
 		// Start with the most general area
 		double maxArea = 1;
 		std::vector<std::vector<std::pair<double,double>>> toProcess;
 		for (int i=0; i<obj.maxVariables; i++) {
-			maxArea *= varBounds[i].second-varBounds[i].first;
+			if (varIsBinary[i]) {
+				maxArea *= 2;
+			} else {
+				maxArea *= varBounds[i].second-varBounds[i].first;
+			}
 		}
 		toProcess.push_back(varBounds);
 
 		// Verbose output
-		if (verbosity >= 2) {
-			std::cout << "Extra PSD matrices: " << std::endl;
+		if (verbosity >= 2 && monomProducts.size() > 0) {
+			std::cout << "Moment matrices: " << std::endl;
 			for (int i=0; i<monomProducts.size(); i++) {
 				std::cout << monomProducts[i] << std::endl;
 			}
+			std::cout << std::endl;
 		}
 
 		// Create the PSD matrices from this list
@@ -4262,7 +4280,7 @@ public:
 		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
 
 		// Create the variable
-		mosek::fusion::Variable::t xM = M->variable(varsTotal);
+		mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(generalBounds.first, generalBounds.second));
 
 		// Use an extra variable to minimize violation of SD
 		mosek::fusion::Variable::t lambda = M->variable();
@@ -4364,7 +4382,15 @@ public:
 			// The area taken up by this section
 			areaCovered = 1;
 			for (int k=0; k<toProcess[0].size(); k++) {
-				areaCovered *= toProcess[0][k].second - toProcess[0][k].first;
+				if (varIsBinary[k]) {
+					if (toProcess[0][k].first == toProcess[0][k].second) {
+						areaCovered *= 1.0;
+					} else {
+						areaCovered *= 2.0;
+					}
+				} else {
+					areaCovered *= toProcess[0][k].second - toProcess[0][k].first;
+				}
 			}
 
 			// The new parameterized constraint vectors
@@ -4409,9 +4435,6 @@ public:
 			auto statProb = M->getProblemStatus();
 			auto statSol = M->getPrimalSolutionStatus();
 
-			// Update the total area count
-			totalArea += areaCovered;
-
 			// If the problem was feasible, extract the result and figure out where to split
 			if (statProb == mosek::fusion::ProblemStatus::PrimalAndDualFeasible && statSol == mosek::fusion::SolutionStatus::Optimal) {
 
@@ -4453,7 +4476,6 @@ public:
 					// Output if verbose
 					if (verbosity >= 2) {
 						std::cout << "    eval at this point: " << objEval << std::endl;
-						std::cout << "    upper bound: " << upperBound << std::endl;
 					}
 
 				}
@@ -4468,7 +4490,7 @@ public:
 				double biggestError = -10000;
 				int bestInd = -1;
 				for (int i=0; i<maxVariables; i++) {
-					if (errors[i] > biggestError) {
+					if (errors[i] > biggestError && toProcess[0][i].first != toProcess[0][i].second) {
 						biggestError = errors[i];
 						bestInd = i;
 					}
@@ -4479,7 +4501,7 @@ public:
 					std::cout << "    errors: " << errors << std::endl;
 				}
 
-				// If the area could still contain the min
+				// If the area could still contain the min TODO
 				if (objPrimal < upperBound) {
 
 					// Split it 
@@ -4487,7 +4509,6 @@ public:
 					double maxPoint = toProcess[0][bestInd].second;
 					double midPoint = (minPoint + maxPoint) / 2.0;
 					double mostFeasiblePoint = solVec[firstMonomInds[bestInd]];
-					double distanceBetween = mostFeasiblePoint - midPoint;
 					double splitPoint = mostFeasiblePoint;
 					if (verbosity >= 2) {
 						std::cout << "    splitting var " << bestInd << " at " << splitPoint << std::endl;
@@ -4507,7 +4528,7 @@ public:
 					}
 
 					// Add the new paths to the queue, lowest lowerBound first
-					int queueLoc = 1;
+					int queueLoc = toProcess.size();
 					for (int i=1; i<toProcess.size(); i++) {
 						if (objPrimal < lowerBounds[i]) {
 							queueLoc = i;
@@ -4519,26 +4540,22 @@ public:
 					lowerBounds.insert(lowerBounds.begin()+queueLoc, objPrimal);
 					lowerBounds.insert(lowerBounds.begin()+queueLoc, objPrimal);
 
+				// Otherwise we can say that this region is done
+				} else {
+					totalArea += areaCovered;
+
 				}
 
 			// If it's infeasible
 			} else {
+				totalArea += areaCovered;
 				totalAreaInfeasible += areaCovered;
 			}
 
 			// The lower bound is the lowest lower bound
 			lowerBound = lowerBounds[0];
 
-			// If we've converged
-			if (std::abs(lowerBound - upperBound) < 1e-5) {
-				if (verbosity >= 1) {
-					std::cout << std::endl;
-				}
-				return {upperBound, bestFeasiblePoint};
-			}
-
 			// Time estimation
-			totalArea += areaCovered;
 			end = std::chrono::steady_clock::now();
 			secondsPerIter = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / (iter * 1.0e6);
 			double areaPerIter = totalArea / iter;
@@ -4548,9 +4565,17 @@ public:
 			// Per-iteration output
 			std::cout << std::defaultfloat;
 			if (verbosity >= 2) {
-				std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * totalAreaInfeasible / maxArea << "%  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << lowerBound << " <= " << upperBound << "\n" << std::flush;
+				std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * totalAreaInfeasible / maxArea << "%  " << representTime(secondsPerIter) << "/i  " << representTime(secondsRemaining) << "  " << lowerBound << " <= " << upperBound << "\n" << std::flush;
 			} else if (verbosity >= 1) {
-				std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * totalAreaInfeasible / maxArea << "%  " << representTime(secondsPerIter) << "/i  " << numIllPosed << "  " << representTime(secondsRemaining) << "  " << lowerBound << " <= " << upperBound << "          \r" << std::flush;
+				std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * totalAreaInfeasible / maxArea << "%  " << representTime(secondsPerIter) << "/i  " << representTime(secondsRemaining) << "  " << lowerBound << " <= " << upperBound << "          \r" << std::flush;
+			}
+
+			// If we've converged
+			if (std::abs(lowerBound - upperBound) < 1e-5) {
+				if (verbosity >= 1) {
+					std::cout << std::endl;
+				}
+				return {upperBound, bestFeasiblePoint};
 			}
 
 			// Remove the one we just processed
