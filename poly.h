@@ -2260,7 +2260,15 @@ private:
 		} else if (numSeconds < 3.156e+7) {
 			return std::to_string(int(numSeconds / 2.628e6)) + "mo";
 		} else {
-			return std::to_string(long(numSeconds / 3.156e+7)) + "y";
+			double numYears = numSeconds / 3.156e+7;
+			int mag = int(std::log10(numYears));
+			if (mag < 0) {
+				return "?s";
+			} else if (numYears < 1e6) {
+				return std::to_string(long(numYears)) + "y";
+			} else {
+				return "10^" + std::to_string(mag) + "y";
+			}
 		}
 	}
 
@@ -3993,7 +4001,7 @@ public:
 	}
 
 	// Minimize using branch and bound plus SDP TODO
-	std::pair<polyType, std::vector<polyType>> minimize(int level=1, int verbosity=1, int maxIters=-1) {
+	std::pair<polyType, std::vector<polyType>> optimize(int level=1, int verbosity=1, int maxIters=-1) {
 
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
@@ -4282,9 +4290,6 @@ public:
 		// Create the variable
 		mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(generalBounds.first, generalBounds.second));
 
-		// Use an extra variable to minimize violation of SD
-		mosek::fusion::Variable::t lambda = M->variable();
-
 		// If the variables should be constrained
 		for (int i=0; i<maxVariables; i++) {
 
@@ -4564,10 +4569,18 @@ public:
 
 			// Per-iteration output
 			std::cout << std::defaultfloat;
-			if (verbosity >= 2) {
-				std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * totalAreaInfeasible / maxArea << "%  " << representTime(secondsPerIter) << "/i  " << representTime(secondsRemaining) << "  " << lowerBound << " <= " << upperBound << "\n" << std::flush;
-			} else if (verbosity >= 1) {
-				std::cout << iter << "i  " << 100.0 * totalArea / maxArea << "%  " << 100.0 * totalAreaInfeasible / maxArea << "%  " << representTime(secondsPerIter) << "/i  " << representTime(secondsRemaining) << "  " << lowerBound << " <= " << upperBound << "          \r" << std::flush;
+			if (verbosity >= 1) {
+				std::cout << iter << "i"
+							<< " * " << representTime(secondsPerIter) << "/i" 
+							<< " = " << representTime(iter*secondsPerIter)
+							<< "   cov:" << 100.0 * totalArea / maxArea << "%" 
+							<< "   est:" << representTime(secondsRemaining) << "  " 
+							<< lowerBound << " <= " << upperBound;
+				if (verbosity >= 2) {
+					std::cout << std::endl;
+				} else {
+					std::cout << "\r" << std::flush;
+				}
 			}
 
 			// If we've converged
@@ -4585,19 +4598,20 @@ public:
 			// Keep track of the iteration number
 			iter++;
 			if (maxIters >= 0 && iter > maxIters) {
+				if (verbosity >= 1 && verbosity < 2) {
+					std::cout << std::endl;
+				}
 				break;
 			}	
 
 		}
 
-		// Output the time taken
-		if (verbosity >= 1) { 
-			std::cout << std::endl;
-			std::cout << representTime(iter * secondsPerIter) << std::endl;
-		}
-
 		// If we got here it's infeasible
-		return {0.0, {}};
+		if (totalAreaInfeasible == totalArea) {
+			return {0.0, {}};
+		} else {
+			return {upperBound, bestFeasiblePoint};
+		}
 
 	}
 

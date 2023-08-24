@@ -9,6 +9,7 @@ int main(int argc, char ** argv) {
 	int level = 1;
 	int maxIters = -1;
 	bool bruteForce = false;
+	bool benchmark = false;
 	std::string filename = "";
 	for (int i=0; i<argc; i++) {
 		std::string arg = argv[i];
@@ -19,6 +20,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -i [int]    set the maximum number of iterations" << std::endl;
 			std::cout << " -f [str]    load the coefficients from a file" << std::endl;
 			std::cout << " -b          brute force to find the optimum" << std::endl;
+			std::cout << " -B          output benchmarking info" << std::endl;
 			std::cout << " -r          use a random seed" << std::endl;
 			return 0;
 		} else if (arg == "-n" && i+1 < argc) {
@@ -38,6 +40,8 @@ int main(int argc, char ** argv) {
 		} else if (arg == "-i" && i+1 < argc) {
 			maxIters = std::stoi(argv[i+1]);
 			i++;
+		} else if (arg == "-B") {
+			benchmark = true;
 		} else if (arg == "-r") {
 			std::srand(time(0));
 		}
@@ -110,10 +114,13 @@ int main(int argc, char ** argv) {
 	}
 
 	// Optimize using branch and bound
-	auto res2 = prob.minimize(level, verbosity, maxIters);
-	std::cout << "From branch and bound:" << std::endl;
-	std::cout << res2.first << " " << res2.second << std::endl;
-	std::cout << std::endl;
+	auto res2 = prob.optimize(level, verbosity, maxIters);
+	if (!benchmark) {
+		std::cout << std::endl;
+		std::cout << "From branch and bound:" << std::endl;
+		std::cout << res2.first << " " << res2.second << std::endl;
+		std::cout << std::endl;
+	}
 
 	return 0;
 
