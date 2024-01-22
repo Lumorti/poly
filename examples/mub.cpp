@@ -5,7 +5,7 @@ int main(int argc, char ** argv) {
 
 	// Get the problem from the args
 	int d = 2;
-	int n = 4;
+	int n = 3;
 	int task = 0;
 	int maxIters = -1;
 	int verbosity = 1;
@@ -35,7 +35,7 @@ int main(int argc, char ** argv) {
 			std::cout << "             0 = try to find a feasible point" << std::endl;
 			std::cout << "             1 = try to prove infeasiblity" << std::endl;
 			std::cout << "             2 = perform a redundancy analysis" << std::endl;
-			std::cout << "             3/4/5 = testing binarization" << std::endl;
+			std::cout << "             3 = redundancy analysis with S-lemma" << std::endl;
 			std::cout << "             6 = trig poly test" << std::endl;
 			std::cout << " -N [str]    set the basis sizes e.g. 2,1,1,1" << std::endl;
 			std::cout << " -l [str]    set the level for the relaxation e.g. 1+2f,3p" << std::endl;
@@ -542,7 +542,11 @@ int main(int argc, char ** argv) {
 	}
 
 	// Combine these equations into a single object
-	PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, orderingCons);
+	//PolynomialProblem<double> prob(Polynomial<double>(numVars), eqns, orderingCons);
+    PolynomialProblem<double> prob(numVars);
+    prob.obj = Polynomial<double>(numVars);
+    prob.conZero = eqns;
+    prob.conPositive = orderingCons;
 
 	// Use as few indices as possible
 	std::unordered_map<int,int> reducedMap = prob.getMinimalMap();
@@ -845,43 +849,65 @@ int main(int argc, char ** argv) {
 
 		}
 
-	// If told to turn it into a binary problem
-	} else if (task == 3 || task == 4 || task == 5) {
+	// If checking redundancy with the s-lemma TODO
+	} else if (task == 3) {
 
-		// Binarize
-		prob.toBinaryProblem(numBits, 1.0/std::sqrt(d), verbosity);
+        // f(x) -> x^TFx + x^Tg + h
+        std::vector<std::vector<std::vector<double>>> inQuadForm;
+        int matSize = prob.maxVariables+1;
+        for (int i=0; i<prob.conZero.size(); i++) {
+            std::vector<std::vector<double>> newQuad(matSize, std::vector<double>(matSize, 0.0));
+            for (auto const &pair: prob.conZero[i].coeffs) {
+                if (pair.first.size() == 0) {
+                    newQuad[matSize-1][matSize-1] += pair.second;
+                } else if (pair.first.size() == prob.conZero[i].digitsPerInd) {
+                    int ind1 = std::stoi(pair.first.substr(0, prob.conZero[i].digitsPerInd));
+                    newQuad[ind1][matSize-1] += 0.5*pair.second;
+                    newQuad[matSize-1][ind1] += 0.5*pair.second;
+                } else if (pair.first.size() == 2*prob.conZero[i].digitsPerInd) {
+                    int ind1 = std::stoi(pair.first.substr(0, prob.conZero[i].digitsPerInd));
+                    int ind2 = std::stoi(pair.first.substr(prob.conZero[i].digitsPerInd, prob.conZero[i].digitsPerInd));
+                    newQuad[ind1][ind2] += 0.5*pair.second;
+                    newQuad[ind2][ind1] += 0.5*pair.second;
+                }
+            }
+            inQuadForm.push_back(newQuad);
+        }
 
-		if (verbosity >= 2) {
-			std::cout << std::endl;
-			std::cout << "---------------------" << std::endl;
-			std::cout << "Binarized Problem: " << std::endl;
-			std::cout << "---------------------" << std::endl;
-			std::cout << prob << std::endl;
-			std::cout << "---------------------" << std::endl;
-			std::cout << "Summary:" << std::endl;
-			std::cout << "---------------------" << std::endl;
-		}
-		if (verbosity >= 1) {
-			std::cout << "binary vars: " << prob.maxVariables << ", equations: " << eqns.size() << std::endl;
-		}
-		if (verbosity >= 2) {
-			std::cout << std::endl;
-			std::cout << "---------------------" << std::endl;
-			std::cout << "Optimisation:" << std::endl;
-			std::cout << "---------------------" << std::endl;
-		}
+        // Convert all to mosek form
+		std::vector<std::shared_ptr<monty::ndarray<double,2>>> inQuadFormM(inQuadForm.size());
+        for (int i=0; i<inQuadForm.size(); i++) {
+			inQuadFormM[i] = monty::new_array_ptr<double>(inQuadForm[i]);
+        }
 
-		// Brute force if told to
-		if (task == 4) {
-			auto res = prob.bruteForce();
-			std::cout << res.first << std::endl;
-			std::cout << res.second << std::endl;
+        // Which constraint to to try to remove
+        int toRemove = 1;
 
-		// Otherwise try to prove infeasible branch and bound
-		} else if (task == 5) {
-			prob.proveInfeasibleBinary(maxIters, level, 1.0/std::sqrt(d), fileName, verbosity, numToSplit);
+        // Create a model
+		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
 
-		}
+		// Create the variable
+        int varsTotal = prob.conZero.size()-1;
+		mosek::fusion::Variable::t tM = M->variable(varsTotal, mosek::fusion::Domain::greaterThan(0.0));
+
+        // Sum of all quad forms scaled with t
+        mosek::fusion::Expression::t quadSum = mosek::fusion::Expr::constTerm(inQuadFormM[toRemove]);
+        int tInd = 0;
+        for (int i=0; i<inQuadFormM.size(); i++) {
+            if (i != toRemove) {
+                quadSum = mosek::fusion::Expr::sub(quadSum, mosek::fusion::Expr::mul(tM->index(tInd), mosek::fusion::Matrix::dense(inQuadFormM[i])));
+                tInd++;
+            }
+        }
+        M->constraint(quadSum, mosek::fusion::Domain::inPSDCone());
+
+        // Solve the problem
+        M->objective(mosek::fusion::ObjectiveSense::Minimize, mosek::fusion::Expr::constTerm(0.0));
+        M->solve();
+        auto statProb = M->getProblemStatus();
+        auto statSol = M->getPrimalSolutionStatus();
+
+        std::cout << "status = " << statProb << " " << statSol << std::endl;
 
 	// If told to prove the search space is infeasible
 	} else if (task == 1) {
