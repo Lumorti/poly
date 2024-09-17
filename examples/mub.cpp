@@ -22,13 +22,14 @@ int main(int argc, char ** argv) {
 	bool noNorm = false;
 	bool noNormExtra = false;
 	double addConstant = 0.0;
+    bool asAMPL = false;
 	std::string givenSizes = "";
 	std::string solver = "mosek";
 	std::string level = "1f";
 	std::string fileName = "";
 	for (int i=0; i<argc; i++) {
 		std::string arg = argv[i];
-		if (arg == "-h") {
+		if (arg == "-h" || arg == "--help") {
 			std::cout << " -d [int]    set the dimension" << std::endl;
 			std::cout << " -n [int]    set the number of bases" << std::endl;
 			std::cout << " -m [int]    change the mode:" << std::endl;
@@ -49,6 +50,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -c [int]    set the number of cores to use" << std::endl;
 			std::cout << " -o [str]    log points to a csv file" << std::endl;
 			std::cout << " -B [int]    set number of bits to use for the binarization" << std::endl;
+			std::cout << " -M          just output as AMPL" << std::endl;
 			std::cout << " -r          use a random seed" << std::endl;
 			std::cout << " -1          don't assume the first basis is the computational" << std::endl;
 			std::cout << " -2          don't assume the first vector of the second basis is uniform" << std::endl;
@@ -61,6 +63,8 @@ int main(int argc, char ** argv) {
 		} else if (arg == "-d" && i+1 < argc) {
 			d = std::stoi(argv[i+1]);
 			i++;
+        } else if (arg == "-M") {
+            asAMPL = true;
 		} else if (arg == "-n" && i+1 < argc) {
 			n = std::stoi(argv[i+1]);
 			i++;
@@ -153,7 +157,7 @@ int main(int argc, char ** argv) {
 
 	}
 
-	// If told to start from the eigenbases of X,Z,XZ etc. TODO
+	// If told to start from the eigenbases of X,Z,XZ etc.
 	if (debugFlag) {
 
 		// Find the prime factorisation of d
@@ -511,7 +515,7 @@ int main(int argc, char ** argv) {
 
 	// Convert these symmetries into constraints which break them
 	std::vector<Polynomial<double>> orderingCons;
-	if (task == 1) {
+	if (task == 1 || asAMPL) {
 		for (int i=0; i<syms.size(); i++) {
 
 			// If the indices are the same, this means the sum should be positive
@@ -577,6 +581,30 @@ int main(int argc, char ** argv) {
 		std::cout << "set sizes: " << basisSizes << ", vars: " << prob.maxVariables << ", vectors: " << numVectors << ", equations: " << eqns.size() << std::endl;
 		std::cout << "num norm eqns: " << normList.size() << ", num extra norm eqns: " << normListExtras.size() << std::endl;
 	}
+
+    // If told to just output as AMPL TODO
+    if (asAMPL) {
+        double bound = 1 / std::sqrt(d);
+        std::cout << "----------------------------------------------------" << std::endl;
+        std::cout << "               BEGIN AMPL " << std::endl;
+        std::cout << "----------------------------------------------------" << std::endl;
+        std::cout << "option baron_options \"maxtime=25200\";" << std::endl;
+        for (int i=0; i<prob.maxVariables; i++) {
+            std::cout << "var x" << i << " >= -" << bound << " <= " << bound << ";" << std::endl;
+        }
+        std::cout << "minimize dummy_obj: 0;" << std::endl;
+        for (int i=0; i<prob.conZero.size(); i++) {
+            std::cout << "subject to eqn" << i << ": " << prob.conZero[i].asAMPL() << " = 0;" << std::endl;
+        }
+        for (int i=0; i<prob.conPositive.size(); i++) {
+            std::cout << "subject to pos" << i << ": " << prob.conPositive[i].asAMPL() << " >= 0;" << std::endl;
+        }
+        std::cout << "solve;" << std::endl;
+        std::cout << "----------------------------------------------------" << std::endl;
+        std::cout << "               END AMPL " << std::endl;
+        std::cout << "----------------------------------------------------" << std::endl;
+        return 0;
+    }
 
 	// If told to find a feasible point
 	if (task == 0) {
@@ -849,7 +877,7 @@ int main(int argc, char ** argv) {
 
 		}
 
-	// If checking redundancy with the s-lemma TODO
+	// If checking redundancy with the s-lemma
 	} else if (task == 3) {
 
         // f(x) -> x^TFx + x^Tg + h

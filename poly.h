@@ -1456,7 +1456,64 @@ public:
 		return toReturn;
 
 	}
-	
+
+	// Output in a form suitable for use elsewhere
+	std::string asAMPL() const {
+
+		// For each term
+		std::string toReturn = "";
+		int numSoFar = 0;
+		for (auto const &pair: coeffs) {
+            
+            // Make sure it's not zero
+            if (std::abs(pair.second) < zeroTol) {
+                continue;
+            }
+
+			// If it contains at least one variable
+			if (pair.first != "") {
+
+				// First the coeff
+				if (pair.second != 1) {
+					toReturn += std::to_string(pair.second);
+					toReturn += "*";
+				}
+
+				// Then the indices
+				for (int i=0; i<pair.first.size(); i+=digitsPerInd) {
+					toReturn += "x";
+					toReturn += pair.first.substr(i, digitsPerInd);
+					if (i < pair.first.size()-digitsPerInd) {
+						toReturn += "*";
+					}
+				}
+
+			// For the constant, don't need any variables
+			} else {
+				toReturn += std::to_string(pair.second);
+			}
+
+			// Output an addition on everything but the last
+			numSoFar += 1;
+			if (numSoFar < coeffs.size()) {
+				toReturn += "+";
+			}
+
+		}
+
+        // Filter out any spaces
+        std::string withoutSpaces = "";
+        for (int i=0; i<toReturn.size(); i++) {
+            if (toReturn[i] != ' ') {
+                withoutSpaces += toReturn[i];
+            }
+        }
+        toReturn = withoutSpaces;
+
+		return toReturn;
+
+	}
+
 	// Output in a form suitable for use elsewhere
 	std::string asLaTeX() const {
 
