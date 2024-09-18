@@ -2666,7 +2666,7 @@ public:
 		
 	}
 
-	// Find the exact solution through brute force TODO remove
+	// Find the exact solution through brute force 
 	std::pair<polyType,std::vector<int>> bruteForce() {
 
 		// If there's no objective, just look for a single valid point
@@ -2688,11 +2688,11 @@ public:
 		}
 
 		// For each possible set of variables
-		int numCombs = std::pow(2, maxVariables);
+		long numCombs = std::pow(2, maxVariables);
 		polyType bestVal = 10000000;
 		std::vector<int> bestSol(maxVariables, 0);
-		int outputEvery = std::max(1, numCombs / 10000);
-		for (int k=0; k<numCombs; k++) {
+		long outputEvery = std::max(long(1), numCombs / 10000);
+		for (long int k=0; k<numCombs; k++) {
 
 			// Convert to -1/1
 			std::vector<int> sol(maxVariables, -1);
@@ -2716,7 +2716,6 @@ public:
 
 				// Get the objective value
 				double objVal = obj.eval(sol);
-
 
 				// If there's no objective, finding a feasible point is enough
 				if (noObj) {
@@ -4506,7 +4505,7 @@ public:
 					std::cout << "    errors: " << errors << std::endl;
 				}
 
-				// If the area could still contain the min TODO
+				// If the area could still contain the min
 				if (objPrimal < upperBound) {
 
 					// Split it 
@@ -4598,16 +4597,16 @@ public:
 			// Keep track of the iteration number
 			iter++;
 			if (maxIters >= 0 && iter > maxIters) {
-				if (verbosity >= 1 && verbosity < 2) {
-					std::cout << std::endl;
-				}
 				break;
 			}	
 
 		}
 
 		// If we got here it's infeasible
-		if (totalAreaInfeasible == totalArea) {
+		if (verbosity >= 1) {
+			std::cout << std::endl;
+		}
+		if (std::abs(totalAreaInfeasible - maxArea) < 1e-5) {
 			return {0.0, {}};
 		} else {
 			return {upperBound, bestFeasiblePoint};
