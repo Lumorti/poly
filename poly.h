@@ -1680,11 +1680,6 @@ public:
 
 	}
 
-	// Turn the polynomial into a trig polynomial and then check for SOS TODO
-	bool checkMonovariableTrigSOS(std::vector<std::tuple<int,int,double>> norms) {
-		return false;
-	}
-
 	// When doing std::cout << Polynomial
 	friend std::ostream &operator<<(std::ostream &output, const Polynomial &other) {
 		output << other.asString();
@@ -4753,6 +4748,50 @@ public:
 			if (level[i] == '+') {
 				levelsToInclude.push_back(std::stoi(currentThing));
 				currentThing = "";
+
+			// If told to do a certain level for each individual constraint TODO
+			} else if (level[i] == 's') {
+
+				// Add whatever numbers are left
+				levelsToInclude.push_back(std::stoi(currentThing));
+
+                // Get the maximum level
+                int l = 1;
+                for (int j=0; j<levelsToInclude.size(); j++) {
+                    l = std::max(l, levelsToInclude[j]);
+                }
+
+                // For each linear constraint
+                for (int j=0; j<conZero.size(); j++) {
+                    std::vector<int> possibleVars = conZero[j].getVariables();
+                    std::vector<Polynomial<polyType>> asPolys = {Polynomial<polyType>(maxVariables, 1)};
+                    if (l >= 1) {
+                        for (int k=0; k<possibleVars.size(); k++) {
+                            asPolys.push_back(Polynomial<polyType>(maxVariables, 1, {possibleVars[k]}));
+                        }
+                    }
+                    if (l >= 2) {
+                        for (int k=0; k<possibleVars.size(); k++) {
+                            for (int m=k; m<possibleVars.size(); m++) {
+                                asPolys.push_back(Polynomial<polyType>(maxVariables, 1, {possibleVars[k], possibleVars[m]}));
+                            }
+                        }
+                    }
+                    if (l >= 3) {
+                        for (int k=0; k<possibleVars.size(); k++) {
+                            for (int m=k; m<possibleVars.size(); m++) {
+                                for (int n=m; n<possibleVars.size(); n++) {
+                                    asPolys.push_back(Polynomial<polyType>(maxVariables, 1, {possibleVars[k], possibleVars[m], possibleVars[n]}));
+                                }
+                            }
+                        }
+                    }
+                    monomProducts.push_back(asPolys);
+                }
+
+                // Reset things
+                currentThing = "";
+                levelsToInclude = {};
 
 			// p for a partial level
 			} else if (level[i] == 'p') {

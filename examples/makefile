@@ -10,22 +10,22 @@ LIBS=$(LIBSEIGEN) $(LIBSOPTIM) $(LIBSMOSEK) $(LIBSSCS) $(LIBSOMP)
 
 all: mub simple sos ising
 
-mubdebug: mub.cpp
+mubdebug: mub.cpp ../poly.h
 	$(CXX) $(DEBUGFLAGS) -o mub mub.cpp $(LIBS) 
 
-mub: mub.cpp
+mub: mub.cpp ../poly.h
 	$(CXX) $(CXXFLAGS) -o mub mub.cpp $(LIBS) 
 
-simple: simple.cpp
+simple: simple.cpp ../poly.h
 	$(CXX) $(CXXFLAGS) -o simple simple.cpp $(LIBS) 
 
-matrices: matrices.cpp
+matrices: matrices.cpp ../poly.h
 	$(CXX) $(CXXFLAGS) -o matrices matrices.cpp $(LIBS) 
 
-sos: sos.cpp
+sos: sos.cpp ../poly.h
 	$(CXX) $(CXXFLAGS) -o sos sos.cpp $(LIBS) 
 
-ising: ising.cpp
+ising: ising.cpp ../poly.h
 	$(CXX) $(CXXFLAGS) -o ising ising.cpp $(LIBS) 
 
 
