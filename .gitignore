@@ -3,6 +3,7 @@
 examples/mub
 examples/simple
 examples/sos
+examples/casual
 examples/matrices
 examples/isingFiles/*
 
