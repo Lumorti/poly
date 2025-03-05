@@ -8,7 +8,7 @@ LIBSMOSEK= -I${MSKHOME}/h -L${MSKHOME}/bin -Wl,-rpath-link,${MSKHOME}/bin -Wl,-r
 LIBSOPTIM= -I${OPTIMHOME}/include/ -L${OPTIMHOME} -loptim
 LIBS=$(LIBSEIGEN) $(LIBSOPTIM) $(LIBSMOSEK) $(LIBSSCS) $(LIBSOMP)
 
-all: mub simple sos ising
+all: mub simple sos ising causal
 
 mubdebug: mub.cpp ../poly.h
 	$(CXX) $(DEBUGFLAGS) -o mub mub.cpp $(LIBS) 
@@ -28,4 +28,5 @@ sos: sos.cpp ../poly.h
 ising: ising.cpp ../poly.h
 	$(CXX) $(CXXFLAGS) -o ising ising.cpp $(LIBS) 
 
-
+causal: causal.cpp ../poly.h
+	$(CXX) $(CXXFLAGS) -o causal causal.cpp $(LIBS)
