@@ -4,10 +4,21 @@
 #include <stdexcept>
 #include <iostream>
 
-// Generic addition of two vector of vectors
+// Addition of two matrices of polynomials
+std::vector<std::vector<Polynomial<double>>> operator+(const std::vector<std::vector<Polynomial<double>>>& A, const std::vector<std::vector<Polynomial<double>>>& B) {
+    std::vector<std::vector<Polynomial<double>>> C(A.size(), std::vector<Polynomial<double>>(A[0].size(), Polynomial<double>(A[0][0].maxVariables)));
+    for (int i=0; i<A.size(); i++) {
+        for (int j=0; j<A[0].size(); j++) {
+            C[i][j] = A[i][j] + B[i][j];
+        }
+    }
+    return C;
+}
+
+// Generic addition of two matrices
 template <typename T>
 std::vector<std::vector<T>> operator+(const std::vector<std::vector<T>>& A, const std::vector<std::vector<T>>& B) {
-    std::vector<std::vector<T>> C(A.size(), std::vector<T>(A[0].size(), T(0)));
+    std::vector<std::vector<T>> C(A.size(), std::vector<T>(A[0].size()));
     for (int i=0; i<A.size(); i++) {
         for (int j=0; j<A[0].size(); j++) {
             C[i][j] = A[i][j] + B[i][j];
@@ -17,6 +28,15 @@ std::vector<std::vector<T>> operator+(const std::vector<std::vector<T>>& A, cons
 }
 
 // Trace of a matrix
+Polynomial<double> trace(const std::vector<std::vector<Polynomial<double>>>& A) {
+    Polynomial<double> tr(A[0][0].maxVariables, 0);
+    for (int i=0; i<A.size(); i++) {
+        tr += A[i][i];
+    }
+    return tr;
+}
+
+// Generic trace of a matrix
 template <typename T>
 T trace(const std::vector<std::vector<T>>& A) {
     T tr = T(0);
@@ -26,10 +46,9 @@ T trace(const std::vector<std::vector<T>>& A) {
     return tr;
 }
 
-// Matrix product of two matrices
-template <typename T>
-std::vector<std::vector<T>> operator*(const std::vector<std::vector<T>>& A, const std::vector<std::vector<T>>& B) {
-    std::vector<std::vector<T>> C(A.size(), std::vector<T>(B[0].size(), T(0)));
+// Matrix product of two matrices of polynomials
+std::vector<std::vector<Polynomial<double>>> operator*(const std::vector<std::vector<Polynomial<double>>>& A, const std::vector<std::vector<Polynomial<double>>>& B) {
+    std::vector<std::vector<Polynomial<double>>> C(A.size(), std::vector<Polynomial<double>>(B[0].size(), Polynomial<double>(A[0][0].maxVariables)));
     for (int i=0; i<A.size(); i++) {
         for (int j=0; j<B[0].size(); j++) {
             for (int k=0; k<A[0].size(); k++) {
@@ -40,10 +59,39 @@ std::vector<std::vector<T>> operator*(const std::vector<std::vector<T>>& A, cons
     return C;
 }
 
-// Tensor product of two matrices
+// Generic matrix product of two matrices
+template <typename T>
+std::vector<std::vector<T>> operator*(const std::vector<std::vector<T>>& A, const std::vector<std::vector<T>>& B) {
+    std::vector<std::vector<T>> C(A.size(), std::vector<T>(B[0].size()));
+    for (int i=0; i<A.size(); i++) {
+        for (int j=0; j<B[0].size(); j++) {
+            for (int k=0; k<A[0].size(); k++) {
+                C[i][j] += A[i][k]*B[k][j];
+            }
+        }
+    }
+    return C;
+}
+
+// Tensor product of two matrices of polynomials
+std::vector<std::vector<Polynomial<double>>> tensor(const std::vector<std::vector<Polynomial<double>>>& A, const std::vector<std::vector<Polynomial<double>>>& B) {
+    std::vector<std::vector<Polynomial<double>>> C(A.size()*B.size(), std::vector<Polynomial<double>>(A[0].size()*B[0].size(), Polynomial<double>(A[0][0].maxVariables)));
+    for (int i=0; i<A.size(); i++) {
+        for (int j=0; j<A[0].size(); j++) {
+            for (int k=0; k<B.size(); k++) {
+                for (int l=0; l<B[0].size(); l++) {
+                    C[i*B.size()+k][j*B[0].size()+l] = A[i][j]*B[k][l];
+                }
+            }
+        }
+    }
+    return C;
+}
+
+// Generic tensor product of two matrices
 template <typename T>
 std::vector<std::vector<T>> tensor(const std::vector<std::vector<T>>& A, const std::vector<std::vector<T>>& B) {
-    std::vector<std::vector<T>> C(A.size()*B.size(), std::vector<T>(A[0].size()*B[0].size(), T(0)));
+    std::vector<std::vector<T>> C(A.size()*B.size(), std::vector<T>(A[0].size()*B[0].size()));
     for (int i=0; i<A.size(); i++) {
         for (int j=0; j<A[0].size(); j++) {
             for (int k=0; k<B.size(); k++) {
@@ -157,9 +205,8 @@ int embedIndexWithSubsystem(int idx, int n, int d, int subsystem, int x) {
  *     std::vector<std::vector<double>> M = ...  // d^n x d^n
  *     auto partial = partialTrace(M, 3, 2, 1);  // trace out subsystem 1 in a 2^3 system
  */
-template <typename T>
-std::vector<std::vector<T>> partialTrace(
-    const std::vector<std::vector<T>>& mat,
+std::vector<std::vector<Polynomial<double>>> partialTrace(
+    const std::vector<std::vector<Polynomial<double>>>& mat,
     int n,
     int d,
     int subsystemToTraceOut
@@ -184,14 +231,14 @@ std::vector<std::vector<T>> partialTrace(
     for(int k = 0; k < n - 1; ++k) {
         dimPartial *= d;
     }
-    std::vector<std::vector<T>> result(dimPartial, std::vector<T>(dimPartial, T(0)));
+    std::vector<std::vector<Polynomial<double>>> result(dimPartial, std::vector<Polynomial<double>>(dimPartial, Polynomial<double>(mat[0][0].maxVariables, 0)));
 
     // For each row/col in the d^(n-1) x d^(n-1) partial trace,
     // we sum over x in [0, d-1], i.e. the index that was "traced out".
     for(int rowP = 0; rowP < dimPartial; ++rowP) {
         for(int colP = 0; colP < dimPartial; ++colP) {
 
-            T sumVal = T(0);
+            Polynomial<double> sumVal = Polynomial<double>(mat[0][0].maxVariables, 0);
 
             // Sum over all x (the basis states of the traced-out subsystem)
             for(int x = 0; x < d; ++x) {
@@ -226,9 +273,8 @@ std::vector<std::vector<T>> partialTrace(
  *   // Suppose we want B (x) A (x) C => p = {1,0,2}
  *   // We reorder a 2^3 x 2^3 matrix from ABC-basis to BAC-basis.
  */
-template <typename T>
-std::vector<std::vector<T>> reorderSubsystems(
-    const std::vector<std::vector<T>>& mat,
+std::vector<std::vector<Polynomial<double>>> reorderSubsystems(
+    const std::vector<std::vector<Polynomial<double>>>& mat,
     int n,
     int d,
     const std::vector<int>& p
@@ -258,7 +304,7 @@ std::vector<std::vector<T>> reorderSubsystems(
     }
 
     // 3) Allocate the new (reordered) matrix
-    std::vector<std::vector<T>> newMat(dimFull, std::vector<T>(dimFull, T(0)));
+    std::vector<std::vector<Polynomial<double>>> newMat(dimFull, std::vector<Polynomial<double>>(dimFull, Polynomial<double>(mat[0][0].maxVariables, 0)));
 
     // 4) For each row/col in the old matrix, determine where it goes in the new matrix
     for(int oldRow = 0; oldRow < dimFull; ++oldRow) {
@@ -439,21 +485,18 @@ int main(int argc, char ** argv) {
     for (int i=0; i<widthW; i++) {
         for (int j=i; j<widthW; j++) {
             prob.conZero.push_back(W_AI_AO[i][j] - W_AI[i][j]);
-            prob.conZero.push_back(W_AI_AO[j][i] - W_AI[j][i]);
         }
     }
     // W_{BI,BO} = W_{BI}
     for (int i=0; i<widthW; i++) {
         for (int j=i; j<widthW; j++) {
             prob.conZero.push_back(W_BI_BO[i][j] - W_BI[i][j]);
-            prob.conZero.push_back(W_BI_BO[j][i] - W_BI[j][i]);
         }
     }
     // W = W_{AI,AO,BI} + W_{AI,BI,BO} - W_{AI,BI}
     for (int i=0; i<widthW; i++) {
         for (int j=i; j<widthW; j++) {
             prob.conZero.push_back(W_AI_AO_BI[i][j] + W_AI_BI_BO[i][j] - W_AI_BI[i][j]);
-            prob.conZero.push_back(W_AI_AO_BI[j][i] + W_AI_BI_BO[j][i] - W_AI_BI[j][i]);
         }
     }
 
@@ -465,18 +508,14 @@ int main(int argc, char ** argv) {
     std::vector<std::vector<Polynomial<double>>> A_1_1_AI = partialTrace(As[3], 2, d, 1);
     std::vector<std::vector<Polynomial<double>>> A_0_sum = A_0_0_AI + A_0_1_AI;
     std::vector<std::vector<Polynomial<double>>> A_1_sum = A_1_0_AI + A_1_1_AI;
-    for (int i=0; i<widthA; i++) {
-        for (int j=i; j<widthA; j++) {
+    for (int i=0; i<A_0_sum.size(); i++) {
+        for (int j=i; j<A_0_sum.size(); j++) {
             if (i == j) {
                 prob.conZero.push_back(A_0_sum[i][j] - Polynomial<double>(numVars, 1));
-                prob.conZero.push_back(A_0_sum[j][i] - Polynomial<double>(numVars, 1));
                 prob.conZero.push_back(A_1_sum[i][j] - Polynomial<double>(numVars, 1));
-                prob.conZero.push_back(A_1_sum[j][i] - Polynomial<double>(numVars, 1));
             } else {
                 prob.conZero.push_back(A_0_sum[i][j]);
-                prob.conZero.push_back(A_0_sum[j][i]);
                 prob.conZero.push_back(A_1_sum[i][j]);
-                prob.conZero.push_back(A_1_sum[j][i]);
             }
         }
     }
@@ -489,18 +528,14 @@ int main(int argc, char ** argv) {
     std::vector<std::vector<Polynomial<double>>> B_1_1_BI = partialTrace(Bs[3], 2, d, 1);
     std::vector<std::vector<Polynomial<double>>> B_0_sum = B_0_0_BI + B_0_1_BI;
     std::vector<std::vector<Polynomial<double>>> B_1_sum = B_1_0_BI + B_1_1_BI;
-    for (int i=0; i<widthB; i++) {
-        for (int j=i; j<widthB; j++) {
+    for (int i=0; i<B_0_sum.size(); i++) {
+        for (int j=i; j<B_0_sum.size(); j++) {
             if (i == j) {
                 prob.conZero.push_back(B_0_sum[i][j] - Polynomial<double>(numVars, 1));
-                prob.conZero.push_back(B_0_sum[j][i] - Polynomial<double>(numVars, 1));
                 prob.conZero.push_back(B_1_sum[i][j] - Polynomial<double>(numVars, 1));
-                prob.conZero.push_back(B_1_sum[j][i] - Polynomial<double>(numVars, 1));
             } else {
                 prob.conZero.push_back(B_0_sum[i][j]);
-                prob.conZero.push_back(B_0_sum[j][i]);
                 prob.conZero.push_back(B_1_sum[i][j]);
-                prob.conZero.push_back(B_1_sum[j][i]);
             }
         }
     }
@@ -523,13 +558,121 @@ int main(int argc, char ** argv) {
     Polynomial<double> p_1_1_1_0 = trace(tensor(As[3], Bs[2]) * W);
     Polynomial<double> p_1_1_1_1 = trace(tensor(As[3], Bs[3]) * W);
     // GYNI = p(a = y, b = x)
-    prob.obj = p_0_0_0_0 + p_0_1_1_0 + p_1_0_0_1 + p_1_1_1_1;
+    prob.obj = 0.25*(p_0_0_0_0 + p_0_1_1_0 + p_1_0_0_1 + p_1_1_1_1);
+
+    // Clean all the constraints
+    std::vector<Polynomial<double>> conZero;
+    for (int i=0; i<prob.conZero.size(); i++) {
+        Polynomial<double> p = prob.conZero[i].prune();
+        if (p.size() > 0) {
+            conZero.push_back(p);
+        }
+    }
+    prob.conZero = conZero;
 
     // If verbose, output the problem
-    if (verbosity > 0) {
+    if (verbosity > 1) {
         std::cout << "Problem:" << std::endl;
         std::cout << prob << std::endl;
+        std::cout << "Num linear cons: " << prob.conZero.size() << std::endl;
     }
+
+    // Test the problem with a known solution
+    std::vector<std::vector<double>> knownW(widthW, std::vector<double>(widthW, 0));
+    std::vector<std::vector<std::vector<double>>> knownAs;
+    for (int i=0; i<numAs; i++) {
+        std::vector<std::vector<double>> A(widthA, std::vector<double>(widthA, 0));
+        knownAs.push_back(A);
+    }
+    std::vector<std::vector<std::vector<double>>> knownBs;
+    for (int i=0; i<numBs; i++) {
+        std::vector<std::vector<double>> B(widthB, std::vector<double>(widthB, 0));
+        knownBs.push_back(B);
+    }
+
+    // W = 0.25 * (I_8 + (1/sqrt(2)) * (ZZZI + ZIXX))
+    for (int i=0; i<widthW; i++) {
+        knownW[i][i] = 1;
+    }
+    std::vector<std::vector<double>> Z(2, std::vector<double>(2, 0));
+    Z[0][0] = 1;
+    Z[1][1] = -1;
+    std::vector<std::vector<double>> X(2, std::vector<double>(2, 0));
+    X[0][1] = 1;
+    X[1][0] = 1;
+    std::vector<std::vector<double>> I2(2, std::vector<double>(2, 0));
+    I2[0][0] = 1;
+    I2[1][1] = 1;
+    std::vector<std::vector<double>> ZZZI = tensor(Z, tensor(Z, tensor(Z, I2)));
+    std::vector<std::vector<double>> ZIXX = tensor(Z, tensor(I2, tensor(X, X)));
+    for (int i=0; i<widthW; i++) {
+        for (int j=i; j<widthW; j++) {
+            knownW[i][j] += (1/sqrt(2)) * (ZZZI[i][j] + ZIXX[i][j]);
+            knownW[j][i] = knownW[i][j];
+        }
+    }
+    for (int i=0; i<widthW; i++) {
+        for (int j=0; j<widthW; j++) {
+            knownW[i][j] *= 0.25;
+        }
+    }
+
+    // A_0_0 = 0
+    // A_0_1 = |00><00| + |00><11| + |11><00| + |11><11|
+    knownAs[1][0][0] = 1;
+    knownAs[1][0][3] = 1;
+    knownAs[1][3][0] = 1;
+    knownAs[1][3][3] = 1;
+    // A_1_0 = |0><0| (x) |0><0|
+    knownAs[2][0][0] = 1;
+    // A_1_1 = |1><1| (x) |0><0|
+    knownAs[3][1][1] = 1;
+
+    // Bs the same as the As
+    knownBs[0] = knownAs[0];
+    knownBs[1] = knownAs[1];
+    knownBs[2] = knownAs[2];
+    knownBs[3] = knownAs[3];
+
+    // Put everything in
+    std::unordered_map<int, double> valueMap;
+    int nextVarInd = 0;
+    for (int i=0; i<widthW; i++) {
+        for (int j=i; j<widthW; j++) {
+            valueMap[nextVarInd] = knownW[i][j];
+            nextVarInd++;
+        }
+    }
+    for (int i=0; i<numAs; i++) {
+        for (int j=0; j<widthA; j++) {
+            for (int k=j; k<widthA; k++) {
+                valueMap[nextVarInd] = knownAs[i][j][k];
+                nextVarInd++;
+            }
+        }
+    }
+    for (int i=0; i<numBs; i++) {
+        for (int j=0; j<widthB; j++) {
+            for (int k=j; k<widthB; k++) {
+                valueMap[nextVarInd] = knownBs[i][j][k];
+                nextVarInd++;
+            }
+        }
+    }
+    PolynomialProblem<double> replaced = prob.replaceWithValue(valueMap);
+
+    // Check everything
+    std::cout << replaced.obj << std::endl;
+    for (int i=0; i<replaced.conZero.size(); i++) {
+        std::cout << replaced.conZero[i] << std::endl;
+    }
+
+    // Manual check
+    double p_0_0_0_0_val = trace(tensor(knownAs[0], knownBs[0]) * knownW);
+    double p_0_1_1_0_val = trace(tensor(knownAs[1], knownBs[2]) * knownW);
+    double p_1_0_0_1_val = trace(tensor(knownAs[2], knownBs[1]) * knownW);
+    double p_1_1_1_1_val = trace(tensor(knownAs[3], knownBs[3]) * knownW);
+    std::cout << 0.25*(p_0_0_0_0_val + p_0_1_1_0_val + p_1_0_0_1_val + p_1_1_1_1_val) << std::endl;
 
 	// Optimize using branch and bound
 	//auto res2 = prob.optimize(level, verbosity, maxIters);
