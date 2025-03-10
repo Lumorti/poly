@@ -1085,13 +1085,13 @@ public:
 	Polynomial operator-(const Polynomial& other) const {
 
 		// Start with one equation
-		Polynomial result = other;
+		Polynomial result = *this;
 
 		// Reserve some space for the new map
 		result.coeffs.reserve(std::max(coeffs.size(), other.coeffs.size()));
 
 		// For each term of the other
-		for (auto const &pair: coeffs) {
+		for (auto const &pair: other.coeffs) {
 
 			// If it's new add it, otherwise combine with the existing
 			if (result.coeffs.find(pair.first) != result.coeffs.end()) {
@@ -2614,6 +2614,11 @@ public:
 				for (int j=0; j<newProb.conPositive.size(); j++) {
 					newProb.conPositive[j] = newProb.conPositive[j].replaceWithPoly(map);
 				}
+                for (int j=0; j<newProb.conPSD.size(); j++) {
+                    for (int k=0; k<newProb.conPSD[j].size(); k++) {
+                        newProb.conPSD[j][k] = newProb.conPSD[j][k].replaceWithPoly(map);
+                    }
+                }
 
 			}
 
@@ -4519,28 +4524,34 @@ public:
 					std::cout << "    nearest feasible point: " << nearestFeasiblePoint << std::endl;
 				}
 
-				// If the point given is actually feasible
-				if (nearestFeasiblePoint.size() > 0) {
+                // If the point is feasible
+                if (nearestFeasiblePoint.size() > 0) {
 
-					// Use this to give an upper bound
-					double objEval = obj.eval(nearestFeasiblePoint);
-					if (objEval < upperBound) {
-						upperBound = objEval;
-						bestFeasiblePoint = nearestFeasiblePoint;
-					}
+                    // Use this to give an upper bound
+                    double objEval = obj.eval(nearestFeasiblePoint);
+                    if (objEval < upperBound) {
+                        upperBound = objEval;
+                        bestFeasiblePoint = nearestFeasiblePoint;
+                    }
 
-					// Output if verbose
-					if (verbosity >= 2) {
-						std::cout << "    eval at this point: " << objEval << std::endl;
-					}
+                    // Output if verbose
+                    if (verbosity >= 2) {
+                        std::cout << "    eval at this point: " << objEval << std::endl;
+                    }
 
-				}
+                }
 
 				// Check the resulting vector for a good place to split 
 				std::vector<double> errors(maxVariables);
-				for (int i=0; i<maxVariables; i++) {
-					errors[i] = std::pow(nearestFeasiblePoint[i] - x[i], 2);
-				}
+                if (nearestFeasiblePoint.size() > 0) {
+                    for (int i=0; i<maxVariables; i++) {
+                        errors[i] = std::pow(nearestFeasiblePoint[i] - x[i], 2);
+                    }
+                } else {
+                    for (int i=0; i<maxVariables; i++) {
+                        errors[i] = std::pow(solVec[quadraticMonomInds[i][i]] - solVec[firstMonomInds[i]]*solVec[firstMonomInds[i]], 2);
+                    }
+                }
 
 				// Find the biggest error
 				double biggestError = -10000;

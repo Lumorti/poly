@@ -27,7 +27,7 @@ std::vector<std::vector<T>> operator+(const std::vector<std::vector<T>>& A, cons
     return C;
 }
 
-// Trace of a matrix
+// Trace of a polynomial matrix
 Polynomial<double> trace(const std::vector<std::vector<Polynomial<double>>>& A) {
     Polynomial<double> tr(A[0][0].maxVariables, 0);
     for (int i=0; i<A.size(); i++) {
@@ -315,6 +315,7 @@ std::vector<std::vector<Polynomial<double>>> reorderSubsystems(
         std::vector<int> newRowDigits(n);
         for(int i = 0; i < n; ++i) {
             newRowDigits[i] = oldRowDigits[p[i]];
+            //newRowDigits[p[i]] = oldRowDigits[i];
         }
         // convert back to integer
         int newRow = multiIndexToIndex(newRowDigits, d);
@@ -345,7 +346,6 @@ int main(int argc, char ** argv) {
 	int level = 1;
 	int maxIters = -1;
 	bool bruteForce = false;
-	bool benchmark = false;
 	std::string filename = "";
 	for (int i=0; i<argc; i++) {
 		std::string arg = argv[i];
@@ -463,14 +463,20 @@ int main(int argc, char ** argv) {
     // Identities
     std::vector<std::vector<Polynomial<double>>> I_2(2, std::vector<Polynomial<double>>(2, Polynomial<double>(numVars, 0)));
     for (int i=0; i<2; i++) {
-        I_2[i][i] = Polynomial<double>(numVars, 1);
+        I_2[i][i] = Polynomial<double>(numVars, 0.5);
     }
-    std::vector<std::vector<Polynomial<double>>> I_4 = tensor(I_2, I_2);
-    std::vector<std::vector<Polynomial<double>>> I_8 = tensor(I_4, I_2);
+    std::vector<std::vector<Polynomial<double>>> I_4(4, std::vector<Polynomial<double>>(4, Polynomial<double>(numVars, 0)));
+    for (int i=0; i<4; i++) {
+        I_4[i][i] = Polynomial<double>(numVars, 0.25);
+    }
+    std::vector<std::vector<Polynomial<double>>> I_8(8, std::vector<Polynomial<double>>(8, Polynomial<double>(numVars, 0)));
+    for (int i=0; i<8; i++) {
+        I_8[i][i] = Polynomial<double>(numVars, 0.125);
+    }
 
     // Constraints on the W
     // The order of W is AI, AO, BI, BO
-    // W_something is tracing out that something then tensoring with the identity
+    // W_something means just the W_{something} part (the rest traced out and replaced with identity)
     Polynomial<double> trace_W = trace(W);
     std::vector<std::vector<Polynomial<double>>> W_AI_AO = tensor(tensor(partialTrace(partialTrace(W, 4, d, 3), 3, d, 2), I_2), I_2);
     std::vector<std::vector<Polynomial<double>>> W_BI_BO = tensor(I_2, tensor(I_2, partialTrace(partialTrace(W, 4, d, 0), 3, d, 0)));
@@ -478,25 +484,29 @@ int main(int argc, char ** argv) {
     std::vector<std::vector<Polynomial<double>>> W_BI = tensor(I_4, tensor(partialTrace(partialTrace(partialTrace(W, 4, d, 3), 3, d, 0), 2, d, 0), I_2));
     std::vector<std::vector<Polynomial<double>>> W_AI_AO_BI = tensor(partialTrace(W, 4, d, 3), I_2);
     std::vector<std::vector<Polynomial<double>>> W_AI_BI_BO = reorderSubsystems(tensor(I_2, partialTrace(W, 4, d, 1)), 4, d, {1, 0, 2, 3});
-    std::vector<std::vector<Polynomial<double>>> W_AI_BI = reorderSubsystems(tensor(I_4, partialTrace(partialTrace(W, 4, d, 3), 3, d, 1)), 4, d, {2, 0, 3, 1});
+    std::vector<std::vector<Polynomial<double>>> W_AI_BI = reorderSubsystems(tensor(I_4, partialTrace(partialTrace(W, 4, d, 3), 3, d, 1)), 4, d, {2, 1, 3, 0});
+
     // tr_W  = d^2 
-    prob.conZero.push_back(trace_W - Polynomial<double>(numVars, 1, {d*d}));
+    prob.conZero.push_back(trace_W - Polynomial<double>(numVars, d*d));
+
     // W_{AI,AO} = W_{AI}
     for (int i=0; i<widthW; i++) {
         for (int j=i; j<widthW; j++) {
             prob.conZero.push_back(W_AI_AO[i][j] - W_AI[i][j]);
         }
     }
+
     // W_{BI,BO} = W_{BI}
     for (int i=0; i<widthW; i++) {
         for (int j=i; j<widthW; j++) {
             prob.conZero.push_back(W_BI_BO[i][j] - W_BI[i][j]);
         }
     }
+
     // W = W_{AI,AO,BI} + W_{AI,BI,BO} - W_{AI,BI}
     for (int i=0; i<widthW; i++) {
         for (int j=i; j<widthW; j++) {
-            prob.conZero.push_back(W_AI_AO_BI[i][j] + W_AI_BI_BO[i][j] - W_AI_BI[i][j]);
+            prob.conZero.push_back(W_AI_AO_BI[i][j] + W_AI_BI_BO[i][j] - W_AI_BI[i][j] - W[i][j]);
         }
     }
 
@@ -540,7 +550,7 @@ int main(int argc, char ** argv) {
         }
     }
 
-    // Objective TODO
+    // Objective
     Polynomial<double> p_0_0_0_0 = trace(tensor(As[0], Bs[0]) * W);
     Polynomial<double> p_0_0_0_1 = trace(tensor(As[0], Bs[1]) * W);
     Polynomial<double> p_0_0_1_0 = trace(tensor(As[0], Bs[2]) * W);
@@ -575,6 +585,26 @@ int main(int argc, char ** argv) {
         std::cout << "Problem:" << std::endl;
         std::cout << prob << std::endl;
         std::cout << "Num linear cons: " << prob.conZero.size() << std::endl;
+        std::cout << "Size of obj: " << prob.obj.size() << std::endl;
+    }
+
+    // Try reducing the problem
+    prob = prob.removeLinear();
+    std::vector<Polynomial<double>> conZeroNew;
+    for (int i=0; i<prob.conZero.size(); i++) {
+        Polynomial<double> p = prob.conZero[i].prune();
+        if (p.size() > 0) {
+            conZeroNew.push_back(p);
+        }
+    }
+    prob.conZero = conZeroNew;
+
+    // If verbose, output the problem
+    if (verbosity > 1) {
+        std::cout << "Problem after reduction:" << std::endl;
+        std::cout << prob << std::endl;
+        std::cout << "Num linear cons: " << prob.conZero.size() << std::endl;
+        std::cout << "Size of obj: " << prob.obj.size() << std::endl;
     }
 
     // Test the problem with a known solution
@@ -608,12 +638,16 @@ int main(int argc, char ** argv) {
     for (int i=0; i<widthW; i++) {
         for (int j=i; j<widthW; j++) {
             knownW[i][j] += (1/sqrt(2)) * (ZZZI[i][j] + ZIXX[i][j]);
-            knownW[j][i] = knownW[i][j];
         }
     }
     for (int i=0; i<widthW; i++) {
         for (int j=0; j<widthW; j++) {
             knownW[i][j] *= 0.25;
+        }
+    }
+    for (int i=0; i<widthW; i++) {
+        for (int j=i; j<widthW; j++) {
+            knownW[j][i] = knownW[i][j];
         }
     }
 
@@ -626,7 +660,7 @@ int main(int argc, char ** argv) {
     // A_1_0 = |0><0| (x) |0><0|
     knownAs[2][0][0] = 1;
     // A_1_1 = |1><1| (x) |0><0|
-    knownAs[3][1][1] = 1;
+    knownAs[3][2][2] = 1;
 
     // Bs the same as the As
     knownBs[0] = knownAs[0];
@@ -634,7 +668,7 @@ int main(int argc, char ** argv) {
     knownBs[2] = knownAs[2];
     knownBs[3] = knownAs[3];
 
-    // Put everything in
+    // Put everything in TODO
     std::unordered_map<int, double> valueMap;
     int nextVarInd = 0;
     for (int i=0; i<widthW; i++) {
@@ -659,29 +693,73 @@ int main(int argc, char ** argv) {
             }
         }
     }
-    PolynomialProblem<double> replaced = prob.replaceWithValue(valueMap);
-
-    // Check everything
-    std::cout << replaced.obj << std::endl;
-    for (int i=0; i<replaced.conZero.size(); i++) {
-        std::cout << replaced.conZero[i] << std::endl;
+    std::vector<double> valueVec(numVars, 0);
+    for (int i=0; i<numVars; i++) {
+        valueVec[i] = valueMap[i];
     }
+    std::cout << "obj: " << prob.obj.eval(valueVec) << std::endl;
+    bool allZero = true;
+    for (int i=0; i<prob.conZero.size(); i++) {
+        double val = prob.conZero[i].eval(valueVec);
+        std::cout << "con " << i << " : " << val << " = " << prob.conZero[i] << std::endl;
+        if (val > 1e-6) {
+            allZero = false;
+        }
+    }
+    Eigen::MatrixXd posMat = Eigen::MatrixXd::Zero(prob.conPSD.size(), prob.conPSD[0].size());
+    for (int i=0; i<prob.conPSD.size(); i++) {
+        for (int j=i; j<prob.conPSD[0].size(); j++) {
+            posMat(i, j) = prob.conPSD[i][j].eval(valueVec);
+            posMat(j, i) = posMat(i, j);
+        }
+    }
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigensolver(posMat);
+    bool allPos = true;
+    for (int i=0; i<eigensolver.eigenvalues().size(); i++) {
+        if (eigensolver.eigenvalues()[i] < -1e-6) {
+            allPos = false;
+        }
+    }
+    std::cout << "All zero: " << allZero << std::endl;
+    std::cout << "All pos: " << allPos << std::endl;
+
+    // Output each matrix
+    //std::cout << "W:" << std::endl;
+    //std::cout << knownW << std::endl;
+    //for (int i=0; i<numAs; i++) {
+        //std::cout << "A_" << i << ":" << std::endl;
+        //std::cout << knownAs[i] << std::endl;
+    //}
+    //for (int i=0; i<numBs; i++) {
+        //std::cout << "B_" << i << ":" << std::endl;
+        //std::cout << knownBs[i] << std::endl;
+    //}
+    //std::cout << "A3 (x) B3:" << std::endl;
+    //std::cout << tensor(knownAs[3], knownBs[3]) << std::endl;
+    //std::cout << "(A3 (x) B3) * W:" << std::endl;
+    //std::cout << tensor(knownAs[3], knownBs[3]) * knownW << std::endl;
 
     // Manual check
-    double p_0_0_0_0_val = trace(tensor(knownAs[0], knownBs[0]) * knownW);
-    double p_0_1_1_0_val = trace(tensor(knownAs[1], knownBs[2]) * knownW);
-    double p_1_0_0_1_val = trace(tensor(knownAs[2], knownBs[1]) * knownW);
-    double p_1_1_1_1_val = trace(tensor(knownAs[3], knownBs[3]) * knownW);
-    std::cout << 0.25*(p_0_0_0_0_val + p_0_1_1_0_val + p_1_0_0_1_val + p_1_1_1_1_val) << std::endl;
+    //double p_0_0_0_0_val = trace(tensor(knownAs[0], knownBs[0]) * knownW);
+    //double p_0_1_1_0_val = trace(tensor(knownAs[1], knownBs[2]) * knownW);
+    //double p_1_0_0_1_val = trace(tensor(knownAs[2], knownBs[1]) * knownW);
+    //double p_1_1_1_1_val = trace(tensor(knownAs[3], knownBs[3]) * knownW);
+    //std::cout << 0.25*(p_0_0_0_0_val + p_0_1_1_0_val + p_1_0_0_1_val + p_1_1_1_1_val) << std::endl;
+
+    // Switch the minimal variable mapping
+    std::unordered_map<int, int> minimalMap = prob.getMinimalMap();
+    prob = prob.replaceWithVariable(minimalMap);
+
+    // Add bounds and make it a maximization problem
+    for (int i=0; i<prob.maxVariables; i++) {
+        prob.varBounds[i] = std::make_pair(-1, 1);
+    }
+    prob.obj = -prob.obj;
 
 	// Optimize using branch and bound
-	//auto res2 = prob.optimize(level, verbosity, maxIters);
-	//if (!benchmark) {
-		//std::cout << std::endl;
-		//std::cout << "From branch and bound:" << std::endl;
-		//std::cout << res2.first << " " << res2.second << std::endl;
-		//std::cout << std::endl;
-	//}
+    auto res2 = prob.optimize(level, verbosity, maxIters);
+    std::cout << "Result: " << -res2.first << std::endl;
+    std::cout << "Is feasible? " << prob.isFeasible(res2.second) << std::endl;
 
 	return 0;
 
