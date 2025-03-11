@@ -2672,13 +2672,16 @@ public:
 			if (!foundThis) {
 				for (int j=0; j<conPSD.size(); j++) {
 					for (int k=0; k<conPSD[j].size(); k++) {
-						if (conPSD[j][j].contains(i)) {
+						if (conPSD[j][k].contains(i)) {
 							indMap[i] = nextInd;
 							foundThis = true;
 							nextInd++;
 							break;
 						}
 					}
+                    if (foundThis) {
+                        break;
+                    }
 				}
 			}
 
@@ -2687,6 +2690,11 @@ public:
 		return indMap;
 		
 	}
+
+    // Check if the problem is already linear (i.e. standard SDP)
+    bool isLinear() {
+        return getDegree() <= 1;
+    }
 
 	// Attempt find a feasible point of this problem
 	std::vector<polyType> findFeasibleEqualityPoint(int zeroInd=-1, double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13, std::vector<polyType> startX={}, double addConstant=0.0) {
@@ -3017,7 +3025,7 @@ public:
 
 		// Get the inds of the first order monomials and their squares
 		std::vector<int> firstMonomInds(varMinMax.size(), -1);
-		std::vector<std::vector<int>> quadraticMonomInds(varMinMax.size(), std::vector<int>(varMinMax.size(), 1));
+		std::vector<std::vector<int>> quadraticMonomInds(varMinMax.size(), std::vector<int>(varMinMax.size(), -1));
 		for (int i=0; i<monoms.size(); i++) {
 			if (monoms[i].size() == digitsPerInd) {
 				firstMonomInds[std::stoi(monoms[i])] = i;
@@ -4059,6 +4067,12 @@ public:
 	// Minimize using branch and bound plus SDP TODO
 	std::pair<polyType, std::vector<polyType>> optimize(int level=1, int verbosity=1, int maxIters=-1) {
 
+        // If it's linear, one iteration is enough
+        bool isLin = isLinear();
+        if (isLin) {
+            maxIters = 1;
+        }
+
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
 		std::sort(monoms.begin(), monoms.end(), [](const std::string& first, const std::string& second){return first.size() < second.size();});
@@ -4129,21 +4143,26 @@ public:
 			}
 		}
 
-		// Get the list monomials that can appear on the top row
-		std::vector<std::string> possibleMonoms;
-		for (int j=0; j<level; j++) {
-			addMonomsOfOrder(possibleMonoms, j+1);
-		}
+        // If we're doing a moment based approximation
+        if (!isLin) {
 
-		// Add these all to the top row of a moment matrix
-		std::vector<Polynomial<double>> toAdd;
-		if (possibleMonoms.size() > 0) {
-			toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
-			for (int j=0; j<possibleMonoms.size(); j++) {
-				toAdd.push_back(Polynomial<polyType>(maxVariables, 1, possibleMonoms[j]));
-			}
-			monomProducts.push_back(toAdd);
-		}
+            // Get the list monomials that can appear on the top row
+            std::vector<std::string> possibleMonoms;
+            for (int j=0; j<level; j++) {
+                addMonomsOfOrder(possibleMonoms, j+1);
+            }
+
+            // Add these all to the top row of a moment matrix
+            std::vector<Polynomial<double>> toAdd;
+            if (possibleMonoms.size() > 0) {
+                toAdd.push_back(Polynomial<polyType>(maxVariables, 1));
+                for (int j=0; j<possibleMonoms.size(); j++) {
+                    toAdd.push_back(Polynomial<polyType>(maxVariables, 1, possibleMonoms[j]));
+                }
+                monomProducts.push_back(toAdd);
+            }
+
+        }
 
 		// Determine the outer bound for all variables
 		std::pair<double,double> generalBounds = {0,0};
@@ -4235,7 +4254,7 @@ public:
 
 		// Get the inds of the first order monomials and their squares
 		std::vector<int> firstMonomInds(maxVariables, -1);
-		std::vector<std::vector<int>> quadraticMonomInds(maxVariables, std::vector<int>(maxVariables, 1));
+		std::vector<std::vector<int>> quadraticMonomInds(maxVariables, std::vector<int>(maxVariables, -1));
 		for (int i=0; i<monoms.size(); i++) {
 			if (monoms[i].size() == digitsPerInd) {
 				firstMonomInds[std::stoi(monoms[i])] = i;
@@ -4373,14 +4392,16 @@ public:
 		int numParamPosCons = 0;
 		std::vector<long> sparsity;
 		for (int i=0; i<toProcess[0].size(); i++) {
-			sparsity.push_back(i*varsTotal + firstMonomInds[i]);
-			sparsity.push_back(i*varsTotal + quadraticMonomInds[i][i]);
-			sparsity.push_back(i*varsTotal + oneIndex);
-			numParamPosCons++;
+            if (quadraticMonomInds[i][i] != -1) {
+                sparsity.push_back(i*varsTotal + firstMonomInds[i]);
+                sparsity.push_back(i*varsTotal + quadraticMonomInds[i][i]);
+                sparsity.push_back(i*varsTotal + oneIndex);
+                numParamPosCons++;
+            }
 		}
 		std::sort(sparsity.begin(), sparsity.end());
-		mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamPosCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
-		M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::greaterThan(0));
+        mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamPosCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
+        M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::greaterThan(0));
 
 		// Parameterized linear equality constraints
 		int numParamEqCons = 0;
@@ -4391,8 +4412,8 @@ public:
 			numParamEqCons++;
 		}
 		std::sort(sparsity2.begin(), sparsity2.end());
-		mosek::fusion::Parameter::t EM = M->parameter(monty::new_array_ptr<int>({numParamEqCons, varsTotal}), monty::new_array_ptr<long>(sparsity2));
-		M->constraint(mosek::fusion::Expr::mul(EM, xM), mosek::fusion::Domain::equalsTo(0.0));
+        mosek::fusion::Parameter::t EM = M->parameter(monty::new_array_ptr<int>({numParamEqCons, varsTotal}), monty::new_array_ptr<long>(sparsity2));
+        M->constraint(mosek::fusion::Expr::mul(EM, xM), mosek::fusion::Domain::equalsTo(0.0));
 
 		// The first element of the vector should be one
 		M->constraint(xM->index(oneIndex), mosek::fusion::Domain::equalsTo(1.0));
@@ -4454,44 +4475,44 @@ public:
 				}
 			}
 
-			// The new parameterized constraint vectors
-			std::vector<std::vector<double>> newD(numParamPosCons, std::vector<double>(varsTotal, 0));
-			std::vector<std::vector<double>> newE(numParamEqCons, std::vector<double>(varsTotal, 0));
-
 			// Update the linear constraints on the quadratics
-			for (int i=0; i<toProcess[0].size(); i++) {
+            if (!isLin) {
+                std::vector<std::vector<double>> newD(numParamPosCons, std::vector<double>(varsTotal, 0));
+                std::vector<std::vector<double>> newE(numParamEqCons, std::vector<double>(varsTotal, 0));
+                for (int i=0; i<toProcess[0].size(); i++) {
 
-				// If it's a binary variable
-				if (varIsBinary[i]) {
+                    // If it's a binary variable
+                    if (varIsBinary[i]) {
 
-					// If it's been constrained to a value
-					if (toProcess[0][i].first == toProcess[0][i].second) {
+                        // If it's been constrained to a value
+                        if (toProcess[0][i].first == toProcess[0][i].second) {
 
-						// Add this as a linear equality con
-						newE[i][oneIndex] = -toProcess[0][i].first;
-						newE[i][firstMonomInds[i]] = 1;
+                            // Add this as a linear equality con
+                            newE[i][oneIndex] = -toProcess[0][i].first;
+                            newE[i][firstMonomInds[i]] = 1;
 
-					}
+                        }
 
-				} else {
+                    } else {
 
-					// Given two points, find ax+by+c=0
-					std::vector<double> point1 = {toProcess[0][i].first, toProcess[0][i].first*toProcess[0][i].first};
-					std::vector<double> point2 = {toProcess[0][i].second, toProcess[0][i].second*toProcess[0][i].second};
-					std::vector<double> coeffs = getLineFromPoints(point1, point2);
+                        // Given two points, find ax+by+c=0
+                        std::vector<double> point1 = {toProcess[0][i].first, toProcess[0][i].first*toProcess[0][i].first};
+                        std::vector<double> point2 = {toProcess[0][i].second, toProcess[0][i].second*toProcess[0][i].second};
+                        std::vector<double> coeffs = getLineFromPoints(point1, point2);
 
-					// Add this as a linear positivity con
-					newD[i][oneIndex] = coeffs[0];
-					newD[i][firstMonomInds[i]] = coeffs[1];
-					newD[i][quadraticMonomInds[i][i]] = coeffs[2];
+                        // Add this as a linear positivity con
+                        newD[i][oneIndex] = coeffs[0];
+                        newD[i][firstMonomInds[i]] = coeffs[1];
+                        newD[i][quadraticMonomInds[i][i]] = coeffs[2];
 
-				}
+                    }
 
-			}
+                }
+                DM->setValue(monty::new_array_ptr<double>(newD));
+                EM->setValue(monty::new_array_ptr<double>(newE));
+            }
 
 			// Solve the problem
-			DM->setValue(monty::new_array_ptr<double>(newD));
-			EM->setValue(monty::new_array_ptr<double>(newE));
 			M->solve();
 			auto statProb = M->getProblemStatus();
 			auto statSol = M->getPrimalSolutionStatus();
@@ -4515,7 +4536,12 @@ public:
 				for (int i=0; i<maxVariables; i++) {
 					x[i] = solVec[firstMonomInds[i]];
 				}
-				std::vector<double> nearestFeasiblePoint = getNearestFeasiblePoint(x, toProcess[0]);
+				std::vector<double> nearestFeasiblePoint(x.size());
+                if (isLin) {
+                    nearestFeasiblePoint = x;
+                } else {
+                    nearestFeasiblePoint = getNearestFeasiblePoint(x, toProcess[0]);
+                }
 
 				// Output if verbose
 				if (verbosity >= 2) {
@@ -4619,8 +4645,17 @@ public:
 				totalAreaInfeasible += areaCovered;
 			}
 
+			// Remove the one we just processed
+			toProcess.erase(toProcess.begin());
+			lowerBounds.erase(lowerBounds.begin());
+
 			// The lower bound is the lowest lower bound
 			lowerBound = lowerBounds[0];
+
+            // If it's linear
+            if (isLin) {
+                lowerBound = upperBound;
+            }
 
 			// Time estimation
 			end = std::chrono::steady_clock::now();
@@ -4644,7 +4679,7 @@ public:
 					std::cout << "\r" << std::flush;
 				}
 			}
-
+            
 			// If we've converged
 			if (std::abs(lowerBound - upperBound) < 1e-5) {
 				if (verbosity >= 1) {
@@ -4652,10 +4687,6 @@ public:
 				}
 				return {upperBound, bestFeasiblePoint};
 			}
-
-			// Remove the one we just processed
-			toProcess.erase(toProcess.begin());
-			lowerBounds.erase(lowerBounds.begin());
 
 			// Keep track of the iteration number
 			iter++;
