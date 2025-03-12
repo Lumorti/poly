@@ -2194,6 +2194,28 @@ Polynomial<polyType> operator-(const otherType& other, const Polynomial<polyType
 	return (-poly)+other;
 }
 
+// Specific overload for double
+Polynomial<double> real(const Polynomial<std::complex<double>>& poly) {
+	Polynomial<double> newPoly(poly.maxVariables);
+	for (auto const &pair: poly.coeffs) {
+		if (std::abs(std::real(pair.second)) > poly.zeroTol) {
+			newPoly.coeffs[pair.first] = std::real(pair.second);
+		}
+	}
+	return newPoly;
+}
+
+// Specific overload for double
+Polynomial<double> imag(const Polynomial<std::complex<double>>& poly) {
+    Polynomial<double> newPoly(poly.maxVariables);
+    for (auto const &pair: poly.coeffs) {
+        if (std::abs(std::imag(pair.second)) > poly.zeroTol) {
+            newPoly.coeffs[pair.first] = std::imag(pair.second);
+        }
+    }
+    return newPoly;
+}
+
 // Overload std::real
 template <typename polyType2, typename polyType>
 Polynomial<polyType2> std::real(const Polynomial<polyType>& poly) {
