@@ -351,7 +351,7 @@ int main(int argc, char ** argv) {
 	int level = 1;
 	int maxIters = -1;
     bool useKnown = false;
-    bool fixedAB = true;
+    bool fixedAB = false;
 	for (int i=0; i<argc; i++) {
 		std::string arg = argv[i];
 		if (arg == "-h") {
@@ -584,13 +584,15 @@ int main(int argc, char ** argv) {
 
     // Positivity of everything
     std::cout << "Adding constraints..." << std::endl;
-    //std::vector<std::vector<Polynomial<double>>> psdCon(fullWidth, std::vector<Polynomial<double>>(fullWidth, Polynomial<double>(numVars, 0)));
-    std::vector<std::vector<Polynomial<double>>> psdCon(2*widthW, std::vector<Polynomial<double>>(2*widthW, Polynomial<double>(numVars, 0)));
-    //int delta = 0;
-    //for (int i=0; i<widthW; i++) {
-        //for (int j=i; j<widthW; j++) {
-            //Polynomial<double> realComp = real(W[i][j]);
-            //Polynomial<double> imagComp = imag(W[i][j]);
+    std::vector<std::vector<Polynomial<double>>> psdCon(fullWidth, std::vector<Polynomial<double>>(fullWidth, Polynomial<double>(numVars, 0)));
+    //std::vector<std::vector<Polynomial<double>>> psdCon(2*widthW, std::vector<Polynomial<double>>(2*widthW, Polynomial<double>(numVars, 0)));
+    int delta = 0;
+    for (int i=0; i<widthW; i++) {
+        for (int j=i; j<widthW; j++) {
+            Polynomial<double> realComp = real(W[i][j]);
+            Polynomial<double> imagComp = imag(W[i][j]);
+            psdCon[i+delta][j+delta] = realComp;
+            psdCon[j+delta][i+delta] = realComp;
             //psdCon[i+delta][j+delta] = realComp;
             //psdCon[j+delta][i+delta] = realComp;
             //psdCon[i+delta+widthW][j+delta+widthW] = realComp;
@@ -601,27 +603,31 @@ int main(int argc, char ** argv) {
                 //psdCon[j+delta+widthW][i+delta] = imagComp;
                 //psdCon[i+delta+widthW][j+delta] = -imagComp;
             //}
-        //}
-    //}
-    //delta += widthW;
-    //for (int i=0; i<numAs; i++) {
-        //for (int j=0; j<widthA; j++) {
-            //for (int k=j; k<widthA; k++) {
-                //psdCon[j+delta][k+delta] = As[i][j][k];
-                //psdCon[k+delta][j+delta] = As[i][k][j];
-            //}
-        //}
-        //delta += widthA;
-    //}
-    //for (int i=0; i<numBs; i++) {
-        //for (int j=0; j<widthB; j++) {
-            //for (int k=j; k<widthB; k++) {
-                //psdCon[j+delta][k+delta] = As[i][j][k];
-                //psdCon[k+delta][j+delta] = As[i][k][j];
-            //}
-        //}
-        //delta += widthB;
-    //}
+        }
+    }
+    delta += widthW;
+    for (int i=0; i<numAs; i++) {
+        for (int j=0; j<widthA; j++) {
+            for (int k=j; k<widthA; k++) {
+                Polynomial<double> realComp = real(As[i][j][k]);
+                Polynomial<double> imagComp = imag(As[i][j][k]);
+                psdCon[j+delta][k+delta] = realComp;
+                psdCon[k+delta][j+delta] = realComp;
+            }
+        }
+        delta += widthA;
+    }
+    for (int i=0; i<numBs; i++) {
+        for (int j=0; j<widthB; j++) {
+            for (int k=j; k<widthB; k++) {
+                Polynomial<double> realComp = real(Bs[i][j][k]);
+                Polynomial<double> imagComp = imag(Bs[i][j][k]);
+                psdCon[j+delta][k+delta] = realComp;
+                psdCon[k+delta][j+delta] = realComp;
+            }
+        }
+        delta += widthB;
+    }
     prob.conPSD = psdCon;
 
     // Identities
@@ -763,7 +769,9 @@ int main(int argc, char ** argv) {
             int indA = a*d + b;
             int indB = b*d + a;
             Polynomial<std::complex<double>> p = trace(tensor(As[indA], Bs[indB]) * W).prune();
-            std::cout << "Prob " << a << " " << b << " : " << p << std::endl;
+            if (verbosity >= 3) {
+                std::cout << "Prob " << a << " " << b << " : " << p << std::endl;
+            }
             prob.obj += real(p);
             numProbs++;
         }
@@ -782,7 +790,7 @@ int main(int argc, char ** argv) {
     prob.conZero = conZero;
 
     // If verbose, output the problem
-    if (verbosity > 1) {
+    if (verbosity >= 2) {
         std::cout << "Problem:" << std::endl;
         std::cout << prob << std::endl;
         std::cout << "Num linear cons: " << prob.conZero.size() << std::endl;
@@ -898,6 +906,10 @@ int main(int argc, char ** argv) {
         prob.varBounds[i] = std::make_pair(-1, 1);
     }
     prob.obj = -prob.obj;
+
+    // TODO see how convex it is using TSNE
+    prob.manyRandom(1);
+    return 0;
 
 	// Optimize using branch and bound
     std::cout << "Optimizing..." << std::endl;
