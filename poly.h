@@ -1727,7 +1727,7 @@ public:
 		// For each coefficient
 		for (auto const &pair: coeffs) {
 
-			// Get the indices as a std::vector
+			// Search through the indices
 			for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
 
 				// Check if this index is the correct
@@ -3400,8 +3400,10 @@ public:
 
 					// Otheriwse write to std::out and stop
 					} else {
-						std::cout << std::endl;
-						std::cout << "converged in " << iter << " iters to region " << toProcess[0] << std::endl;
+                        if (verbosity >= 1) {
+                            std::cout << std::endl;
+                            std::cout << "converged in " << iter << " iters to region " << toProcess[0] << std::endl;
+                        }
 						break;
 					}
 
@@ -3456,8 +3458,10 @@ public:
 			}	
 
 		}
-		std::cout << std::endl;
-		std::cout << representTime(iter * secondsPerIter) << std::endl;
+        if (verbosity >= 1) {
+            std::cout << std::endl;
+            std::cout << representTime(iter * secondsPerIter) << std::endl;
+        }
 
 		// Free the memory used by SCS
 		free(coneSCS);
@@ -3998,36 +4002,38 @@ public:
 	}
 
 	// Given a point, check if it meets all of the constraints
-	bool isFeasible(std::vector<polyType> x) {
+	bool isFeasible(std::vector<polyType> x, double customTol=1e-7) {
 
 		// Equality constraints
 		for (int i=0; i<conZero.size(); i++) {
-			if (std::abs(conZero[i].eval(x)) > zeroTol) {
-				std::cout << "equality constraint " << i << " violated" << std::endl;
+            polyType res = conZero[i].eval(x);
+			if (std::abs(res) > customTol) {
+				std::cout << "equality constraint " << i << " violated: " << res << std::endl;
 				return false;
 			}
 		}
 
 		// Inequality constraints
 		for (int i=0; i<conPositive.size(); i++) {
-			if (conPositive[i].eval(x) < -zeroTol) {
-				std::cout << "positive constraint " << i << " violated" << std::endl;
+            polyType res = conPositive[i].eval(x);
+			if (res < -customTol) {
+				std::cout << "positive constraint " << i << " violated: " << res << std::endl;
 				return false;
 			}
 		}
 
 		// Variable bounds
 		for (int i=0; i<x.size(); i++) {
-			if (x[i] < varBounds[i].first - zeroTol || x[i] > varBounds[i].second + zeroTol) {
-				std::cout << "variable bound " << i << " violated" << std::endl;
+			if (x[i] < varBounds[i].first - customTol || x[i] > varBounds[i].second + customTol) {
+				std::cout << "variable bound " << i << " violated: " << x[i] << std::endl;
 				return false;
 			}
 		}
 
 		// Binary constraints
 		for (int i=0; i<x.size(); i++) {
-			if (varIsBinary[i] && std::abs(x[i] - varBounds[i].first) > zeroTol && std::abs(x[i] - varBounds[i].second) > zeroTol) {
-				std::cout << "binary constraint " << i << " violated" << std::endl;
+			if (varIsBinary[i] && std::abs(x[i] - varBounds[i].first) > customTol && std::abs(x[i] - varBounds[i].second) > customTol) {
+				std::cout << "binary constraint " << i << " violated: " << x[i] << std::endl;
 				return false;
 			}
 		}
@@ -4041,7 +4047,9 @@ public:
 				}
 			}
 			Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(mat);
-			if (es.eigenvalues().minCoeff() < -zeroTol) {
+            double smallestEigenvalue = es.eigenvalues().minCoeff();
+			if (smallestEigenvalue < -customTol) {
+                std::cout << "PSD constraint violated: " << smallestEigenvalue << std::endl;
 				return false;
 			}
 		}
@@ -4051,7 +4059,7 @@ public:
 
 	}
 
-	// Given a point, find the nearest feasible point TODO
+	// Given a point, find the nearest feasible point
 	std::vector<polyType> getNearestFeasiblePoint(std::vector<polyType> x, std::vector<std::pair<polyType, polyType>> region) {
 	
 		// Start with a copy of the point
@@ -4086,7 +4094,136 @@ public:
 
 	}
 
-	// Minimize using branch and bound plus SDP TODO
+    // Get a bunch of points in the feasible region TODO
+    std::vector<std::vector<polyType>> manyFeasible(int num, int verbosity=1) {
+
+        // Save the objective
+        Polynomial<polyType> prevObj = obj;
+
+        // For the number that we need
+        std::vector<std::vector<polyType>> points;
+        for (int i=0; i<num; i++) {
+            if (verbosity >= 1) {
+                std::cout << i << " / " << num << "\r" << std::flush;
+            }
+
+            // Random objective
+            obj = Polynomial<polyType>(maxVariables);
+            for (int j=0; j<maxVariables; j++) {
+                obj.addTerm(double(rand()) / double(RAND_MAX), {j});
+            }
+
+            // Solve and get the solution
+            auto sol = optimize(1, 0, 1);
+            points.push_back(sol.second);
+
+        }
+        if (verbosity >= 1) {
+            std::cout << std::endl;
+        }
+
+        // Restore the previous objective
+        obj = prevObj;
+
+        return points;
+
+    }
+
+    // Get a bunch of points near the edge TODO
+    std::vector<std::vector<polyType>> manyRandom(int num1, int num2) {
+
+        // Generate a bunch of random feasible points
+        std::vector<std::vector<polyType>> feasiblePoints = manyFeasible(num1);
+
+        // For the number that we need
+        std::vector<std::vector<polyType>> points;
+        for (int i=0; i<num2; i++) {
+
+            // Start from a random feasible point
+            int feasInd = rand() % num1;
+            std::vector<polyType> x = feasiblePoints[feasInd];
+
+            // Pick a random point to mix with
+            int randInd = rand() % num1;
+
+            // Get a random combination of the feasible points
+            double t = double(rand()) / double(RAND_MAX);
+            for (int k=0; k<maxVariables; k++) {
+                x[k] = (1-t) * x[k] + t * feasiblePoints[randInd][k];
+            }
+
+            // Check if it's initially feasible
+            //bool initFeas = isFeasible(x);
+            //bool currentFeas = initFeas;
+
+            //// Determine the direction to move in
+            //std::vector<polyType> direction(maxVariables);
+            //for (int j=0; j<maxVariables; j++) {
+
+                //// Looking for this var
+                //std::string indToFind = std::to_string(j);
+                //indToFind.insert(0, digitsPerInd-indToFind.size(), ' ');
+
+                //// Get the sum of all terms that contain this variable
+                //double coeffSum = 0;
+                //for (auto const &pair: obj.coeffs) {
+                    
+                    //// Check if this term contains our variable
+                    //for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
+                        //if (pair.first.substr(j, digitsPerInd) == indToFind) {
+                            //coeffSum += pair.second;
+                            //break;
+                        //}
+
+                    //}
+
+                //}
+
+                //// For now the direction is just the sum
+                //direction[j] = coeffSum;
+
+            //}
+
+            //// Print this
+            //std::cout << "x: " << x << std::endl;
+            //std::cout << "initFeas: " << initFeas << std::endl;
+            //std::cout << "direction: " << direction << std::endl;
+
+            //// Keep moving in that direction until not feasible
+            //double alpha = 100;
+            //std::vector<polyType> newX(maxVariables);
+            //while (alpha > 1e-7) {
+                //newX = x;
+
+                //// Move in the direction
+                //for (int j=0; j<maxVariables; j++) {
+                    //newX[j] += alpha * direction[j];
+                //}
+
+                //// Check if it's feasible
+                //currentFeas = isFeasible(newX);
+                //std::cout << "alpha: " << alpha << " currentFeas: " << currentFeas << std::endl;
+                //if (currentFeas) {
+                    //x = newX;
+                //}
+
+                //alpha /= 10;
+
+            //}
+
+            // Append the objective evaluated at this point
+            //x.push_back(obj.eval(x));
+
+            // Add this to the list
+            points.push_back(x);
+
+        }
+
+        return points;
+
+    }
+
+	// Minimize using branch and bound plus SDP
 	std::pair<polyType, std::vector<polyType>> optimize(int level=1, int verbosity=1, int maxIters=-1) {
 
         // If it's linear, one iteration is enough
@@ -4813,7 +4950,7 @@ public:
 				levelsToInclude.push_back(std::stoi(currentThing));
 				currentThing = "";
 
-			// If told to do a certain level for each individual constraint TODO
+			// If told to do a certain level for each individual constraint
 			} else if (level[i] == 's') {
 
 				// Add whatever numbers are left

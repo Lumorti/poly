@@ -399,14 +399,18 @@ int main(int argc, char ** argv) {
 	PolynomialProblem<double> prob(numVars);
 
     // Output some sizes
-    std::cout << "Full matrix size: " << fullWidth << std::endl;
-    std::cout << "Number of variables: " << numVars << std::endl;
-    std::cout << "Width of W: " << widthW << std::endl;
-    std::cout << "Width of A: " << widthA << std::endl;
-    std::cout << "Width of B: " << widthB << std::endl;
+    if (verbosity > 0) {
+        std::cout << "Full (complex) matrix size: " << fullWidth << std::endl;
+        std::cout << "Number of variables: " << numVars << std::endl;
+        std::cout << "Width of W: " << widthW << std::endl;
+        std::cout << "Width of A: " << widthA << std::endl;
+        std::cout << "Width of B: " << widthB << std::endl;
+    }
 
     // Known valid solution
-    std::cout << "Constructing known solution..." << std::endl;
+    if (verbosity > 0) {
+        std::cout << "Constructing known solution..." << std::endl;
+    }
     std::vector<std::vector<std::complex<double>>> knownW(widthW, std::vector<std::complex<double>>(widthW, 0));
     std::vector<std::vector<std::vector<std::complex<double>>>> knownAs;
     for (int i=0; i<numAs; i++) {
@@ -506,7 +510,9 @@ int main(int argc, char ** argv) {
     }
 
     // Construct W
-    std::cout << "Constructing variable matrices..." << std::endl;
+    if (verbosity > 0) {
+        std::cout << "Constructing variable matrices..." << std::endl;
+    }
     std::vector<std::vector<Polynomial<std::complex<double>>>> W(widthW, std::vector<Polynomial<std::complex<double>>>(widthW, Polynomial<std::complex<double>>(numVars, 0i)));
     int nextVar = 0;
     for (int i=0; i<widthW; i++) {
@@ -531,7 +537,7 @@ int main(int argc, char ** argv) {
                 if (fixedAB) {
                     A[j][k] = Polynomial<std::complex<double>>(numVars, knownAs[i][j][k]);
                 } else {
-                    if (i == j) {
+                    if (j == k) {
                         A[j][k] = Polynomial<std::complex<double>>(numVars, 1, {nextVar});
                         nextVar++;
                     } else {
@@ -554,7 +560,7 @@ int main(int argc, char ** argv) {
                 if (fixedAB) {
                     B[j][k] = Polynomial<std::complex<double>>(numVars, knownBs[i][j][k]);
                 } else {
-                    if (i == j) {
+                    if (j == k) {
                         B[j][k] = Polynomial<std::complex<double>>(numVars, 1, {nextVar});
                         nextVar++;
                     } else {
@@ -583,7 +589,10 @@ int main(int argc, char ** argv) {
     }
 
     // Positivity of everything
-    std::cout << "Adding constraints..." << std::endl;
+    if (verbosity >= 1) {
+        std::cout << "Adding constraints..." << std::endl;
+    }
+    fullWidth = 2*fullWidth;
     std::vector<std::vector<Polynomial<double>>> psdCon(fullWidth, std::vector<Polynomial<double>>(fullWidth, Polynomial<double>(numVars, 0)));
     //std::vector<std::vector<Polynomial<double>>> psdCon(2*widthW, std::vector<Polynomial<double>>(2*widthW, Polynomial<double>(numVars, 0)));
     int delta = 0;
@@ -593,19 +602,17 @@ int main(int argc, char ** argv) {
             Polynomial<double> imagComp = imag(W[i][j]);
             psdCon[i+delta][j+delta] = realComp;
             psdCon[j+delta][i+delta] = realComp;
-            //psdCon[i+delta][j+delta] = realComp;
-            //psdCon[j+delta][i+delta] = realComp;
-            //psdCon[i+delta+widthW][j+delta+widthW] = realComp;
-            //psdCon[j+delta+widthW][i+delta+widthW] = realComp;
-            //if (i != j) {
-                //psdCon[i+delta][j+delta+widthW] = imagComp;
-                //psdCon[j+delta][i+delta+widthW] = -imagComp;
-                //psdCon[j+delta+widthW][i+delta] = imagComp;
-                //psdCon[i+delta+widthW][j+delta] = -imagComp;
-            //}
+            psdCon[i+delta+widthW][j+delta+widthW] = realComp;
+            psdCon[j+delta+widthW][i+delta+widthW] = realComp;
+            if (i != j) {
+                psdCon[i+delta][j+delta+widthW] = imagComp;
+                psdCon[j+delta][i+delta+widthW] = -imagComp;
+                psdCon[j+delta+widthW][i+delta] = imagComp;
+                psdCon[i+delta+widthW][j+delta] = -imagComp;
+            }
         }
     }
-    delta += widthW;
+    delta += 2*widthW;
     for (int i=0; i<numAs; i++) {
         for (int j=0; j<widthA; j++) {
             for (int k=j; k<widthA; k++) {
@@ -613,9 +620,17 @@ int main(int argc, char ** argv) {
                 Polynomial<double> imagComp = imag(As[i][j][k]);
                 psdCon[j+delta][k+delta] = realComp;
                 psdCon[k+delta][j+delta] = realComp;
+                psdCon[j+delta+widthA][k+delta+widthA] = realComp;
+                psdCon[k+delta+widthA][j+delta+widthA] = realComp;
+                if (j != k) {
+                    psdCon[j+delta][k+delta+widthA] = imagComp;
+                    psdCon[k+delta][j+delta+widthA] = -imagComp;
+                    psdCon[k+delta+widthA][j+delta] = imagComp;
+                    psdCon[j+delta+widthA][k+delta] = -imagComp;
+                }
             }
         }
-        delta += widthA;
+        delta += 2*widthA;
     }
     for (int i=0; i<numBs; i++) {
         for (int j=0; j<widthB; j++) {
@@ -624,9 +639,17 @@ int main(int argc, char ** argv) {
                 Polynomial<double> imagComp = imag(Bs[i][j][k]);
                 psdCon[j+delta][k+delta] = realComp;
                 psdCon[k+delta][j+delta] = realComp;
+                psdCon[j+delta+widthB][k+delta+widthB] = realComp;
+                psdCon[k+delta+widthB][j+delta+widthB] = realComp;
+                if (j != k) {
+                    psdCon[j+delta][k+delta+widthB] = imagComp;
+                    psdCon[k+delta][j+delta+widthB] = -imagComp;
+                    psdCon[k+delta+widthB][j+delta] = imagComp;
+                    psdCon[j+delta+widthB][k+delta] = -imagComp;
+                }
             }
         }
-        delta += widthB;
+        delta += 2*widthB;
     }
     prob.conPSD = psdCon;
 
@@ -740,28 +763,30 @@ int main(int argc, char ** argv) {
         }
     }
 
-    double a = 0.1048566;
-    prob.conZero.push_back(real(W[0][3]) - Polynomial<double>(numVars, a));
-    prob.conZero.push_back(real(W[0][12]) - Polynomial<double>(numVars, a));
-    prob.conZero.push_back(real(W[1][13]) - Polynomial<double>(numVars, a));
-    prob.conZero.push_back(real(W[2][14]) - Polynomial<double>(numVars, -a));
-    prob.conZero.push_back(real(W[3][0]) - Polynomial<double>(numVars, a));
-    prob.conZero.push_back(real(W[3][15]) - Polynomial<double>(numVars, -a));
-    prob.conZero.push_back(real(W[4][7]) - Polynomial<double>(numVars, a));
-    prob.conZero.push_back(real(W[7][4]) - Polynomial<double>(numVars, a));
-    prob.conZero.push_back(real(W[8][11]) - Polynomial<double>(numVars, -a));
-    prob.conZero.push_back(real(W[11][8]) - Polynomial<double>(numVars, -a));
-    prob.conZero.push_back(real(W[12][0]) - Polynomial<double>(numVars, a));
-    prob.conZero.push_back(real(W[12][15]) - Polynomial<double>(numVars, -a));
-    prob.conZero.push_back(real(W[13][1]) - Polynomial<double>(numVars, a));
-    prob.conZero.push_back(real(W[14][2]) - Polynomial<double>(numVars, -a));
-    prob.conZero.push_back(real(W[15][3]) - Polynomial<double>(numVars, -a));
-    prob.conZero.push_back(real(W[15][12]) - Polynomial<double>(numVars, -a));
+    //double a = 0.1048566;
+    //prob.conZero.push_back(real(W[0][3]) - Polynomial<double>(numVars, a));
+    //prob.conZero.push_back(real(W[0][12]) - Polynomial<double>(numVars, a));
+    //prob.conZero.push_back(real(W[1][13]) - Polynomial<double>(numVars, a));
+    //prob.conZero.push_back(real(W[2][14]) - Polynomial<double>(numVars, -a));
+    //prob.conZero.push_back(real(W[3][0]) - Polynomial<double>(numVars, a));
+    //prob.conZero.push_back(real(W[3][15]) - Polynomial<double>(numVars, -a));
+    //prob.conZero.push_back(real(W[4][7]) - Polynomial<double>(numVars, a));
+    //prob.conZero.push_back(real(W[7][4]) - Polynomial<double>(numVars, a));
+    //prob.conZero.push_back(real(W[8][11]) - Polynomial<double>(numVars, -a));
+    //prob.conZero.push_back(real(W[11][8]) - Polynomial<double>(numVars, -a));
+    //prob.conZero.push_back(real(W[12][0]) - Polynomial<double>(numVars, a));
+    //prob.conZero.push_back(real(W[12][15]) - Polynomial<double>(numVars, -a));
+    //prob.conZero.push_back(real(W[13][1]) - Polynomial<double>(numVars, a));
+    //prob.conZero.push_back(real(W[14][2]) - Polynomial<double>(numVars, -a));
+    //prob.conZero.push_back(real(W[15][3]) - Polynomial<double>(numVars, -a));
+    //prob.conZero.push_back(real(W[15][12]) - Polynomial<double>(numVars, -a));
 
     // Objective
     // GYNI = p(a = y, b = x)
     //      = 0.25*(p_0_0_0_0 + p_0_1_1_0 + p_1_0_0_1 + p_1_1_1_1);
-    std::cout << "Constructing objective..." << std::endl;
+    if (verbosity >= 1) {
+        std::cout << "Constructing objective..." << std::endl;
+    }
     prob.obj = Polynomial<double>(numVars);
     int numProbs = 0;
     for (int a=0; a<d; a++) {
@@ -779,7 +804,9 @@ int main(int argc, char ** argv) {
     prob.obj = prob.obj*(1.0/numProbs);
 
     // Clean all the constraints
-    std::cout << "Cleaning constraints..." << std::endl;
+    if (verbosity > 0) {
+        std::cout << "Cleaning constraints..." << std::endl;
+    }
     std::vector<Polynomial<double>> conZero;
     for (int i=0; i<prob.conZero.size(); i++) {
         Polynomial<double> p = prob.conZero[i].prune();
@@ -799,7 +826,9 @@ int main(int argc, char ** argv) {
     }
 
     // Try reducing the problem
-    std::cout << "Reducing problem..." << std::endl;
+    if (verbosity > 0) {
+        std::cout << "Reducing problem..." << std::endl;
+    }
     //prob = prob.removeLinear();
     std::vector<Polynomial<double>> conZeroNew;
     for (int i=0; i<prob.conZero.size(); i++) {
@@ -820,6 +849,7 @@ int main(int argc, char ** argv) {
     }
 
     // Put everything in
+    std::vector<double> valueVec(numVars, 0);
     if (useKnown) {
         std::unordered_map<int, double> valueMap;
         int nextVarInd = 0;
@@ -863,36 +893,14 @@ int main(int argc, char ** argv) {
                 }
             }
         }
-        std::vector<double> valueVec(numVars, 0);
         for (int i=0; i<numVars; i++) {
             valueVec[i] = valueMap[i];
         }
-        bool allZero = true;
-        for (int i=0; i<prob.conZero.size(); i++) {
-            double val = prob.conZero[i].eval(valueVec);
-            std::cout << "con " << i << " : " << val << " = " << prob.conZero[i] << std::endl;
-            if (std::abs(val) > 1e-6) {
-                allZero = false;
-            }
-        }
-        Eigen::MatrixXd posMat = Eigen::MatrixXd::Zero(prob.conPSD.size(), prob.conPSD[0].size());
-        for (int i=0; i<prob.conPSD.size(); i++) {
-            for (int j=i; j<prob.conPSD[0].size(); j++) {
-                posMat(i, j) = prob.conPSD[i][j].eval(valueVec);
-                posMat(j, i) = posMat(i, j);
-            }
-        }
-        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigensolver(posMat);
-        bool allPos = true;
-        for (int i=0; i<eigensolver.eigenvalues().size(); i++) {
-            if (eigensolver.eigenvalues()[i] < -1e-6) {
-                allPos = false;
-            }
-        }
-        std::cout << "obj: " << prob.obj.eval(valueVec) << std::endl;
-        std::cout << "All zero: " << allZero << std::endl;
-        std::cout << "All pos: " << allPos << std::endl;
-        return 0;
+        std::cout << "Checking known solution..." << std::endl;
+        bool feasible = prob.isFeasible(valueVec);
+        std::cout << "Feasible: " << feasible << std::endl;
+        std::cout << "Value: " << prob.obj.eval(valueVec) << std::endl;
+        //return 0;
     }
 
     // Switch the minimal variable mapping
@@ -907,59 +915,111 @@ int main(int argc, char ** argv) {
     }
     prob.obj = -prob.obj;
 
-    // TODO see how convex it is using TSNE
-    prob.manyRandom(1);
-    return 0;
+    // TODO see how convex it is using TSNE, writing to a file
+    //std::ofstream outfile("temp2");
+    //std::ofstream outfile2("temp3");
+    //auto points = prob.manyRandom(100, 1000);
+    //for (int i=0; i<points.size(); i++) {
+        //for (int j=0; j<points[i].size(); j++) {
+            //outfile << points[i][j];
+            //if (j < points[i].size()-1) {
+                //outfile << "\t";
+            //}
+        //}
+        //outfile << std::endl;
+        //outfile2 << prob.obj.eval(points[i]) << std::endl;
+    //}
+    //return 0;
+
+    // TODO get approximate linear objective
+    std::vector<double> direction(prob.maxVariables);
+    direction = valueVec;
+    //for (int j=0; j<prob.maxVariables; j++) {
+
+        //// Looking for this var
+        //int digitsPerInd = prob.obj.digitsPerInd;
+        //std::string indToFind = std::to_string(j);
+        //indToFind.insert(0, digitsPerInd-indToFind.size(), ' ');
+
+        //// Get the sum of all terms that contain this variable
+        //double coeffSum = 0;
+        //for (auto const &pair: prob.obj.coeffs) {
+            
+            //// Check if this term contains our variable
+            //for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
+                //if (pair.first.substr(j, digitsPerInd) == indToFind) {
+                    //coeffSum += pair.second / double(pair.first.size()/digitsPerInd);
+                    //break;
+                //}
+
+            //}
+
+        //}
+
+        //// For now the direction is just the sum
+        //direction[j] = -coeffSum;
+
+    //}
+
+    // This is the linear objective
+    Polynomial<double> linearObj = Polynomial<double>(numVars, 0);
+    for (int j=0; j<prob.maxVariables; j++) {
+        linearObj += (-direction[j])*Polynomial<double>(numVars, 1, {j});
+    }
+    Polynomial<double> trueObj = prob.obj;
+    prob.obj = linearObj;
 
 	// Optimize using branch and bound
     std::cout << "Optimizing..." << std::endl;
     auto res2 = prob.optimize(level, verbosity, maxIters);
     std::cout << "Result: " << -res2.first << std::endl;
-    prob.isFeasible(res2.second);
+    bool isFeas = prob.isFeasible(res2.second);
+    std::cout << "Feasible: " << isFeas << std::endl;
+    std::cout << "True result: " << -trueObj.eval(res2.second) << std::endl;
 
     // Output the optimal W
-    int nextVarInd = 0;
-    Eigen::MatrixXcd Wopt = Eigen::MatrixXcd::Zero(widthW, widthW);
-    for (int i=0; i<widthW; i++) {
-        for (int j=i; j<widthW; j++) {
-            if (i == j) {
-                Wopt(i, j) = res2.second[nextVarInd];
-                nextVarInd++;
-            } else {
-                Wopt(i, j) = res2.second[nextVarInd] + 1i*res2.second[nextVarInd+1];
-                Wopt(j, i) = std::conj(Wopt(i, j));
-                nextVarInd+=2;
-            }
-        }
-    }
-    // set near 0 elements to 0
-    for (int i=0; i<widthW; i++) {
-        for (int j=0; j<widthW; j++) {
-            if (std::abs(Wopt(i, j)) < 1e-6) {
-                Wopt(i, j) = 0;
-            }
-            if (std::abs(std::imag(Wopt(i, j))) < 1e-6) {
-                Wopt(i, j) = std::real(Wopt(i, j));
-            }
-            if (std::abs(std::real(Wopt(i, j))) < 1e-6) {
-                Wopt(i, j) = 1i*std::imag(Wopt(i, j));
-            }
-        }
-    }
-    std::cout << "Wopt:" << std::endl;
-    std::cout << Wopt << std::endl;
+    //int nextVarInd = 0;
+    //Eigen::MatrixXcd Wopt = Eigen::MatrixXcd::Zero(widthW, widthW);
+    //for (int i=0; i<widthW; i++) {
+        //for (int j=i; j<widthW; j++) {
+            //if (i == j) {
+                //Wopt(i, j) = res2.second[nextVarInd];
+                //nextVarInd++;
+            //} else {
+                //Wopt(i, j) = res2.second[nextVarInd] + 1i*res2.second[nextVarInd+1];
+                //Wopt(j, i) = std::conj(Wopt(i, j));
+                //nextVarInd+=2;
+            //}
+        //}
+    //}
+    //// set near 0 elements to 0
+    //for (int i=0; i<widthW; i++) {
+        //for (int j=0; j<widthW; j++) {
+            //if (std::abs(Wopt(i, j)) < 1e-6) {
+                //Wopt(i, j) = 0;
+            //}
+            //if (std::abs(std::imag(Wopt(i, j))) < 1e-6) {
+                //Wopt(i, j) = std::real(Wopt(i, j));
+            //}
+            //if (std::abs(std::real(Wopt(i, j))) < 1e-6) {
+                //Wopt(i, j) = 1i*std::imag(Wopt(i, j));
+            //}
+        //}
+    //}
+    //std::cout << "Wopt:" << std::endl;
+    //std::cout << Wopt << std::endl;
 
     // Output all the indices which should be equal to 0.1048566
-    for (int i=0; i<widthW; i++) {
-        for (int j=0; j<widthW; j++) {
-            if (std::abs(Wopt(i, j)-0.1048566) < 1e-6) {
-                std::cout << "W[" << i << "," << j << "] = " << 0.1048566 << std::endl;
-            }
-            if (std::abs(Wopt(i, j)+0.1048566) < 1e-6) {
-                std::cout << "W[" << i << "," << j << "] = " << -0.1048566 << std::endl;
-            }
-        }
-    }
+    //for (int i=0; i<widthW; i++) {
+        //for (int j=0; j<widthW; j++) {
+            //if (std::abs(Wopt(i, j)-0.1048566) < 1e-6) {
+                //std::cout << "W[" << i << "," << j << "] = " << 0.1048566 << std::endl;
+            //}
+            //if (std::abs(Wopt(i, j)+0.1048566) < 1e-6) {
+                //std::cout << "W[" << i << "," << j << "] = " << -0.1048566 << std::endl;
+            //}
+        //}
+    //}
 
     // maybe  TODO
     // 0.1048566 = (25/(16*sqrt(2))) - 1
