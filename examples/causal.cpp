@@ -454,7 +454,6 @@ int main(int argc, char ** argv) {
         }
     }
 
-    // TODO
     // A_0_0 = 0
     // A_1_0 = |00><00| + |00><11| + |11><00| + |11><11|
     // A_2_0 = 0
@@ -508,6 +507,8 @@ int main(int argc, char ** argv) {
     for (int i=0; i<numBs; i++) {
         knownBs[i] = knownAs[i];
     }
+
+    // Ansats approach TODO
 
     // Construct W
     if (verbosity > 0) {
@@ -594,7 +595,6 @@ int main(int argc, char ** argv) {
     }
     fullWidth = 2*fullWidth;
     std::vector<std::vector<Polynomial<double>>> psdCon(fullWidth, std::vector<Polynomial<double>>(fullWidth, Polynomial<double>(numVars, 0)));
-    //std::vector<std::vector<Polynomial<double>>> psdCon(2*widthW, std::vector<Polynomial<double>>(2*widthW, Polynomial<double>(numVars, 0)));
     int delta = 0;
     for (int i=0; i<widthW; i++) {
         for (int j=i; j<widthW; j++) {
@@ -900,7 +900,7 @@ int main(int argc, char ** argv) {
         bool feasible = prob.isFeasible(valueVec);
         std::cout << "Feasible: " << feasible << std::endl;
         std::cout << "Value: " << prob.obj.eval(valueVec) << std::endl;
-        //return 0;
+        return 0;
     }
 
     // Switch the minimal variable mapping
@@ -911,11 +911,97 @@ int main(int argc, char ** argv) {
 
     // Add bounds and make it a maximization problem
     for (int i=0; i<prob.maxVariables; i++) {
-        prob.varBounds[i] = std::make_pair(-1, 1);
+        prob.varBounds[i] = std::make_pair(-d, d);
     }
     prob.obj = -prob.obj;
 
-    // TODO see how convex it is using TSNE, writing to a file
+    // Generate two random points and plot the objective between them
+    //std::vector<std::vector<double>> points = prob.manyFeasible(10, verbosity);
+    //points.push_back(valueVec);
+    //int steps = 100;
+    //std::ofstream outfile("temp2");
+
+    // 2D
+    //for (int i=0; i<steps; i++) {
+
+        //// The mix
+        //double t1 = double(i)/double(steps);
+
+        //// For each combination of points
+        //std::vector<double> results;
+        //for (int j1=0; j1<points.size(); j1++) {
+            //for (int j2=j1+1; j2<points.size(); j2++) {
+
+                //// Mixing the two
+                //std::vector<double> point(prob.maxVariables, 0);
+                //for (int l=0; l<prob.maxVariables; l++) {
+                    //point[l] = (1-t1)*points[j1][l] + t1*points[j2][l];
+                //}
+
+                //// Evaluate the objective
+                //double obj = prob.obj.eval(point);
+                //results.push_back(obj);
+
+            //}
+        //}
+
+        //// Write it to file
+        //outfile << t1 << ", ";
+        //for (int j=0; j<results.size(); j++) {
+            //outfile << results[j];
+            //if (j < results.size()-1) {
+                //outfile << ", ";
+            //}
+        //}
+        //outfile << std::endl;
+
+    //}
+
+    // 3D
+    //for (int i=0; i<steps; i++) {
+        //for (int k=0; k<steps; k++) {
+
+            //// The mix
+            //double t1 = double(i)/double(steps);
+            //double t2 = double(k)/double(steps);
+
+            //// For each combination of points
+            //std::vector<double> results;
+            //for (int j1=0; j1<points.size(); j1++) {
+                //for (int j2=j1+1; j2<points.size(); j2++) {
+                    //for (int j3=j2+1; j3<points.size(); j3++) {
+
+                        //// Mixing all three
+                        //std::vector<double> point(prob.maxVariables, 0);
+                        //for (int l=0; l<prob.maxVariables; l++) {
+                            //point[l] = t1*points[j1][l] + t2*points[j2][l] + (1-t1-t2)*points[j3][l];
+                        //}
+
+                        //// Evaluate the objective
+                        //double obj = prob.obj.eval(point);
+                        //results.push_back(obj);
+
+                    //}
+                //}
+            //}
+
+            //// Write it to file
+            //outfile << t1 << ", ";
+            //outfile << t2 << ", ";
+            //for (int j=0; j<results.size(); j++) {
+                //outfile << results[j];
+                //if (j < results.size()-1) {
+                    //outfile << ", ";
+                //}
+            //}
+            //outfile << std::endl;
+
+        //}
+    //}
+
+    //return 0;
+
+    // See how convex it is using TSNE, writing to a file
     //std::ofstream outfile("temp2");
     //std::ofstream outfile2("temp3");
     //auto points = prob.manyRandom(100, 1000);
@@ -931,9 +1017,9 @@ int main(int argc, char ** argv) {
     //}
     //return 0;
 
-    // TODO get approximate linear objective
-    std::vector<double> direction(prob.maxVariables);
-    direction = valueVec;
+    // Get approximate linear objective
+    //std::vector<double> direction(prob.maxVariables);
+    //direction = valueVec;
     //for (int j=0; j<prob.maxVariables; j++) {
 
         //// Looking for this var
@@ -962,12 +1048,12 @@ int main(int argc, char ** argv) {
     //}
 
     // This is the linear objective
-    Polynomial<double> linearObj = Polynomial<double>(numVars, 0);
-    for (int j=0; j<prob.maxVariables; j++) {
-        linearObj += (-direction[j])*Polynomial<double>(numVars, 1, {j});
-    }
-    Polynomial<double> trueObj = prob.obj;
-    prob.obj = linearObj;
+    //Polynomial<double> linearObj = Polynomial<double>(numVars, 0);
+    //for (int j=0; j<prob.maxVariables; j++) {
+        //linearObj += (-direction[j])*Polynomial<double>(numVars, 1, {j});
+    //}
+    //Polynomial<double> trueObj = prob.obj;
+    //prob.obj = linearObj;
 
 	// Optimize using branch and bound
     std::cout << "Optimizing..." << std::endl;
@@ -1020,15 +1106,6 @@ int main(int argc, char ** argv) {
             //}
         //}
     //}
-
-    // maybe  TODO
-    // 0.1048566 = (25/(16*sqrt(2))) - 1
-    // 0.148495 = (1/(4*sqrt(2) - 2)) - (1/8)
-    // 0.362857 = 1/(1/rt2 - 8) + 1/2
-    // 0.02571739 = 1/32 - sqrt(2)/256
-    // 0.1838971 = 1/16 - 2 + sqrt(2) + 1/sqrt(2)
-    // 0.1130928 = 3 / (64 sqrt(2) - 64)
-    // obj 0.5694007 = 15/(32 - 4*sqrt(2))
 
 	return 0;
 

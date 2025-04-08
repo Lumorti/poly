@@ -4094,7 +4094,7 @@ public:
 
 	}
 
-    // Get a bunch of points in the feasible region TODO
+    // Get a bunch of points in the feasible region
     std::vector<std::vector<polyType>> manyFeasible(int num, int verbosity=1) {
 
         // Save the objective
@@ -4129,11 +4129,11 @@ public:
 
     }
 
-    // Get a bunch of points near the edge TODO
-    std::vector<std::vector<polyType>> manyRandom(int num1, int num2) {
+    // Get a bunch of points near the edge
+    std::vector<std::vector<polyType>> manyFeasibleMixed(int num1, int num2, int verbosity=1) {
 
         // Generate a bunch of random feasible points
-        std::vector<std::vector<polyType>> feasiblePoints = manyFeasible(num1);
+        std::vector<std::vector<polyType>> feasiblePoints = manyFeasible(num1, verbosity);
 
         // For the number that we need
         std::vector<std::vector<polyType>> points;
@@ -4151,68 +4151,6 @@ public:
             for (int k=0; k<maxVariables; k++) {
                 x[k] = (1-t) * x[k] + t * feasiblePoints[randInd][k];
             }
-
-            // Check if it's initially feasible
-            //bool initFeas = isFeasible(x);
-            //bool currentFeas = initFeas;
-
-            //// Determine the direction to move in
-            //std::vector<polyType> direction(maxVariables);
-            //for (int j=0; j<maxVariables; j++) {
-
-                //// Looking for this var
-                //std::string indToFind = std::to_string(j);
-                //indToFind.insert(0, digitsPerInd-indToFind.size(), ' ');
-
-                //// Get the sum of all terms that contain this variable
-                //double coeffSum = 0;
-                //for (auto const &pair: obj.coeffs) {
-                    
-                    //// Check if this term contains our variable
-                    //for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
-                        //if (pair.first.substr(j, digitsPerInd) == indToFind) {
-                            //coeffSum += pair.second;
-                            //break;
-                        //}
-
-                    //}
-
-                //}
-
-                //// For now the direction is just the sum
-                //direction[j] = coeffSum;
-
-            //}
-
-            //// Print this
-            //std::cout << "x: " << x << std::endl;
-            //std::cout << "initFeas: " << initFeas << std::endl;
-            //std::cout << "direction: " << direction << std::endl;
-
-            //// Keep moving in that direction until not feasible
-            //double alpha = 100;
-            //std::vector<polyType> newX(maxVariables);
-            //while (alpha > 1e-7) {
-                //newX = x;
-
-                //// Move in the direction
-                //for (int j=0; j<maxVariables; j++) {
-                    //newX[j] += alpha * direction[j];
-                //}
-
-                //// Check if it's feasible
-                //currentFeas = isFeasible(newX);
-                //std::cout << "alpha: " << alpha << " currentFeas: " << currentFeas << std::endl;
-                //if (currentFeas) {
-                    //x = newX;
-                //}
-
-                //alpha /= 10;
-
-            //}
-
-            // Append the objective evaluated at this point
-            //x.push_back(obj.eval(x));
 
             // Add this to the list
             points.push_back(x);
