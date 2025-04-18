@@ -4077,9 +4077,9 @@ public:
 					xFeasible[i] = varBounds[i].second;
 				}
 
-			// Otherwise for now just pick a random point in the region
+			// Otherwise for now just use the point
 			} else {
-				xFeasible[i] = region[i].first + (region[i].second - region[i].first) * (rand() / (RAND_MAX + 1.0));
+				xFeasible[i] = x[i];
 
 			}
 
@@ -4247,6 +4247,39 @@ public:
             std::vector<std::string> possibleMonoms;
             for (int j=0; j<level; j++) {
                 addMonomsOfOrder(possibleMonoms, j+1);
+            }
+
+            // Make sure that your terms in your objective appear somewhere TODO
+            for (int j=0; j<obj.size(); j++) {
+                std::string monom = obj.getMonomials()[j];
+                monom = monom.substr(0, monom.size()-digitsPerInd);
+                if (std::find(possibleMonoms.begin(), possibleMonoms.end(), monom) == possibleMonoms.end()) {
+                    if (verbosity >= 2) {
+                        std::cout << "Adding " << monom << " to the moment matrix" << std::endl;
+                    }
+                    possibleMonoms.push_back(monom);
+                }
+            }
+
+            // Only allow certain terms in the moment matrix
+            std::vector<std::string> allowedMonoms = {" 0", " 6", "15"};
+            if (allowedMonoms.size() > 0) {
+                for (int j=0; j<possibleMonoms.size(); j++) {
+                    bool containsAllowed = false;
+                    for (int k=0; k<allowedMonoms.size(); k++) {
+                        if (possibleMonoms[j].find(allowedMonoms[k]) != std::string::npos) {
+                            containsAllowed = true;
+                            break;
+                        }
+                    }
+                    if (!containsAllowed) {
+                        if (verbosity >= 2) {
+                            std::cout << "Removing " << possibleMonoms[j] << " from the moment matrix" << std::endl;
+                        }
+                        possibleMonoms.erase(possibleMonoms.begin()+j);
+                        j--;
+                    }
+                }
             }
 
             // Add these all to the top row of a moment matrix
@@ -4666,14 +4699,13 @@ public:
 
 				// Check the resulting vector for a good place to split 
 				std::vector<double> errors(maxVariables);
-                if (nearestFeasiblePoint.size() > 0) {
-                    for (int i=0; i<maxVariables; i++) {
-                        errors[i] = std::pow(nearestFeasiblePoint[i] - x[i], 2);
-                    }
-                } else {
-                    for (int i=0; i<maxVariables; i++) {
-                        errors[i] = std::pow(solVec[quadraticMonomInds[i][i]] - solVec[firstMonomInds[i]]*solVec[firstMonomInds[i]], 2);
-                    }
+                //if (nearestFeasiblePoint.size() > 0) {
+                    //for (int i=0; i<maxVariables; i++) {
+                        //errors[i] = std::pow(nearestFeasiblePoint[i] - x[i], 2);
+                    //}
+                //}
+                for (int i=0; i<maxVariables; i++) {
+                    errors[i] = std::pow(solVec[quadraticMonomInds[i][i]] - solVec[firstMonomInds[i]]*solVec[firstMonomInds[i]], 2);
                 }
 
 				// Find the biggest error
