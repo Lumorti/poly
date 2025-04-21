@@ -4575,31 +4575,30 @@ public:
 
 		}
 
-		// Parameterized linear positivity constraints TODO error
-        std::cout << "here" << std::endl;
+		// Parameterized linear positivity constraints
 		int numParamPosCons = 0;
 		std::vector<long> sparsity;
 		for (int i=0; i<toProcess[0].size(); i++) {
             if (quadraticMonomInds[i][i] != -1 && firstMonomInds[i] != -1) {
-                sparsity.push_back(i*varsTotal + firstMonomInds[i]);
-                sparsity.push_back(i*varsTotal + quadraticMonomInds[i][i]);
-                sparsity.push_back(i*varsTotal + oneIndex);
+                sparsity.push_back(numParamPosCons*varsTotal + firstMonomInds[i]);
+                sparsity.push_back(numParamPosCons*varsTotal + quadraticMonomInds[i][i]);
+                sparsity.push_back(numParamPosCons*varsTotal + oneIndex);
                 numParamPosCons++;
             }
 		}
 		std::sort(sparsity.begin(), sparsity.end());
-        std::cout << sparsity << std::endl;
         mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamPosCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
         M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::greaterThan(0));
-        std::cout << "here" << std::endl;
 
 		// Parameterized linear equality constraints
 		int numParamEqCons = 0;
 		std::vector<long> sparsity2;
 		for (int i=0; i<toProcess[0].size(); i++) {
-			sparsity2.push_back(i*varsTotal + firstMonomInds[i]);
-			sparsity2.push_back(i*varsTotal + oneIndex);
-			numParamEqCons++;
+            if (firstMonomInds[i] != -1) {
+                sparsity2.push_back(numParamEqCons*varsTotal + firstMonomInds[i]);
+                sparsity2.push_back(numParamEqCons*varsTotal + oneIndex);
+                numParamEqCons++;
+            }
 		}
 		std::sort(sparsity2.begin(), sparsity2.end());
         mosek::fusion::Parameter::t EM = M->parameter(monty::new_array_ptr<int>({numParamEqCons, varsTotal}), monty::new_array_ptr<long>(sparsity2));
@@ -4669,6 +4668,8 @@ public:
             if (!isLin) {
                 std::vector<std::vector<double>> newD(numParamPosCons, std::vector<double>(varsTotal, 0));
                 std::vector<std::vector<double>> newE(numParamEqCons, std::vector<double>(varsTotal, 0));
+                int dInd = 0;
+                int eInd = 0;
                 for (int i=0; i<toProcess[0].size(); i++) {
 
                     // If it's a binary variable
@@ -4678,8 +4679,11 @@ public:
                         if (toProcess[0][i].first == toProcess[0][i].second) {
 
                             // Add this as a linear equality con
-                            newE[i][oneIndex] = -toProcess[0][i].first;
-                            newE[i][firstMonomInds[i]] = 1;
+                            if (firstMonomInds[i] != -1) {
+                                newE[eInd][oneIndex] = -toProcess[0][i].first;
+                                newE[eInd][firstMonomInds[i]] = 1;
+                                eInd++;
+                            }
 
                         }
 
@@ -4691,9 +4695,12 @@ public:
                         std::vector<double> coeffs = getLineFromPoints(point1, point2);
 
                         // Add this as a linear positivity con
-                        newD[i][oneIndex] = coeffs[0];
-                        newD[i][firstMonomInds[i]] = coeffs[1];
-                        newD[i][quadraticMonomInds[i][i]] = coeffs[2];
+                        if (quadraticMonomInds[i][i] != -1 && firstMonomInds[i] != -1) {
+                            newD[dInd][oneIndex] = coeffs[0];
+                            newD[dInd][firstMonomInds[i]] = coeffs[1];
+                            newD[dInd][quadraticMonomInds[i][i]] = coeffs[2];
+                            dInd++;
+                        }
 
                     }
 
@@ -4765,7 +4772,9 @@ public:
                     //}
                 //}
                 for (int i=0; i<maxVariables; i++) {
-                    errors[i] = std::pow(solVec[quadraticMonomInds[i][i]] - solVec[firstMonomInds[i]]*solVec[firstMonomInds[i]], 2);
+                    if (quadraticMonomInds[i][i] != -1 && firstMonomInds[i] != -1) {
+                        errors[i] = std::pow(solVec[quadraticMonomInds[i][i]] - solVec[firstMonomInds[i]]*solVec[firstMonomInds[i]], 2);
+                    }
                 }
 
 				// Find the biggest error

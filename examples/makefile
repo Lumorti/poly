@@ -1,5 +1,6 @@
 CXX=g++
 CXXFLAGS=-Wfatal-errors -O3 -march=native
+#CXXFLAGS=-Wfatal-errors -O0 -g 
 DEBUGFLAGS=-Wall -g -pg -Wfatal-errors
 LIBSEIGEN= -I/usr/include/eigen3
 LIBSOMP= -fopenmp
