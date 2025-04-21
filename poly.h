@@ -4164,8 +4164,63 @@ public:
 	// Minimize using branch and bound plus SDP
 	std::pair<polyType, std::vector<polyType>> optimize(int level=1, int verbosity=1, int maxIters=-1) {
 
+        // See which parts are linear
+        bool linearObjective = true;
+        bool linearConstraints = true;
+
+        // Only optimize over variables which have a non-linear term somewhere TODO
+        std::vector<bool> varIsNonlinear(maxVariables, false);
+        for (int i=0; i<obj.getMonomials().size(); i++) {
+            std::string monom = obj.getMonomials()[i];
+            if (monom.size() > digitsPerInd) {
+                for (int j=0; j<monom.size(); j+=digitsPerInd) {
+                    int ind = std::stoi(monom.substr(j, digitsPerInd));
+                    varIsNonlinear[ind] = true;
+                    linearObjective = false;
+                }
+            }
+        }
+        for (int i=0; i<conZero.size(); i++) {
+            for (int j=0; j<conZero[i].getMonomials().size(); j++) {
+                std::string monom = conZero[i].getMonomials()[j];
+                if (monom.size() > digitsPerInd) {
+                    for (int k=0; k<monom.size(); k+=digitsPerInd) {
+                        int ind = std::stoi(monom.substr(k, digitsPerInd));
+                        varIsNonlinear[ind] = true;
+                        linearConstraints = false;
+                    }
+                }
+            }
+        }
+        for (int i=0; i<conPositive.size(); i++) {
+            for (int j=0; j<conPositive[i].getMonomials().size(); j++) {
+                std::string monom = conPositive[i].getMonomials()[j];
+                if (monom.size() > digitsPerInd) {
+                    for (int k=0; k<monom.size(); k+=digitsPerInd) {
+                        int ind = std::stoi(monom.substr(k, digitsPerInd));
+                        varIsNonlinear[ind] = true;
+                        linearConstraints = false;
+                    }
+                }
+            }
+        }
+        for (int i=0; i<conPSD.size(); i++) {
+            for (int j=0; j<conPSD[i].size(); j++) {
+                for (int k=0; k<conPSD[i][j].getMonomials().size(); k++) {
+                    std::string monom = conPSD[i][j].getMonomials()[k];
+                    if (monom.size() > digitsPerInd) {
+                        for (int l=0; l<monom.size(); l+=digitsPerInd) {
+                            int ind = std::stoi(monom.substr(l, digitsPerInd));
+                            varIsNonlinear[ind] = true;
+                            linearConstraints = false;
+                        }
+                    }
+                }
+            }
+        }
+
         // If it's linear, one iteration is enough
-        bool isLin = isLinear();
+        bool isLin = linearObjective && linearConstraints;
         if (isLin) {
             maxIters = 1;
         }
@@ -4193,22 +4248,26 @@ public:
 		// Add all square monoms
 		if (degree >= 2) {
 			for (int i=0; i<maxVariables; i++) {
-				std::string newInd = std::to_string(i);
-				newInd.insert(0, digitsPerInd-newInd.size(), ' ');
-				if (std::find(monoms.begin(), monoms.end(), newInd+newInd) == monoms.end()) {
-					monoms.push_back(newInd+newInd);
-				}
+                if (varIsNonlinear[i]) {
+                    std::string newInd = std::to_string(i);
+                    newInd.insert(0, digitsPerInd-newInd.size(), ' ');
+                    if (std::find(monoms.begin(), monoms.end(), newInd+newInd) == monoms.end()) {
+                        monoms.push_back(newInd+newInd);
+                    }
+                }
 			}
 		}
 
 		// Add all quartic monoms
 		if (degree >= 4) {
 			for (int i=0; i<maxVariables; i++) {
-				std::string newInd = std::to_string(i);
-				newInd.insert(0, digitsPerInd-newInd.size(), ' ');
-				if (std::find(monoms.begin(), monoms.end(), newInd+newInd+newInd+newInd) == monoms.end()) {
-					monoms.push_back(newInd+newInd+newInd+newInd);
-				}
+                if (varIsNonlinear[i]) {
+                    std::string newInd = std::to_string(i);
+                    newInd.insert(0, digitsPerInd-newInd.size(), ' ');
+                    if (std::find(monoms.begin(), monoms.end(), newInd+newInd+newInd+newInd) == monoms.end()) {
+                        monoms.push_back(newInd+newInd+newInd+newInd);
+                    }
+                }
 			}
 		}
 		
@@ -4261,24 +4320,22 @@ public:
                 }
             }
 
-            // Only allow certain terms in the moment matrix
-            std::vector<std::string> allowedMonoms = {" 0", " 6", "15"};
-            if (allowedMonoms.size() > 0) {
-                for (int j=0; j<possibleMonoms.size(); j++) {
-                    bool containsAllowed = false;
-                    for (int k=0; k<allowedMonoms.size(); k++) {
-                        if (possibleMonoms[j].find(allowedMonoms[k]) != std::string::npos) {
-                            containsAllowed = true;
-                            break;
-                        }
+            // Only put the non-linear terms in the moment matrix
+            for (int j=0; j<possibleMonoms.size(); j++) {
+                bool containsSomethingNonlinear = false;
+                for (int k=0; k<possibleMonoms[j].size(); k+=digitsPerInd) {
+                    int ind = std::stoi(possibleMonoms[j].substr(k, digitsPerInd));
+                    if (varIsNonlinear[ind]) {
+                        containsSomethingNonlinear = true;
+                        break;
                     }
-                    if (!containsAllowed) {
-                        if (verbosity >= 2) {
-                            std::cout << "Removing " << possibleMonoms[j] << " from the moment matrix" << std::endl;
-                        }
-                        possibleMonoms.erase(possibleMonoms.begin()+j);
-                        j--;
+                }
+                if (!containsSomethingNonlinear) {
+                    if (verbosity >= 2) {
+                        std::cout << "Removing " << possibleMonoms[j] << " from the moment matrix" << std::endl;
                     }
+                    possibleMonoms.erase(possibleMonoms.begin()+j);
+                    j--;
                 }
             }
 
@@ -4518,11 +4575,12 @@ public:
 
 		}
 
-		// Parameterized linear positivity constraints
+		// Parameterized linear positivity constraints TODO error
+        std::cout << "here" << std::endl;
 		int numParamPosCons = 0;
 		std::vector<long> sparsity;
 		for (int i=0; i<toProcess[0].size(); i++) {
-            if (quadraticMonomInds[i][i] != -1) {
+            if (quadraticMonomInds[i][i] != -1 && firstMonomInds[i] != -1) {
                 sparsity.push_back(i*varsTotal + firstMonomInds[i]);
                 sparsity.push_back(i*varsTotal + quadraticMonomInds[i][i]);
                 sparsity.push_back(i*varsTotal + oneIndex);
@@ -4530,8 +4588,10 @@ public:
             }
 		}
 		std::sort(sparsity.begin(), sparsity.end());
+        std::cout << sparsity << std::endl;
         mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamPosCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
         M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::greaterThan(0));
+        std::cout << "here" << std::endl;
 
 		// Parameterized linear equality constraints
 		int numParamEqCons = 0;
