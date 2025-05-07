@@ -4730,6 +4730,76 @@ public:
 
 	}
 
+    // Test many random points TODO
+    void manyRandom(int num) {
+
+        // Pick a random point
+        std::vector<double> x(maxVariables, 0);
+        for (int i=0; i<maxVariables; i++) {
+            if (varIsBinary[i]) {
+                x[i] = rand() % 2;
+            } else {
+                x[i] = varBounds[i].first + ((double)rand() / RAND_MAX) * (varBounds[i].second - varBounds[i].first);
+            }
+        }
+
+        // Check if it's feasible
+        bool initiallyFeasible = isFeasible(x);
+        bool currentlyFeasible = initiallyFeasible;
+
+        // Pseudo-gradient descent
+        std::vector<double> gradish(maxVariables, 0);
+        for (int i=0; i<maxVariables; i++) {
+            double sumOfCoeffs = 0;
+                
+            // Cache the ind to find as a string
+            std::string indString = std::to_string(i);
+            indString.insert(0, digitsPerInd-indString.size(), ' ');
+
+            // For each coefficient, we want to see if it contains ours
+            for (auto const &pair: obj.coeffs) {
+
+                // Check each index
+                for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
+
+                    // Check if this index is the correct
+                    if (pair.first.substr(j, digitsPerInd) == indString) {
+                        sumOfCoeffs += pair.second;
+                        break;
+                    }
+
+                }
+            }
+
+            // We'll take this as our gradient
+            gradish[i] = sumOfCoeffs;
+
+        }
+
+        // If it's feasible
+        while (currentlyFeasible) {
+
+            // Move in the direction of the objective until it isn't
+            double alpha = 0.1;
+            for (int i=0; i<maxVariables; i++) {
+                x[i] += alpha * gradish[i];
+            }
+
+            // Check if it's feasible again
+            currentlyFeasible = isFeasible(x);
+            std::cout << "x: " << x << std::endl;
+            std::cout << "feasible: " << currentlyFeasible << std::endl;
+
+        }
+
+        if (initiallyFeasible) {
+            std::cout << "Initial point was feasible, now not" << std::endl;
+        } else {
+            std::cout << "Initial point was not feasible" << std::endl;
+        }
+
+    }
+
 	// Attempt to find a series of constraints that show this is infeasible
 	void proveInfeasible(int maxIters=-1, std::string level="1f", double bound=1, std::string logFileName="", int verbosity=1, int numVarsToSplit=0) {
 
@@ -4813,7 +4883,7 @@ public:
 				levelsToInclude.push_back(std::stoi(currentThing));
 				currentThing = "";
 
-			// If told to do a certain level for each individual constraint TODO
+			// If told to do a certain level for each individual constraint
 			} else if (level[i] == 's') {
 
 				// Add whatever numbers are left
