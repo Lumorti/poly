@@ -1727,7 +1727,7 @@ public:
 		// For each coefficient
 		for (auto const &pair: coeffs) {
 
-			// Get the indices as a std::vector
+			// Search through the indices
 			for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
 
 				// Check if this index is the correct
@@ -3400,8 +3400,10 @@ public:
 
 					// Otheriwse write to std::out and stop
 					} else {
-						std::cout << std::endl;
-						std::cout << "converged in " << iter << " iters to region " << toProcess[0] << std::endl;
+                        if (verbosity >= 1) {
+                            std::cout << std::endl;
+                            std::cout << "converged in " << iter << " iters to region " << toProcess[0] << std::endl;
+                        }
 						break;
 					}
 
@@ -3456,8 +3458,10 @@ public:
 			}	
 
 		}
-		std::cout << std::endl;
-		std::cout << representTime(iter * secondsPerIter) << std::endl;
+        if (verbosity >= 1) {
+            std::cout << std::endl;
+            std::cout << representTime(iter * secondsPerIter) << std::endl;
+        }
 
 		// Free the memory used by SCS
 		free(coneSCS);
@@ -3998,36 +4002,38 @@ public:
 	}
 
 	// Given a point, check if it meets all of the constraints
-	bool isFeasible(std::vector<polyType> x) {
+	bool isFeasible(std::vector<polyType> x, double customTol=1e-7) {
 
 		// Equality constraints
 		for (int i=0; i<conZero.size(); i++) {
-			if (std::abs(conZero[i].eval(x)) > zeroTol) {
-				std::cout << "equality constraint " << i << " violated" << std::endl;
+            polyType res = conZero[i].eval(x);
+			if (std::abs(res) > customTol) {
+				std::cout << "equality constraint " << i << " violated: " << res << std::endl;
 				return false;
 			}
 		}
 
 		// Inequality constraints
 		for (int i=0; i<conPositive.size(); i++) {
-			if (conPositive[i].eval(x) < -zeroTol) {
-				std::cout << "positive constraint " << i << " violated" << std::endl;
+            polyType res = conPositive[i].eval(x);
+			if (res < -customTol) {
+				std::cout << "positive constraint " << i << " violated: " << res << std::endl;
 				return false;
 			}
 		}
 
 		// Variable bounds
 		for (int i=0; i<x.size(); i++) {
-			if (x[i] < varBounds[i].first - zeroTol || x[i] > varBounds[i].second + zeroTol) {
-				std::cout << "variable bound " << i << " violated" << std::endl;
+			if (x[i] < varBounds[i].first - customTol || x[i] > varBounds[i].second + customTol) {
+				std::cout << "variable bound " << i << " violated: " << x[i] << std::endl;
 				return false;
 			}
 		}
 
 		// Binary constraints
 		for (int i=0; i<x.size(); i++) {
-			if (varIsBinary[i] && std::abs(x[i] - varBounds[i].first) > zeroTol && std::abs(x[i] - varBounds[i].second) > zeroTol) {
-				std::cout << "binary constraint " << i << " violated" << std::endl;
+			if (varIsBinary[i] && std::abs(x[i] - varBounds[i].first) > customTol && std::abs(x[i] - varBounds[i].second) > customTol) {
+				std::cout << "binary constraint " << i << " violated: " << x[i] << std::endl;
 				return false;
 			}
 		}
@@ -4041,7 +4047,9 @@ public:
 				}
 			}
 			Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(mat);
-			if (es.eigenvalues().minCoeff() < -zeroTol) {
+            double smallestEigenvalue = es.eigenvalues().minCoeff();
+			if (smallestEigenvalue < -customTol) {
+                std::cout << "PSD constraint violated: " << smallestEigenvalue << std::endl;
 				return false;
 			}
 		}
@@ -4051,7 +4059,7 @@ public:
 
 	}
 
-	// Given a point, find the nearest feasible point TODO
+	// Given a point, find the nearest feasible point
 	std::vector<polyType> getNearestFeasiblePoint(std::vector<polyType> x, std::vector<std::pair<polyType, polyType>> region) {
 	
 		// Start with a copy of the point
@@ -4069,9 +4077,9 @@ public:
 					xFeasible[i] = varBounds[i].second;
 				}
 
-			// Otherwise for now just pick a random point in the region
+			// Otherwise for now just use the point
 			} else {
-				xFeasible[i] = region[i].first + (region[i].second - region[i].first) * (rand() / (RAND_MAX + 1.0));
+				xFeasible[i] = x[i];
 
 			}
 
@@ -4086,11 +4094,133 @@ public:
 
 	}
 
-	// Minimize using branch and bound plus SDP TODO
+    // Get a bunch of points in the feasible region
+    std::vector<std::vector<polyType>> manyFeasible(int num, int verbosity=1) {
+
+        // Save the objective
+        Polynomial<polyType> prevObj = obj;
+
+        // For the number that we need
+        std::vector<std::vector<polyType>> points;
+        for (int i=0; i<num; i++) {
+            if (verbosity >= 1) {
+                std::cout << i << " / " << num << "\r" << std::flush;
+            }
+
+            // Random objective
+            obj = Polynomial<polyType>(maxVariables);
+            for (int j=0; j<maxVariables; j++) {
+                obj.addTerm(double(rand()) / double(RAND_MAX), {j});
+            }
+
+            // Solve and get the solution
+            auto sol = optimize(1, 0, 1);
+            points.push_back(sol.second);
+
+        }
+        if (verbosity >= 1) {
+            std::cout << std::endl;
+        }
+
+        // Restore the previous objective
+        obj = prevObj;
+
+        return points;
+
+    }
+
+    // Get a bunch of points near the edge
+    std::vector<std::vector<polyType>> manyFeasibleMixed(int num1, int num2, int verbosity=1) {
+
+        // Generate a bunch of random feasible points
+        std::vector<std::vector<polyType>> feasiblePoints = manyFeasible(num1, verbosity);
+
+        // For the number that we need
+        std::vector<std::vector<polyType>> points;
+        for (int i=0; i<num2; i++) {
+
+            // Start from a random feasible point
+            int feasInd = rand() % num1;
+            std::vector<polyType> x = feasiblePoints[feasInd];
+
+            // Pick a random point to mix with
+            int randInd = rand() % num1;
+
+            // Get a random combination of the feasible points
+            double t = double(rand()) / double(RAND_MAX);
+            for (int k=0; k<maxVariables; k++) {
+                x[k] = (1-t) * x[k] + t * feasiblePoints[randInd][k];
+            }
+
+            // Add this to the list
+            points.push_back(x);
+
+        }
+
+        return points;
+
+    }
+
+	// Minimize using branch and bound plus SDP
 	std::pair<polyType, std::vector<polyType>> optimize(int level=1, int verbosity=1, int maxIters=-1) {
 
+        // See which parts are linear
+        bool linearObjective = true;
+        bool linearConstraints = true;
+
+        // Only optimize over variables which have a non-linear term somewhere TODO
+        std::vector<bool> varIsNonlinear(maxVariables, false);
+        for (int i=0; i<obj.getMonomials().size(); i++) {
+            std::string monom = obj.getMonomials()[i];
+            if (monom.size() > digitsPerInd) {
+                for (int j=0; j<monom.size(); j+=digitsPerInd) {
+                    int ind = std::stoi(monom.substr(j, digitsPerInd));
+                    varIsNonlinear[ind] = true;
+                    linearObjective = false;
+                }
+            }
+        }
+        for (int i=0; i<conZero.size(); i++) {
+            for (int j=0; j<conZero[i].getMonomials().size(); j++) {
+                std::string monom = conZero[i].getMonomials()[j];
+                if (monom.size() > digitsPerInd) {
+                    for (int k=0; k<monom.size(); k+=digitsPerInd) {
+                        int ind = std::stoi(monom.substr(k, digitsPerInd));
+                        varIsNonlinear[ind] = true;
+                        linearConstraints = false;
+                    }
+                }
+            }
+        }
+        for (int i=0; i<conPositive.size(); i++) {
+            for (int j=0; j<conPositive[i].getMonomials().size(); j++) {
+                std::string monom = conPositive[i].getMonomials()[j];
+                if (monom.size() > digitsPerInd) {
+                    for (int k=0; k<monom.size(); k+=digitsPerInd) {
+                        int ind = std::stoi(monom.substr(k, digitsPerInd));
+                        varIsNonlinear[ind] = true;
+                        linearConstraints = false;
+                    }
+                }
+            }
+        }
+        for (int i=0; i<conPSD.size(); i++) {
+            for (int j=0; j<conPSD[i].size(); j++) {
+                for (int k=0; k<conPSD[i][j].getMonomials().size(); k++) {
+                    std::string monom = conPSD[i][j].getMonomials()[k];
+                    if (monom.size() > digitsPerInd) {
+                        for (int l=0; l<monom.size(); l+=digitsPerInd) {
+                            int ind = std::stoi(monom.substr(l, digitsPerInd));
+                            varIsNonlinear[ind] = true;
+                            linearConstraints = false;
+                        }
+                    }
+                }
+            }
+        }
+
         // If it's linear, one iteration is enough
-        bool isLin = isLinear();
+        bool isLin = linearObjective && linearConstraints;
         if (isLin) {
             maxIters = 1;
         }
@@ -4118,22 +4248,26 @@ public:
 		// Add all square monoms
 		if (degree >= 2) {
 			for (int i=0; i<maxVariables; i++) {
-				std::string newInd = std::to_string(i);
-				newInd.insert(0, digitsPerInd-newInd.size(), ' ');
-				if (std::find(monoms.begin(), monoms.end(), newInd+newInd) == monoms.end()) {
-					monoms.push_back(newInd+newInd);
-				}
+                if (varIsNonlinear[i]) {
+                    std::string newInd = std::to_string(i);
+                    newInd.insert(0, digitsPerInd-newInd.size(), ' ');
+                    if (std::find(monoms.begin(), monoms.end(), newInd+newInd) == monoms.end()) {
+                        monoms.push_back(newInd+newInd);
+                    }
+                }
 			}
 		}
 
 		// Add all quartic monoms
 		if (degree >= 4) {
 			for (int i=0; i<maxVariables; i++) {
-				std::string newInd = std::to_string(i);
-				newInd.insert(0, digitsPerInd-newInd.size(), ' ');
-				if (std::find(monoms.begin(), monoms.end(), newInd+newInd+newInd+newInd) == monoms.end()) {
-					monoms.push_back(newInd+newInd+newInd+newInd);
-				}
+                if (varIsNonlinear[i]) {
+                    std::string newInd = std::to_string(i);
+                    newInd.insert(0, digitsPerInd-newInd.size(), ' ');
+                    if (std::find(monoms.begin(), monoms.end(), newInd+newInd+newInd+newInd) == monoms.end()) {
+                        monoms.push_back(newInd+newInd+newInd+newInd);
+                    }
+                }
 			}
 		}
 		
@@ -4172,6 +4306,37 @@ public:
             std::vector<std::string> possibleMonoms;
             for (int j=0; j<level; j++) {
                 addMonomsOfOrder(possibleMonoms, j+1);
+            }
+
+            // Make sure that your terms in your objective appear somewhere TODO
+            for (int j=0; j<obj.size(); j++) {
+                std::string monom = obj.getMonomials()[j];
+                monom = monom.substr(0, monom.size()-digitsPerInd);
+                if (std::find(possibleMonoms.begin(), possibleMonoms.end(), monom) == possibleMonoms.end()) {
+                    if (verbosity >= 2) {
+                        std::cout << "Adding " << monom << " to the moment matrix" << std::endl;
+                    }
+                    possibleMonoms.push_back(monom);
+                }
+            }
+
+            // Only put the non-linear terms in the moment matrix
+            for (int j=0; j<possibleMonoms.size(); j++) {
+                bool containsSomethingNonlinear = false;
+                for (int k=0; k<possibleMonoms[j].size(); k+=digitsPerInd) {
+                    int ind = std::stoi(possibleMonoms[j].substr(k, digitsPerInd));
+                    if (varIsNonlinear[ind]) {
+                        containsSomethingNonlinear = true;
+                        break;
+                    }
+                }
+                if (!containsSomethingNonlinear) {
+                    if (verbosity >= 2) {
+                        std::cout << "Removing " << possibleMonoms[j] << " from the moment matrix" << std::endl;
+                    }
+                    possibleMonoms.erase(possibleMonoms.begin()+j);
+                    j--;
+                }
             }
 
             // Add these all to the top row of a moment matrix
@@ -4414,10 +4579,10 @@ public:
 		int numParamPosCons = 0;
 		std::vector<long> sparsity;
 		for (int i=0; i<toProcess[0].size(); i++) {
-            if (quadraticMonomInds[i][i] != -1) {
-                sparsity.push_back(i*varsTotal + firstMonomInds[i]);
-                sparsity.push_back(i*varsTotal + quadraticMonomInds[i][i]);
-                sparsity.push_back(i*varsTotal + oneIndex);
+            if (quadraticMonomInds[i][i] != -1 && firstMonomInds[i] != -1) {
+                sparsity.push_back(numParamPosCons*varsTotal + firstMonomInds[i]);
+                sparsity.push_back(numParamPosCons*varsTotal + quadraticMonomInds[i][i]);
+                sparsity.push_back(numParamPosCons*varsTotal + oneIndex);
                 numParamPosCons++;
             }
 		}
@@ -4429,9 +4594,11 @@ public:
 		int numParamEqCons = 0;
 		std::vector<long> sparsity2;
 		for (int i=0; i<toProcess[0].size(); i++) {
-			sparsity2.push_back(i*varsTotal + firstMonomInds[i]);
-			sparsity2.push_back(i*varsTotal + oneIndex);
-			numParamEqCons++;
+            if (firstMonomInds[i] != -1) {
+                sparsity2.push_back(numParamEqCons*varsTotal + firstMonomInds[i]);
+                sparsity2.push_back(numParamEqCons*varsTotal + oneIndex);
+                numParamEqCons++;
+            }
 		}
 		std::sort(sparsity2.begin(), sparsity2.end());
         mosek::fusion::Parameter::t EM = M->parameter(monty::new_array_ptr<int>({numParamEqCons, varsTotal}), monty::new_array_ptr<long>(sparsity2));
@@ -4501,6 +4668,8 @@ public:
             if (!isLin) {
                 std::vector<std::vector<double>> newD(numParamPosCons, std::vector<double>(varsTotal, 0));
                 std::vector<std::vector<double>> newE(numParamEqCons, std::vector<double>(varsTotal, 0));
+                int dInd = 0;
+                int eInd = 0;
                 for (int i=0; i<toProcess[0].size(); i++) {
 
                     // If it's a binary variable
@@ -4510,8 +4679,11 @@ public:
                         if (toProcess[0][i].first == toProcess[0][i].second) {
 
                             // Add this as a linear equality con
-                            newE[i][oneIndex] = -toProcess[0][i].first;
-                            newE[i][firstMonomInds[i]] = 1;
+                            if (firstMonomInds[i] != -1) {
+                                newE[eInd][oneIndex] = -toProcess[0][i].first;
+                                newE[eInd][firstMonomInds[i]] = 1;
+                                eInd++;
+                            }
 
                         }
 
@@ -4523,9 +4695,12 @@ public:
                         std::vector<double> coeffs = getLineFromPoints(point1, point2);
 
                         // Add this as a linear positivity con
-                        newD[i][oneIndex] = coeffs[0];
-                        newD[i][firstMonomInds[i]] = coeffs[1];
-                        newD[i][quadraticMonomInds[i][i]] = coeffs[2];
+                        if (quadraticMonomInds[i][i] != -1 && firstMonomInds[i] != -1) {
+                            newD[dInd][oneIndex] = coeffs[0];
+                            newD[dInd][firstMonomInds[i]] = coeffs[1];
+                            newD[dInd][quadraticMonomInds[i][i]] = coeffs[2];
+                            dInd++;
+                        }
 
                     }
 
@@ -4591,12 +4766,13 @@ public:
 
 				// Check the resulting vector for a good place to split 
 				std::vector<double> errors(maxVariables);
-                if (nearestFeasiblePoint.size() > 0) {
-                    for (int i=0; i<maxVariables; i++) {
-                        errors[i] = std::pow(nearestFeasiblePoint[i] - x[i], 2);
-                    }
-                } else {
-                    for (int i=0; i<maxVariables; i++) {
+                //if (nearestFeasiblePoint.size() > 0) {
+                    //for (int i=0; i<maxVariables; i++) {
+                        //errors[i] = std::pow(nearestFeasiblePoint[i] - x[i], 2);
+                    //}
+                //}
+                for (int i=0; i<maxVariables; i++) {
+                    if (quadraticMonomInds[i][i] != -1 && firstMonomInds[i] != -1) {
                         errors[i] = std::pow(solVec[quadraticMonomInds[i][i]] - solVec[firstMonomInds[i]]*solVec[firstMonomInds[i]], 2);
                     }
                 }
