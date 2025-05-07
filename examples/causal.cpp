@@ -536,10 +536,20 @@ int main(int argc, char ** argv) {
         std::vector<std::vector<std::complex<double>>> XXZI = tensor(X, tensor(X, tensor(Z, I2)));
         std::vector<std::vector<std::complex<double>>> YYZI = tensor(Y, tensor(Y, tensor(Z, I2)));
         std::vector<std::vector<std::complex<double>>> II = tensor(I2, I2);
-        std::vector<std::vector<std::complex<double>>> ZI = tensor(Z, I2);
+        std::vector<std::vector<std::complex<double>>> IX = tensor(I2, X);
+        std::vector<std::vector<std::complex<double>>> IY = tensor(I2, Y);
         std::vector<std::vector<std::complex<double>>> IZ = tensor(I2, Z);
+        std::vector<std::vector<std::complex<double>>> XI = tensor(X, I2);
         std::vector<std::vector<std::complex<double>>> XX = tensor(X, X);
+        std::vector<std::vector<std::complex<double>>> XY = tensor(X, Y);
+        std::vector<std::vector<std::complex<double>>> XZ = tensor(X, Z);
+        std::vector<std::vector<std::complex<double>>> YI = tensor(Y, I2);
+        std::vector<std::vector<std::complex<double>>> YX = tensor(Y, X);
         std::vector<std::vector<std::complex<double>>> YY = tensor(Y, Y);
+        std::vector<std::vector<std::complex<double>>> YZ = tensor(Y, Z);
+        std::vector<std::vector<std::complex<double>>> ZI = tensor(Z, I2);
+        std::vector<std::vector<std::complex<double>>> ZX = tensor(Z, X);
+        std::vector<std::vector<std::complex<double>>> ZY = tensor(Z, Y);
         std::vector<std::vector<std::complex<double>>> ZZ = tensor(Z, Z);
 
         // Which to use
@@ -554,7 +564,7 @@ int main(int argc, char ** argv) {
         std::vector<std::vector<std::vector<std::complex<double>>>> termsA = {
             II,
             XX,
-            ZZ,
+            XZ,
         };
         //std::vector<std::vector<std::vector<std::complex<double>>>> termsB = {
             //II,
@@ -710,65 +720,123 @@ int main(int argc, char ** argv) {
     if (verbosity >= 1) {
         std::cout << "Adding constraints..." << std::endl;
     }
-    fullWidth = 2*fullWidth;
-    std::vector<std::vector<Polynomial<double>>> psdCon(fullWidth, std::vector<Polynomial<double>>(fullWidth, Polynomial<double>(numVars, 0)));
-    int delta = 0;
+    //fullWidth = 2*fullWidth;
+    //std::vector<std::vector<Polynomial<double>>> psdCon(fullWidth, std::vector<Polynomial<double>>(fullWidth, Polynomial<double>(numVars, 0)));
+    //int delta = 0;
+    //for (int i=0; i<widthW; i++) {
+        //for (int j=i; j<widthW; j++) {
+            //Polynomial<double> realComp = real(W[i][j]);
+            //Polynomial<double> imagComp = imag(W[i][j]);
+            //psdCon[i+delta][j+delta] = realComp;
+            //psdCon[j+delta][i+delta] = realComp;
+            //psdCon[i+delta+widthW][j+delta+widthW] = realComp;
+            //psdCon[j+delta+widthW][i+delta+widthW] = realComp;
+            //if (i != j) {
+                //psdCon[i+delta][j+delta+widthW] = imagComp;
+                //psdCon[j+delta][i+delta+widthW] = -imagComp;
+                //psdCon[j+delta+widthW][i+delta] = imagComp;
+                //psdCon[i+delta+widthW][j+delta] = -imagComp;
+            //}
+        //}
+    //}
+    //delta += 2*widthW;
+    //for (int i=0; i<numAs; i++) {
+        //for (int j=0; j<widthA; j++) {
+            //for (int k=j; k<widthA; k++) {
+                //Polynomial<double> realComp = real(As[i][j][k]);
+                //Polynomial<double> imagComp = imag(As[i][j][k]);
+                //psdCon[j+delta][k+delta] = realComp;
+                //psdCon[k+delta][j+delta] = realComp;
+                //psdCon[j+delta+widthA][k+delta+widthA] = realComp;
+                //psdCon[k+delta+widthA][j+delta+widthA] = realComp;
+                //if (j != k) {
+                    //psdCon[j+delta][k+delta+widthA] = imagComp;
+                    //psdCon[k+delta][j+delta+widthA] = -imagComp;
+                    //psdCon[k+delta+widthA][j+delta] = imagComp;
+                    //psdCon[j+delta+widthA][k+delta] = -imagComp;
+                //}
+            //}
+        //}
+        //delta += 2*widthA;
+    //}
+    //for (int i=0; i<numBs; i++) {
+        //for (int j=0; j<widthB; j++) {
+            //for (int k=j; k<widthB; k++) {
+                //Polynomial<double> realComp = real(Bs[i][j][k]);
+                //Polynomial<double> imagComp = imag(Bs[i][j][k]);
+                //psdCon[j+delta][k+delta] = realComp;
+                //psdCon[k+delta][j+delta] = realComp;
+                //psdCon[j+delta+widthB][k+delta+widthB] = realComp;
+                //psdCon[k+delta+widthB][j+delta+widthB] = realComp;
+                //if (j != k) {
+                    //psdCon[j+delta][k+delta+widthB] = imagComp;
+                    //psdCon[k+delta][j+delta+widthB] = -imagComp;
+                    //psdCon[k+delta+widthB][j+delta] = imagComp;
+                    //psdCon[j+delta+widthB][k+delta] = -imagComp;
+                //}
+            //}
+        //}
+        //delta += 2*widthB;
+    //}
+    //prob.conPSD = psdCon;
+    std::vector<std::vector<Polynomial<double>>> psdW(2*widthW, std::vector<Polynomial<double>>(2*widthW, Polynomial<double>(numVars, 0)));
     for (int i=0; i<widthW; i++) {
         for (int j=i; j<widthW; j++) {
             Polynomial<double> realComp = real(W[i][j]);
             Polynomial<double> imagComp = imag(W[i][j]);
-            psdCon[i+delta][j+delta] = realComp;
-            psdCon[j+delta][i+delta] = realComp;
-            psdCon[i+delta+widthW][j+delta+widthW] = realComp;
-            psdCon[j+delta+widthW][i+delta+widthW] = realComp;
+            psdW[i][j] = realComp;
+            psdW[j][i] = realComp;
+            psdW[i+widthW][j+widthW] = realComp;
+            psdW[j+widthW][i+widthW] = realComp;
             if (i != j) {
-                psdCon[i+delta][j+delta+widthW] = imagComp;
-                psdCon[j+delta][i+delta+widthW] = -imagComp;
-                psdCon[j+delta+widthW][i+delta] = imagComp;
-                psdCon[i+delta+widthW][j+delta] = -imagComp;
+                psdW[i][j+widthW] = imagComp;
+                psdW[j][i+widthW] = -imagComp;
+                psdW[j+widthW][i] = imagComp;
+                psdW[i+widthW][j] = -imagComp;
             }
         }
     }
-    delta += 2*widthW;
+    prob.consPSD.push_back(psdW);
     for (int i=0; i<numAs; i++) {
+        std::vector<std::vector<Polynomial<double>>> psdA(2*widthA, std::vector<Polynomial<double>>(2*widthA, Polynomial<double>(numVars, 0)));
         for (int j=0; j<widthA; j++) {
             for (int k=j; k<widthA; k++) {
                 Polynomial<double> realComp = real(As[i][j][k]);
                 Polynomial<double> imagComp = imag(As[i][j][k]);
-                psdCon[j+delta][k+delta] = realComp;
-                psdCon[k+delta][j+delta] = realComp;
-                psdCon[j+delta+widthA][k+delta+widthA] = realComp;
-                psdCon[k+delta+widthA][j+delta+widthA] = realComp;
+                psdA[j][k] = realComp;
+                psdA[k][j] = realComp;
+                psdA[j+widthA][k+widthA] = realComp;
+                psdA[k+widthA][j+widthA] = realComp;
                 if (j != k) {
-                    psdCon[j+delta][k+delta+widthA] = imagComp;
-                    psdCon[k+delta][j+delta+widthA] = -imagComp;
-                    psdCon[k+delta+widthA][j+delta] = imagComp;
-                    psdCon[j+delta+widthA][k+delta] = -imagComp;
+                    psdA[j][k+widthA] = imagComp;
+                    psdA[k][j+widthA] = -imagComp;
+                    psdA[k+widthA][j] = imagComp;
+                    psdA[j+widthA][k] = -imagComp;
                 }
             }
         }
-        delta += 2*widthA;
+        prob.consPSD.push_back(psdA);
     }
     for (int i=0; i<numBs; i++) {
+        std::vector<std::vector<Polynomial<double>>> psdB(2*widthB, std::vector<Polynomial<double>>(2*widthB, Polynomial<double>(numVars, 0)));
         for (int j=0; j<widthB; j++) {
             for (int k=j; k<widthB; k++) {
                 Polynomial<double> realComp = real(Bs[i][j][k]);
                 Polynomial<double> imagComp = imag(Bs[i][j][k]);
-                psdCon[j+delta][k+delta] = realComp;
-                psdCon[k+delta][j+delta] = realComp;
-                psdCon[j+delta+widthB][k+delta+widthB] = realComp;
-                psdCon[k+delta+widthB][j+delta+widthB] = realComp;
+                psdB[j][k] = realComp;
+                psdB[k][j] = realComp;
+                psdB[j+widthB][k+widthB] = realComp;
+                psdB[k+widthB][j+widthB] = realComp;
                 if (j != k) {
-                    psdCon[j+delta][k+delta+widthB] = imagComp;
-                    psdCon[k+delta][j+delta+widthB] = -imagComp;
-                    psdCon[k+delta+widthB][j+delta] = imagComp;
-                    psdCon[j+delta+widthB][k+delta] = -imagComp;
+                    psdB[j][k+widthB] = imagComp;
+                    psdB[k][j+widthB] = -imagComp;
+                    psdB[k+widthB][j] = imagComp;
+                    psdB[j+widthB][k] = -imagComp;
                 }
             }
         }
-        delta += 2*widthB;
+        prob.consPSD.push_back(psdB);
     }
-    prob.conPSD = psdCon;
 
     // Identities
     std::vector<std::vector<Polynomial<std::complex<double>>>> I_2(d, std::vector<Polynomial<std::complex<double>>>(d, Polynomial<std::complex<double>>(numVars, 0i)));

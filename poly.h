@@ -2374,7 +2374,7 @@ public:
 	Polynomial<polyType> obj;
 	std::vector<Polynomial<polyType>> conZero;
 	std::vector<Polynomial<polyType>> conPositive;
-	std::vector<std::vector<Polynomial<polyType>>> conPSD;
+    std::vector<std::vector<std::vector<Polynomial<polyType>>>> consPSD;
 	std::vector<bool> varIsBinary;
 	std::vector<std::pair<polyType,polyType>> varBounds;
 	double zeroTol = 1e-15;
@@ -2399,7 +2399,7 @@ public:
 		obj = other.obj;
 		conZero = other.conZero;
 		conPositive = other.conPositive;
-		conPSD = other.conPSD;
+        consPSD = other.consPSD;
 		zeroTol = other.zeroTol;
 		varIsBinary = other.varIsBinary;
 		varBounds = other.varBounds;
@@ -2420,12 +2420,14 @@ public:
 			tempList = conPositive[i].getMonomials();
 			monoms.insert(tempList.begin(), tempList.end());
 		}
-		for (int i=0; i<conPSD.size(); i++) {
-			for (int j=0; j<conPSD[i].size(); j++) {
-				tempList = conPSD[i][j].getMonomials();
-				monoms.insert(tempList.begin(), tempList.end());
-			}
-		}
+        for (int i=0; i<consPSD.size(); i++) {
+            for (int j=0; j<consPSD[i].size(); j++) {
+                for (int k=0; k<consPSD[i][j].size(); k++) {
+                    tempList = consPSD[i][j][k].getMonomials();
+                    monoms.insert(tempList.begin(), tempList.end());
+                }
+            }
+        }
 
 		// Turn this into a vector
 		std::vector<std::string> monomList;
@@ -2463,12 +2465,14 @@ public:
 			newProb.conPositive[i] = newProb.conPositive[i].replaceWithValue(convertedMap);
 		}
 
-		// Substitute in the values for the PSD constraint
-		for (int i=0; i<conPSD.size(); i++) {
-			for (int j=0; j<conPSD[i].size(); j++) {
-				newProb.conPSD[i][j] = newProb.conPSD[i][j].replaceWithValue(convertedMap);
-			}
-		}
+        // Substitute in the values for the PSD constraints
+        for (int i=0; i<consPSD.size(); i++) {
+            for (int j=0; j<consPSD[i].size(); j++) {
+                for (int k=0; k<consPSD[i][j].size(); k++) {
+                    newProb.consPSD[i][j][k] = newProb.consPSD[i][j][k].replaceWithValue(convertedMap);
+                }
+            }
+        }
 
 		return newProb;
 
@@ -2508,14 +2512,17 @@ public:
 			}
 		}
 
-		// Replace the PSD con
-		for (int i=0; i<conPSD.size(); i++) {
-			newProb.conPSD.push_back({});
-			for (int j=0; j<conPSD[i].size(); j++) {
-				Polynomial<polyType> newPoly = conPSD[i][j].replaceWithVariable(indMap).changeMaxVariables(newNumVars);
-				newProb.conPSD[i].push_back(newPoly);
-			}
-		}
+        // Replace the PSD cons
+        for (int i=0; i<consPSD.size(); i++) {
+            newProb.consPSD.push_back({});
+            for (int j=0; j<consPSD[i].size(); j++) {
+                newProb.consPSD[i].push_back({});
+                for (int k=0; k<consPSD[i][j].size(); k++) {
+                    Polynomial<polyType> newPoly = consPSD[i][j][k].replaceWithVariable(indMap).changeMaxVariables(newNumVars);
+                    newProb.consPSD[i][j].push_back(newPoly);
+                }
+            }
+        }
 
 		// Create the new poly problem and return
 		return newProb;
@@ -2551,7 +2558,7 @@ public:
 		}
 
 		// Output each constraint
-		if (other.conZero.size() + other.conPositive.size() + other.conPSD.size() > 0) {
+		if (other.conZero.size() + other.conPositive.size() + other.consPSD.size() > 0) {
 			output << "Subject to: " << std::endl;
 			for (int i=0; i<other.conZero.size(); i++) {
 				output << std::endl << other.conZero[i] << " = 0 " << std::endl;
@@ -2559,14 +2566,14 @@ public:
 			for (int i=0; i<other.conPositive.size(); i++) {
 				output << std::endl << other.conPositive[i] << " > 0 " << std::endl;
 			}
-			if (other.conPSD.size() > 0) {
-				output << std::endl << other.conPSD << " >= 0" << std::endl;
-			}
+            for (int i=0; i<other.consPSD.size(); i++) {
+                output << std::endl << other.consPSD[i] << " >= 0" << std::endl;
+            }
 		}
 
 		// Output the number of variables and constraints
 		output << "Total variables: " << other.maxVariables << std::endl;
-		output << "Total constraints: " << other.conZero.size() + other.conPositive.size() + other.conPSD.size();
+		output << "Total constraints: " << other.conZero.size() + other.conPositive.size() + other.consPSD.size() << std::endl;
 
 		return output;
 
@@ -2581,11 +2588,13 @@ public:
 		for (auto const &eqn : conPositive) {
 			maxDegree = std::max(maxDegree, eqn.getDegree());
 		}
-		for (auto const &eqn1 : conPSD) {
-			for (auto const &eqn2 : eqn1) {
-				maxDegree = std::max(maxDegree, eqn2.getDegree());
-			}
-		}
+        for (auto const &mat : consPSD) {
+            for (auto const &eqn1 : mat) {
+                for (auto const &eqn2 : eqn1) {
+                    maxDegree = std::max(maxDegree, eqn2.getDegree());
+                }
+            }
+        }
 		return maxDegree;
 	}
 
@@ -2636,9 +2645,11 @@ public:
 				for (int j=0; j<newProb.conPositive.size(); j++) {
 					newProb.conPositive[j] = newProb.conPositive[j].replaceWithPoly(map);
 				}
-                for (int j=0; j<newProb.conPSD.size(); j++) {
-                    for (int k=0; k<newProb.conPSD[j].size(); k++) {
-                        newProb.conPSD[j][k] = newProb.conPSD[j][k].replaceWithPoly(map);
+                for (int j=0; j<newProb.consPSD.size(); j++) {
+                    for (int k=0; k<newProb.consPSD[j].size(); k++) {
+                        for (int l=0; l<newProb.consPSD[j][k].size(); l++) {
+                            newProb.consPSD[j][k][l] = newProb.consPSD[j][k][l].replaceWithPoly(map);
+                        }
                     }
                 }
 
@@ -2690,22 +2701,27 @@ public:
 				}
 			}
 
-			// Check the PSD cons if still not found
-			if (!foundThis) {
-				for (int j=0; j<conPSD.size(); j++) {
-					for (int k=0; k<conPSD[j].size(); k++) {
-						if (conPSD[j][k].contains(i)) {
-							indMap[i] = nextInd;
-							foundThis = true;
-							nextInd++;
-							break;
-						}
-					}
+            // Check the PSD cons if still not found
+            if (!foundThis) {
+                for (int j=0; j<consPSD.size(); j++) {
+                    for (int k=0; k<consPSD[j].size(); k++) {
+                        for (int l=0; l<consPSD[j][k].size(); l++) {
+                            if (consPSD[j][k][l].contains(i)) {
+                                indMap[i] = nextInd;
+                                foundThis = true;
+                                nextInd++;
+                                break;
+                            }
+                        }
+                        if (foundThis) {
+                            break;
+                        }
+                    }
                     if (foundThis) {
                         break;
                     }
-				}
-			}
+                }
+            }
 
 		}
 
@@ -3515,13 +3531,16 @@ public:
 		for (int i=0; i<conPositive.size(); i++) {
 			conPositiveLinear[i] = conPositive[i].replaceWithVariable(mapping);
 		}
-		std::vector<std::vector<Polynomial<polyType>>> conPSDLinear;
-		for (int i=0; i<conPSD.size(); i++) {
-			conPSDLinear.push_back({});
-			for (int j=0; j<conPSD[i].size(); j++) {
-				conPSDLinear[i].push_back(conPSD[i][j].replaceWithVariable(mapping));
-			}
-		}
+        std::vector<std::vector<std::vector<Polynomial<polyType>>>> consPSDLinear;
+        for (int i=0; i<consPSD.size(); i++) {
+            consPSDLinear.push_back({});
+            for (int j=0; j<consPSD[i].size(); j++) {
+                consPSDLinear[i].push_back({});
+                for (int k=0; k<consPSD[i][j].size(); k++) {
+                    consPSDLinear[i][j].push_back(consPSD[i][j][k].replaceWithVariable(mapping));
+                }
+            }
+        }
 
 		// Start with the most general area
 		std::vector<std::vector<int>> toProcess;
@@ -3695,48 +3714,56 @@ public:
 		auto BM = mosek::fusion::Matrix::sparse(conPositiveLinear.size(), varsTotal, monty::new_array_ptr<int>(BRows), monty::new_array_ptr<int>(BCols), monty::new_array_ptr<polyType>(BVals));
 
 		// Determine the largest amount of terms per element of the PSD matrix
-		int numMatsToSum = 1;
-		for (int i=0; i<conPSDLinear.size(); i++) {
-			for (int j=i; j<conPSDLinear[i].size(); j++) {
-				numMatsToSum = std::max(numMatsToSum, int(conPSDLinear[i][j].coeffs.size()));
-			}
-		}
+        std::vector<int> numMatsToSum(consPSDLinear.size(), 1);
+        for (int k=0; k<consPSDLinear.size(); k++) {
+            for (int i=0; i<consPSDLinear[k].size(); i++) {
+                for (int j=i; j<consPSDLinear[k][i].size(); j++) {
+                    numMatsToSum[k] = std::max(numMatsToSum[k], int(consPSDLinear[k][i][j].coeffs.size()));
+                }
+            }
+        }
 
 		// Convert the linear PSD constraints to MOSEK form
-		int upperTriangSize = (conPSDLinear.size()*(conPSDLinear.size()+1)) / 2;
-		std::vector<std::vector<int>> psdLocs(numMatsToSum, std::vector<int>(upperTriangSize, oneIndex));
-		std::vector<std::vector<double>> psdCoeffs(numMatsToSum, std::vector<double>(upperTriangSize, 0.0));
-		int whichEl = 0;
-		for (int i=0; i<conPSDLinear.size(); i++) {
-			for (int j=i; j<conPSDLinear[i].size(); j++) {
-				int whichMat = 0;
-				if (conPSDLinear[i][j].coeffs.size() > 0) {
-					for (auto const &pair: conPSDLinear[i][j].coeffs) {
-						if (pair.first == "") {
-							psdLocs[whichMat][whichEl] = oneIndex;
-						} else {
-							psdLocs[whichMat][whichEl] = std::stoi(pair.first);
-						}
-						if (i == j) {
-							psdCoeffs[whichMat][whichEl] = pair.second;
-						} else {
-							psdCoeffs[whichMat][whichEl] = std::sqrt(2.0)*pair.second;
-						}
-						whichMat++;
-					}
-				} else {
-					psdLocs[whichMat][whichEl] = oneIndex;
-					psdCoeffs[whichMat][whichEl] = 0;
-				}
-				whichEl++;
-			}
-		}
-		std::vector<std::shared_ptr<monty::ndarray<int,1>>> psdLocsM(numMatsToSum);
-		std::vector<std::shared_ptr<monty::ndarray<double,1>>> psdCoeffsM(numMatsToSum);
-		for (int i=0; i<numMatsToSum; i++) {
-			psdLocsM[i] = monty::new_array_ptr<int>(psdLocs[i]);
-			psdCoeffsM[i] = monty::new_array_ptr<double>(psdCoeffs[i]);
-		}
+        std::vector<std::vector<std::shared_ptr<monty::ndarray<int,1>>>> psdLocsMs(consPSDLinear.size());
+        std::vector<std::vector<std::shared_ptr<monty::ndarray<double,1>>>> psdCoeffsMs(consPSDLinear.size());
+        for (int k=0; k<consPSDLinear.size(); k++) {
+            int upperTriangSize = (consPSDLinear[k].size()*(consPSDLinear[k].size()+1)) / 2;
+            std::vector<std::vector<int>> psdLocs(numMatsToSum, std::vector<int>(upperTriangSize, oneIndex));
+            std::vector<std::vector<double>> psdCoeffs(numMatsToSum, std::vector<double>(upperTriangSize, 0.0));
+            int whichEl = 0;
+            for (int i=0; i<consPSDLinear[k].size(); i++) {
+                for (int j=i; j<consPSDLinear[k][i].size(); j++) {
+                    int whichMat = 0;
+                    if (consPSDLinear[k][i][j].coeffs.size() > 0) {
+                        for (auto const &pair: consPSDLinear[k][i][j].coeffs) {
+                            if (pair.first == "") {
+                                psdLocs[whichMat][whichEl] = oneIndex;
+                            } else {
+                                psdLocs[whichMat][whichEl] = std::stoi(pair.first);
+                            }
+                            if (i == j) {
+                                psdCoeffs[whichMat][whichEl] = pair.second;
+                            } else {
+                                psdCoeffs[whichMat][whichEl] = std::sqrt(2.0)*pair.second;
+                            }
+                            whichMat++;
+                        }
+                    } else {
+                        psdLocs[whichMat][whichEl] = oneIndex;
+                        psdCoeffs[whichMat][whichEl] = 0;
+                    }
+                    whichEl++;
+                }
+            }
+            std::vector<std::shared_ptr<monty::ndarray<int,1>>> psdLocsM(numMatsToSum);
+            std::vector<std::shared_ptr<monty::ndarray<double,1>>> psdCoeffsM(numMatsToSum);
+            for (int i=0; i<numMatsToSum; i++) {
+                psdLocsM[i] = monty::new_array_ptr<int>(psdLocs[i]);
+                psdCoeffsM[i] = monty::new_array_ptr<double>(psdCoeffs[i]);
+            }
+            psdLocsMs[k] = psdLocsM;
+            psdCoeffsMs[k] = psdCoeffsM;
+        }
 
 		// Create a model
 		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
@@ -3762,13 +3789,15 @@ public:
 		M->objective(mosek::fusion::ObjectiveSense::Maximize, mosek::fusion::Expr::sum(xM));
 
 		// Linear PSD constraints
-		if (conPSDLinear.size() > 0) {
-			mosek::fusion::Expression::t matSum = mosek::fusion::Expr::mulElm(psdCoeffsM[0], xM->pick(psdLocsM[0]));
-			for (int i=1; i<numMatsToSum; i++) {
-				matSum = mosek::fusion::Expr::add(matSum, mosek::fusion::Expr::mulElm(psdCoeffsM[i], xM->pick(psdLocsM[i])));
-			}
-			M->constraint(matSum, mosek::fusion::Domain::inSVecPSDCone());
-		}
+        for (int k=0; k<consPSDLinear.size(); k++) {
+            if (consPSDLinear[k].size() > 0) {
+                mosek::fusion::Expression::t matSum = mosek::fusion::Expr::mulElm(psdCoeffsMs[k][0], xM->pick(psdLocsMs[k][0]));
+                for (int i=1; i<numMatsToSum[k]; i++) {
+                    matSum = mosek::fusion::Expr::add(matSum, mosek::fusion::Expr::mulElm(psdCoeffsMs[k][i], xM->pick(psdLocsMs[k][i])));
+                }
+                M->constraint(matSum, mosek::fusion::Domain::inSVecPSDCone());
+            }
+        }
 
 		// Open a file if told to record the points
 		std::ofstream logFile;
@@ -4039,19 +4068,23 @@ public:
 		}
 
 		// Positive semi-definiteness constraints
-		if (conPSD.size() > 0) {
-			Eigen::MatrixXd mat = Eigen::MatrixXd::Zero(conPSD.size(), conPSD[0].size());
-			for (int i=0; i<conPSD.size(); i++) {
-				for (int j=0; j<conPSD[0].size(); j++) {
-					mat(i,j) = conPSD[i][j].eval(x);
-				}
-			}
-			Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(mat);
-            double smallestEigenvalue = es.eigenvalues().minCoeff();
-			if (smallestEigenvalue < -customTol) {
-                std::cout << "PSD constraint violated: " << smallestEigenvalue << std::endl;
-				return false;
-			}
+		if (consPSD.size() > 0) {
+            for (int k=0; k<consPSD.size(); k++) {
+                if (consPSD[k].size() > 0) {
+                    Eigen::MatrixXd mat = Eigen::MatrixXd::Zero(consPSD[k].size(), consPSD[k][0].size());
+                    for (int i=0; i<consPSD[k].size(); i++) {
+                        for (int j=0; j<consPSD[][0].size(); j++) {
+                            mat(i,j) = consPSD[k][i][j].eval(x);
+                        }
+                    }
+                    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(mat);
+                    double smallestEigenvalue = es.eigenvalues().minCoeff();
+                    if (smallestEigenvalue < -customTol) {
+                        std::cout << "PSD constraint violated: " << smallestEigenvalue << std::endl;
+                        return false;
+                    }
+                }
+            }
 		}
 
 		// Otherwise I guess it's fine
@@ -4204,15 +4237,17 @@ public:
                 }
             }
         }
-        for (int i=0; i<conPSD.size(); i++) {
-            for (int j=0; j<conPSD[i].size(); j++) {
-                for (int k=0; k<conPSD[i][j].getMonomials().size(); k++) {
-                    std::string monom = conPSD[i][j].getMonomials()[k];
-                    if (monom.size() > digitsPerInd) {
-                        for (int l=0; l<monom.size(); l+=digitsPerInd) {
-                            int ind = std::stoi(monom.substr(l, digitsPerInd));
-                            varIsNonlinear[ind] = true;
-                            linearConstraints = false;
+        for (int l=0; l<consPSD.size(); l++) {
+            for (int i=0; i<consPSD[l].size(); i++) {
+                for (int j=0; j<consPSD[l][i].size(); j++) {
+                    for (int k=0; k<consPSD[l][i][j].getMonomials().size(); k++) {
+                        std::string monom = consPSD[l][i][j].getMonomials()[k];
+                        if (monom.size() > digitsPerInd) {
+                            for (int l=0; l<monom.size(); l+=digitsPerInd) {
+                                int ind = std::stoi(monom.substr(l, digitsPerInd));
+                                varIsNonlinear[ind] = true;
+                                linearConstraints = false;
+                            }
                         }
                     }
                 }
@@ -4291,13 +4326,16 @@ public:
 		for (int i=0; i<conPositive.size(); i++) {
 			conPositiveLinear[i] = conPositive[i].replaceWithVariable(mapping);
 		}
-		std::vector<std::vector<Polynomial<polyType>>> conPSDLinear;
-		for (int i=0; i<conPSD.size(); i++) {
-			conPSDLinear.push_back({});
-			for (int j=0; j<conPSD[i].size(); j++) {
-				conPSDLinear[i].push_back(conPSD[i][j].replaceWithVariable(mapping));
-			}
-		}
+		std::vector<std::vector<Polynomial<polyType>>> consPSDLinear;
+        for (int i=0; i<consPSD.size(); i++) {
+            consPSDLinear.push_back({});
+            for (int j=0; j<consPSD[i].size(); j++) {
+                consPSDLinear[i].push_back({});
+                for (int k=0; k<consPSD[i][j].size(); k++) {
+                    consPSDLinear[i][j].push_back(consPSD[i][j][k].replaceWithVariable(mapping));
+                }
+            }
+        }
 
         // If we're doing a moment based approximation
         if (!isLin) {
@@ -4503,48 +4541,56 @@ public:
 		auto cM = mosek::fusion::Matrix::dense(1, varsTotal, monty::new_array_ptr<double>(objCoeffs));
 
 		// Determine the largest amount of terms per element of the PSD matrix
-		int numMatsToSum = 1;
-		for (int i=0; i<conPSDLinear.size(); i++) {
-			for (int j=i; j<conPSDLinear[i].size(); j++) {
-				numMatsToSum = std::max(numMatsToSum, int(conPSDLinear[i][j].coeffs.size()));
-			}
-		}
+        std::vector<int> numMatsToSum(consPSDLinear.size(), 1);
+		for (int k=0; k<consPSDLinear.size(); k++) {
+            for (int i=0; i<consPSDLinear[k].size(); i++) {
+                for (int j=i; j<consPSDLinear[k][i].size(); j++) {
+                    numMatsToSum[k] = std::max(numMatsToSum[k], int(consPSDLinear[k][i][j].coeffs.size()));
+                }
+            }
+        }
 
 		// Convert the linear PSD constraints to MOSEK form
-		int upperTriangSize = (conPSDLinear.size()*(conPSDLinear.size()+1)) / 2;
-		std::vector<std::vector<int>> psdLocs(numMatsToSum, std::vector<int>(upperTriangSize, oneIndex));
-		std::vector<std::vector<double>> psdCoeffs(numMatsToSum, std::vector<double>(upperTriangSize, 0.0));
-		int whichEl = 0;
-		for (int i=0; i<conPSDLinear.size(); i++) {
-			for (int j=i; j<conPSDLinear[i].size(); j++) {
-				int whichMat = 0;
-				if (conPSDLinear[i][j].coeffs.size() > 0) {
-					for (auto const &pair: conPSDLinear[i][j].coeffs) {
-						if (pair.first == "") {
-							psdLocs[whichMat][whichEl] = oneIndex;
-						} else {
-							psdLocs[whichMat][whichEl] = std::stoi(pair.first);
-						}
-						if (i == j) {
-							psdCoeffs[whichMat][whichEl] = pair.second;
-						} else {
-							psdCoeffs[whichMat][whichEl] = std::sqrt(2.0)*pair.second;
-						}
-						whichMat++;
-					}
-				} else {
-					psdLocs[whichMat][whichEl] = oneIndex;
-					psdCoeffs[whichMat][whichEl] = 0;
-				}
-				whichEl++;
-			}
-		}
-		std::vector<std::shared_ptr<monty::ndarray<int,1>>> psdLocsM(numMatsToSum);
-		std::vector<std::shared_ptr<monty::ndarray<double,1>>> psdCoeffsM(numMatsToSum);
-		for (int i=0; i<numMatsToSum; i++) {
-			psdLocsM[i] = monty::new_array_ptr<int>(psdLocs[i]);
-			psdCoeffsM[i] = monty::new_array_ptr<double>(psdCoeffs[i]);
-		}
+        std::vector<std::vector<std::shared_ptr<monty::ndarray<int,1>>>> psdLocsMs(consPSDLinear.size());
+        std::vector<std::vector<std::shared_ptr<monty::ndarray<double,1>>>> psdCoeffsMs(consPSDLinear.size());
+        for (int k=0; k<consPSDLinear.size(); k++) {
+            int upperTriangSize = (consPSDLinear[k].size()*(consPSDLinear[k].size()+1)) / 2;
+            std::vector<std::vector<int>> psdLocs(numMatsToSum, std::vector<int>(upperTriangSize, oneIndex));
+            std::vector<std::vector<double>> psdCoeffs(numMatsToSum, std::vector<double>(upperTriangSize, 0.0));
+            int whichEl = 0;
+            for (int i=0; i<consPSDLinear[k].size(); i++) {
+                for (int j=i; j<consPSDLinear[k][i].size(); j++) {
+                    int whichMat = 0;
+                    if (consPSDLinear[k][i][j].coeffs.size() > 0) {
+                        for (auto const &pair: consPSDLinear[k][i][j].coeffs) {
+                            if (pair.first == "") {
+                                psdLocs[whichMat][whichEl] = oneIndex;
+                            } else {
+                                psdLocs[whichMat][whichEl] = std::stoi(pair.first);
+                            }
+                            if (i == j) {
+                                psdCoeffs[whichMat][whichEl] = pair.second;
+                            } else {
+                                psdCoeffs[whichMat][whichEl] = std::sqrt(2.0)*pair.second;
+                            }
+                            whichMat++;
+                        }
+                    } else {
+                        psdLocs[whichMat][whichEl] = oneIndex;
+                        psdCoeffs[whichMat][whichEl] = 0;
+                    }
+                    whichEl++;
+                }
+            }
+            std::vector<std::shared_ptr<monty::ndarray<int,1>>> psdLocsM(numMatsToSum);
+            std::vector<std::shared_ptr<monty::ndarray<double,1>>> psdCoeffsM(numMatsToSum);
+            for (int i=0; i<numMatsToSum; i++) {
+                psdLocsM[i] = monty::new_array_ptr<int>(psdLocs[i]);
+                psdCoeffsM[i] = monty::new_array_ptr<double>(psdCoeffs[i]);
+            }
+            psdLocsMs[k] = psdLocsM;
+            psdCoeffsMs[k] = psdCoeffsM;
+        }
 
 		// Create a model
 		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
@@ -4622,13 +4668,17 @@ public:
 		}
 
 		// Linear PSD constraints
-		if (conPSDLinear.size() > 0) {
-			mosek::fusion::Expression::t matSum = mosek::fusion::Expr::mulElm(psdCoeffsM[0], xM->pick(psdLocsM[0]));
-			for (int i=1; i<numMatsToSum; i++) {
-				matSum = mosek::fusion::Expr::add(matSum, mosek::fusion::Expr::mulElm(psdCoeffsM[i], xM->pick(psdLocsM[i])));
-			}
-			M->constraint(matSum, mosek::fusion::Domain::inSVecPSDCone());
-		}
+        if (consPSDLinear.size() > 0) {
+            for (int i=0; i<consPSDLinear.size(); i++) {
+                if (consPSDLinear[i].size() > 0) {
+                    mosek::fusion::Expression::t matSum = mosek::fusion::Expr::mulElm(psdCoeffsMs[i][0], xM->pick(psdLocsMs[i][0]));
+                    for (int j=1; j<numMatsToSum[i]; j++) {
+                        matSum = mosek::fusion::Expr::add(matSum, mosek::fusion::Expr::mulElm(psdCoeffsMs[i][j], xM->pick(psdLocsMs[i][j])));
+                    }
+                    M->constraint(matSum, mosek::fusion::Domain::inSVecPSDCone());
+                }
+            }
+        }
 
 		// Keep splitting
 		int iter = 1;
