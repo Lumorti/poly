@@ -1,6 +1,5 @@
 CXX=g++
-CXXFLAGS=-Wfatal-errors -O3 -march=native
-#CXXFLAGS=-Wfatal-errors -O0 -g 
+CXXFLAGS=-fmax-errors=3 -O3 -march=native
 DEBUGFLAGS=-Wall -g -pg -Wfatal-errors
 LIBSEIGEN= -I/usr/include/eigen3
 LIBSOMP= -fopenmp
@@ -31,3 +30,6 @@ ising: ising.cpp ../poly.h
 
 causal: causal.cpp ../poly.h
 	$(CXX) $(CXXFLAGS) -o causal causal.cpp $(LIBS)
+
+causaldebug: causal.cpp ../poly.h
+	$(CXX) $(DEBUGFLAGS) -o causal causal.cpp $(LIBS)

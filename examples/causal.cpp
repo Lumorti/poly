@@ -446,6 +446,10 @@ int main(int argc, char ** argv) {
     std::vector<std::vector<std::complex<double>>> I2(2, std::vector<std::complex<double>>(2, 0));
     I2[0][0] = 1;
     I2[1][1] = 1;
+    std::vector<std::vector<std::complex<double>>> proj0(2, std::vector<std::complex<double>>(2, 0));
+    proj0[0][0] = 1;
+    std::vector<std::vector<std::complex<double>>> proj1(2, std::vector<std::complex<double>>(2, 0));
+    proj1[1][1] = 1;
     std::vector<std::vector<std::complex<double>>> ZZZI = tensor(Z, tensor(Z, tensor(Z, I2)));
     std::vector<std::vector<std::complex<double>>> ZIXX = tensor(Z, tensor(I2, tensor(X, X)));
     for (int i=0; i<widthW; i++) {
@@ -551,20 +555,50 @@ int main(int argc, char ** argv) {
         std::vector<std::vector<std::complex<double>>> ZX = tensor(Z, X);
         std::vector<std::vector<std::complex<double>>> ZY = tensor(Z, Y);
         std::vector<std::vector<std::complex<double>>> ZZ = tensor(Z, Z);
+        std::vector<std::vector<std::complex<double>>> proj01 = tensor(proj0, proj1);
+        std::vector<std::vector<std::complex<double>>> proj10 = tensor(proj1, proj0);
+        std::vector<std::vector<std::complex<double>>> proj00 = tensor(proj0, proj0);
+        std::vector<std::vector<std::complex<double>>> psi(4, std::vector<std::complex<double>>(4, 0));
+        psi[0][0] = 1;
+        psi[3][3] = 1;
+        psi[0][3] = 1;
+        psi[3][0] = 1;
 
         // Which to use
         std::vector<std::vector<std::vector<std::complex<double>>>> termsW = {
             IIII,
+
             ZIZI,
-            ZZZI,
+
+            ZIII,
+            IIZI,
+
+            ZIIZ,
             IZZI,
+
+            ZIZZ,
+            ZZZI,
+
             ZIXX,
+            ZIYY,
+            XXZI,
             YYZI,
+
         };
         std::vector<std::vector<std::vector<std::complex<double>>>> termsA = {
-            II,
-            XX,
-            XZ,
+            proj10,
+            proj00,
+            psi,
+            //II,
+            //IX,
+            //IZ,
+            //XI,
+            //XX,
+            //XZ,
+            //YY,
+            //ZI,
+            //ZX,
+            //ZZ,
         };
         //std::vector<std::vector<std::vector<std::complex<double>>>> termsB = {
             //II,
@@ -611,6 +645,28 @@ int main(int argc, char ** argv) {
             }
             As.push_back(A);
         }
+
+        // General A
+        //for (int i=0; i<numAs; i++) {
+            //std::vector<std::vector<Polynomial<std::complex<double>>>> A(widthA, std::vector<Polynomial<std::complex<double>>>(widthA, Polynomial<std::complex<double>>(numVars, 0i)));
+            //for (int j=0; j<widthA; j++) {
+                //for (int k=j; k<widthA; k++) {
+                    //if (fixedAB) {
+                        //A[j][k] = Polynomial<std::complex<double>>(numVars, knownAs[i][j][k]);
+                    //} else {
+                        //if (j == k) {
+                            //A[j][k] = Polynomial<std::complex<double>>(numVars, 1, {nextVar});
+                            //nextVar++;
+                        //} else {
+                            //A[j][k] = Polynomial<std::complex<double>>(numVars, 1, {nextVar}) + Polynomial<std::complex<double>>(numVars, 1i, {nextVar+1});
+                            //nextVar+=2;
+                        //}
+                    //}
+                    //A[k][j] = std::conj(A[j][k]);
+                //}
+            //}
+            //As.push_back(A);
+        //}
 
         // The Bs
         for (int i=0; i<numBs; i++) {
@@ -796,7 +852,7 @@ int main(int argc, char ** argv) {
             }
         }
     }
-    prob.consPSD.push_back(psdW);
+    prob.conPSD.push_back(psdW);
     for (int i=0; i<numAs; i++) {
         std::vector<std::vector<Polynomial<double>>> psdA(2*widthA, std::vector<Polynomial<double>>(2*widthA, Polynomial<double>(numVars, 0)));
         for (int j=0; j<widthA; j++) {
@@ -815,7 +871,7 @@ int main(int argc, char ** argv) {
                 }
             }
         }
-        prob.consPSD.push_back(psdA);
+        prob.conPSD.push_back(psdA);
     }
     for (int i=0; i<numBs; i++) {
         std::vector<std::vector<Polynomial<double>>> psdB(2*widthB, std::vector<Polynomial<double>>(2*widthB, Polynomial<double>(numVars, 0)));
@@ -835,7 +891,7 @@ int main(int argc, char ** argv) {
                 }
             }
         }
-        prob.consPSD.push_back(psdB);
+        prob.conPSD.push_back(psdB);
     }
 
     // Identities
