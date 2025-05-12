@@ -183,6 +183,35 @@ private:
 
 	}
 
+	// Return combinations 
+	std::vector<std::vector<int>> getAllMonomials(int startingVar, int maxVar, int dimension, std::vector<bool> shouldUse) {
+
+		// Stop when asking for single order monomials
+		std::vector<std::vector<int>> toReturn;
+		if (dimension == 1) {
+			for (int i=startingVar; i<maxVar; i++) {
+                if (shouldUse[i]) {
+                    toReturn.push_back({i});
+                }
+			}
+			return toReturn;
+		}
+
+		// For each var, consider this var as the first and then recurse
+		for (int i=startingVar; i<maxVar; i++) {
+            if (shouldUse[i]) {
+                std::vector<std::vector<int>> y = getAllMonomials(i, maxVar, dimension-1);
+                for (int j=0; j<y.size(); j++) {
+                    y[j].insert(y[j].begin(), i);
+                }
+                toReturn.insert(toReturn.end(), y.begin(), y.end());
+            }
+		}
+
+		return toReturn;
+
+	}
+
 	// Same as above but converts to Polynomial
 	std::vector<Polynomial> getAllMonomialsAsPoly(int numVars, int dimension) {
 
@@ -2294,11 +2323,61 @@ private:
 
 	}
 
+	// Return combinations 
+	std::vector<std::vector<int>> getAllMonomials(int startingVar, int maxVar, int dimension, std::vector<bool> shouldUse) {
+
+		// Stop when asking for single order monomials
+		std::vector<std::vector<int>> toReturn;
+		if (dimension == 1) {
+			for (int i=startingVar; i<maxVar; i++) {
+                if (shouldUse[i]) {
+                    toReturn.push_back({i});
+                }
+			}
+			return toReturn;
+		}
+
+		// For each var, consider this var as the first and then recurse
+		for (int i=startingVar; i<maxVar; i++) {
+            if (shouldUse[i]) {
+                std::vector<std::vector<int>> y = getAllMonomials(i, maxVar, dimension-1);
+                for (int j=0; j<y.size(); j++) {
+                    y[j].insert(y[j].begin(), i);
+                }
+                toReturn.insert(toReturn.end(), y.begin(), y.end());
+            }
+		}
+
+		return toReturn;
+
+	}
+
 	// Add every monom of a certain order (e.g. for order=2, {12}, {13}, {14}...)
 	void addMonomsOfOrder(std::vector<std::string>& monoms, int order) {
 
 		// Get all combinations of this of size=order
 		std::vector<std::vector<int>> toAdd = getAllMonomials(0, maxVariables, order);
+
+		// Convert each of these to monomials and add
+		for (const auto& a : toAdd) {
+			std::string newMonom = "";
+			for (const auto& j : a) {
+				std::string newSection = std::to_string(j);
+				newSection.insert(0, digitsPerInd-newSection.size(), ' ');
+				newMonom += newSection;
+			}
+			if (std::find(monoms.begin(), monoms.end(), newMonom) == monoms.end()) {
+				monoms.push_back(newMonom);
+			}
+		}
+
+	}
+
+	// Add every monom of a certain order (e.g. for order=2, {12}, {13}, {14}...)
+	void addMonomsOfOrder(std::vector<std::string>& monoms, int order, std::vector<bool> shouldUse) {
+
+		// Get all combinations of this of size=order
+		std::vector<std::vector<int>> toAdd = getAllMonomials(0, maxVariables, order, shouldUse);
 
 		// Convert each of these to monomials and add
 		for (const auto& a : toAdd) {
@@ -3169,12 +3248,12 @@ public:
         }
 
         // If we're doing a moment based approximation
-        if (!isLin) {
+        if (!isLin && level > 0) {
 
-            // Get the list monomials that can appear on the top row
+            // Get the list monomials that can appear on the top row TODO not linears ones
             std::vector<std::string> possibleMonoms;
             for (int j=0; j<level; j++) {
-                addMonomsOfOrder(possibleMonoms, j+1);
+                addMonomsOfOrder(possibleMonoms, j+1, varIsNonlinear);
             }
 
             // Make sure that your terms in your objective appear somewhere
@@ -3190,23 +3269,23 @@ public:
             }
 
             // Only put the non-linear terms in the moment matrix
-            for (int j=0; j<possibleMonoms.size(); j++) {
-                bool containsSomethingNonlinear = false;
-                for (int k=0; k<possibleMonoms[j].size(); k+=digitsPerInd) {
-                    int ind = std::stoi(possibleMonoms[j].substr(k, digitsPerInd));
-                    if (varIsNonlinear[ind]) {
-                        containsSomethingNonlinear = true;
-                        break;
-                    }
-                }
-                if (!containsSomethingNonlinear) {
-                    if (verbosity >= 2) {
-                        std::cout << "Removing " << possibleMonoms[j] << " from the moment matrix" << std::endl;
-                    }
-                    possibleMonoms.erase(possibleMonoms.begin()+j);
-                    j--;
-                }
-            }
+            //for (int j=0; j<possibleMonoms.size(); j++) {
+                //bool containsSomethingNonlinear = false;
+                //for (int k=0; k<possibleMonoms[j].size(); k+=digitsPerInd) {
+                    //int ind = std::stoi(possibleMonoms[j].substr(k, digitsPerInd));
+                    //if (varIsNonlinear[ind]) {
+                        //containsSomethingNonlinear = true;
+                        //break;
+                    //}
+                //}
+                //if (!containsSomethingNonlinear) {
+                    //if (verbosity >= 2) {
+                        //std::cout << "Removing " << possibleMonoms[j] << " from the moment matrix" << std::endl;
+                    //}
+                    //possibleMonoms.erase(possibleMonoms.begin()+j);
+                    //j--;
+                //}
+            //}
 
             // Add these all to the top row of a moment matrix
             std::vector<Polynomial<double>> toAdd;
@@ -3254,6 +3333,15 @@ public:
 			}
 			std::cout << std::endl;
 		}
+        if (verbosity >= 1) {
+            int largestMat = 0;
+            for (int i=0; i<monomProducts.size(); i++) {
+                if (monomProducts[i].size() > largestMat) {
+                    largestMat = monomProducts[i].size();
+                }
+            }
+            std::cout << "Largest moment matrix size: " << largestMat << std::endl;
+        }
 
 		// Create the PSD matrices from this list
 		std::vector<std::shared_ptr<monty::ndarray<int,1>>> shouldBePSD;

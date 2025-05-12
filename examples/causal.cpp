@@ -1044,6 +1044,65 @@ int main(int argc, char ** argv) {
     }
     prob.obj = prob.obj*(1.0/numProbs);
 
+    // Custom moment matrix TODO
+    std::vector<std::vector<std::vector<Polynomial<std::complex<double>>>>> matsInTopRow;
+    std::vector<std::vector<Polynomial<std::complex<double>>>> fullI(widthW, std::vector<Polynomial<std::complex<double>>>(widthW, Polynomial<std::complex<double>>(numVars, 0i)));
+    std::vector<std::vector<Polynomial<std::complex<double>>>> partialI(widthA, std::vector<Polynomial<std::complex<double>>>(widthA, Polynomial<std::complex<double>>(numVars, 0i)));
+    for (int i=0; i<widthW; i++) {
+        fullI[i][i] = Polynomial<std::complex<double>>(numVars, 1);
+    }
+    for (int i=0; i<widthA; i++) {
+        partialI[i][i] = Polynomial<std::complex<double>>(numVars, 1);
+    }
+    matsInTopRow.push_back(fullI);
+    matsInTopRow.push_back(W);
+    std::cout << "W done" << std::endl;
+    for (int i=0; i<numAs; i++) {
+        matsInTopRow.push_back(tensor(As[i], partialI));
+        std::cout << "A[" << i << "] done" << std::endl;
+    }
+    for (int i=0; i<numBs; i++) {
+        matsInTopRow.push_back(tensor(partialI, Bs[i]));
+        std::cout << "B[" << i << "] done" << std::endl;
+    }
+    for (int i=0; i<numBs; i++) {
+        matsInTopRow.push_back(tensor(partialI, Bs[i]) * W);
+        std::cout << "B[" << i << "]W done" << std::endl;
+    }
+
+    // Form the custom matrix based on the products of the above matrices
+    int customMatWidth = matsInTopRow.size() * widthW;
+    std::vector<std::vector<Polynomial<double>>> customMomentMat(customMatWidth, std::vector<Polynomial<double>>(customMatWidth, Polynomial<double>(numVars, 0)));
+    for (int i=0; i<matsInTopRow.size(); i++) {
+        for (int j=0; j<matsInTopRow.size(); j++) {
+            std::cout << "Multiplying " << i << " " << j << std::endl;
+            std::vector<std::vector<Polynomial<std::complex<double>>>> mat = matsInTopRow[i] * matsInTopRow[j];
+            for (int k=0; k<mat.size(); k++) {
+                for (int l=0; l<mat.size(); l++) {
+                    customMomentMat[widthW*i+k][widthW*j+l] += real(mat[k][l]);
+                }
+            }
+        }
+    }
+    level = 0;
+    prob.conPSD.push_back(customMomentMat);
+
+    // Try restricting to a subset of the objective
+    //Polynomial<double> objSubset = Polynomial<double>(numVars, 0);
+    //int numTerms = 5;
+    //for (int i=0; i<numTerms; i++) {
+        //int randInd = rand() % prob.obj.size();
+        //int count = 0;
+        //for (auto it=prob.obj.coeffs.begin(); it!=prob.obj.coeffs.end(); it++) {
+            //if (count == randInd) {
+                //objSubset.coeffs[it->first] = it->second;
+                //break;
+            //}
+            //count++;
+        //}
+    //}
+    //prob.obj = objSubset;
+
     // Clean all the constraints
     if (verbosity > 0) {
         std::cout << "Cleaning constraints..." << std::endl;
@@ -1063,7 +1122,11 @@ int main(int argc, char ** argv) {
         std::cout << prob << std::endl;
         std::cout << "Num linear cons: " << prob.conZero.size() << std::endl;
         std::cout << "Size of obj: " << prob.obj.size() << std::endl;
-        std::cout << "Size of moment mat: " << prob.conPSD.size() << " x " << prob.conPSD[0].size() << std::endl;
+        std::cout << "Size of moment mats: ";
+        for (int i=0; i<prob.conPSD.size(); i++) {
+            std::cout << prob.conPSD[i].size() << " x " << prob.conPSD[i][0].size() << ", ";
+        }
+        std::cout << std::endl;
     }
 
     // Try reducing the problem
