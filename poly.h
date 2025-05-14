@@ -1954,6 +1954,18 @@ public:
 
 	}
 
+    // Get the hessian of a Polynomial
+    std::vector<std::vector<Polynomial>> hessian() {
+        std::vector<std::vector<Polynomial>> hessian(maxVariables, std::vector<Polynomial>(maxVariables, Polynomial(maxVariables)));
+        for (int i=0; i<maxVariables; i++) {
+            for (int j=i; j<maxVariables; j++) {
+                hessian[i][j] = differentiate(i).differentiate(j);
+                hessian[j][i] = hessian[i][j];
+            }
+        }
+        return hessian;
+    }
+
 	// Use the optim library to minimize the polynomial
 	std::vector<polyType> minimize(double alpha=0.9, double tolerance=1e-10, int maxIters=-1, int threads=4, int verbosity=1, double maxMag=1, double stabilityTerm=1e-13) {
 

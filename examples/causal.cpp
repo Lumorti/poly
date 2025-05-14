@@ -352,7 +352,9 @@ int main(int argc, char ** argv) {
 	int maxIters = -1;
     bool useKnown = false;
     bool useAnsatz = false;
+    bool bEqualsA = false;
     bool fixedAB = false;
+    bool justPrintHessian = false;
 	for (int i=0; i<argc; i++) {
 		std::string arg = argv[i];
 		if (arg == "-h" || arg == "--help") {
@@ -360,7 +362,9 @@ int main(int argc, char ** argv) {
 			std::cout << " -v [int]    set the verbosity level" << std::endl;
 			std::cout << " -l [int]    set the level of the branch and bound" << std::endl;
 			std::cout << " -i [int]    set the maximum number of iterations" << std::endl;
+			std::cout << " -H          just print the Hessian of the objective" << std::endl;
 			std::cout << " -a          use ansatz approach" << std::endl;
+			std::cout << " -B          set all A and B matrices to be equal" << std::endl;
 			std::cout << " -f          use fixed A and B matrices" << std::endl;
 			std::cout << " -k          test with a known solution" << std::endl;
 			std::cout << " -r          use a random seed" << std::endl;
@@ -371,6 +375,10 @@ int main(int argc, char ** argv) {
 		} else if (arg == "-v" && i+1 < argc) {
 			verbosity = std::stoi(argv[i+1]);
 			i++;
+        } else if (arg == "-H") {
+            justPrintHessian = true;
+        } else if (arg == "-B") {
+            bEqualsA = true;
         } else if (arg == "-f") {
             fixedAB = true;
         } else if (arg == "-a") {
@@ -430,10 +438,7 @@ int main(int argc, char ** argv) {
         knownBs.push_back(B);
     }
 
-    // W = 0.25 * (I_8 + (1/sqrt(2)) * (ZZZI + ZIXX))
-    for (int i=0; i<widthW; i++) {
-        knownW[i][i] = 1;
-    }
+    // Define the matrices
     std::vector<std::vector<std::complex<double>>> Z(2, std::vector<std::complex<double>>(2, 0));
     Z[0][0] = 1;
     Z[1][1] = -1;
@@ -452,74 +457,82 @@ int main(int argc, char ** argv) {
     proj1[1][1] = 1;
     std::vector<std::vector<std::complex<double>>> ZZZI = tensor(Z, tensor(Z, tensor(Z, I2)));
     std::vector<std::vector<std::complex<double>>> ZIXX = tensor(Z, tensor(I2, tensor(X, X)));
-    for (int i=0; i<widthW; i++) {
-        for (int j=i; j<widthW; j++) {
-            knownW[i][j] += (1/sqrt(2)) * (ZZZI[i][j] + ZIXX[i][j]);
-        }
-    }
-    for (int i=0; i<widthW; i++) {
-        for (int j=0; j<widthW; j++) {
-            knownW[i][j] *= 0.25;
-        }
-    }
-    for (int i=0; i<widthW; i++) {
-        for (int j=i; j<widthW; j++) {
-            knownW[j][i] = std::conj(knownW[i][j]);
-        }
-    }
 
-    // A_0_0 = 0
-    // A_1_0 = |00><00| + |00><11| + |11><00| + |11><11|
-    // A_2_0 = 0
-    for (int i=0; i<d; i++) {
-        for (int j=0; j<d; j++) {
-            int ind1 = i*d + i;
-            int ind2 = j*d + j;
-            knownAs[d][ind1][ind2] = 1;
+    // W = 0.25 * (I_8 + (1/sqrt(2)) * (ZZZI + ZIXX))
+    if (d == 2) {
+        for (int i=0; i<widthW; i++) {
+            knownW[i][i] = 1;
         }
-    }
-    
-    // A_0_1 = |0><0| (x) |0><0|
-    // A_1_1 = |1><1| (x) |0><0|
-    // A_2_1 = |2><2| (x) |0><0|
-    for (int i=0; i<d; i++) {
-        knownAs[d*i+1][i*d][i*d] = 1;
-    }
-
-    // A_0_2 = |+0><+0| (x) |0><0|
-    // A_1_2 = |+1><+1| (x) |0><0|
-    // A_2_2 = |+2><+2| (x) |0><0|
-    if (d >= 3) {
-        std::complex<double> omega = exp(2i*M_PI/double(d));
-        std::complex<double> omega2 = exp(4i*M_PI/double(d));
-        for (int i=0; i<d; i++) {
-            for (int j=0; j<d; j++) {
-                knownAs[2][i*d][j*d] = 1/sqrt(3);
-                std::complex<double> coeff1 = 1/sqrt(3);
-                std::complex<double> coeff2 = 1/sqrt(3);
-                if (i == 1) {
-                    coeff1 *= omega;
-                    coeff2 *= omega2;
-                } else if (i == 2) {
-                    coeff1 *= omega2;
-                    coeff2 *= omega;
-                }
-                if (j == 1) {
-                    coeff1 *= omega;
-                    coeff2 *= omega2;
-                } else if (j == 2) {
-                    coeff1 *= omega2;
-                    coeff2 *= omega;
-                }
-                knownAs[d+2][i*d][j*d] = coeff1;
-                knownAs[2*d+2][i*d][j*d] = coeff2;
+        for (int i=0; i<widthW; i++) {
+            for (int j=i; j<widthW; j++) {
+                knownW[i][j] += (1/sqrt(2)) * (ZZZI[i][j] + ZIXX[i][j]);
             }
         }
-    }
+        for (int i=0; i<widthW; i++) {
+            for (int j=0; j<widthW; j++) {
+                knownW[i][j] *= 0.25;
+            }
+        }
+        for (int i=0; i<widthW; i++) {
+            for (int j=i; j<widthW; j++) {
+                knownW[j][i] = std::conj(knownW[i][j]);
+            }
+        }
 
-    // Bs the same as the As
-    for (int i=0; i<numBs; i++) {
-        knownBs[i] = knownAs[i];
+        // A_0_0 = 0
+        // A_1_0 = |00><00| + |00><11| + |11><00| + |11><11|
+        // A_2_0 = 0
+        for (int i=0; i<d; i++) {
+            for (int j=0; j<d; j++) {
+                int ind1 = i*d + i;
+                int ind2 = j*d + j;
+                knownAs[d][ind1][ind2] = 1;
+            }
+        }
+        
+        // A_0_1 = |0><0| (x) |0><0|
+        // A_1_1 = |1><1| (x) |0><0|
+        // A_2_1 = |2><2| (x) |0><0|
+        for (int i=0; i<d; i++) {
+            knownAs[d*i+1][i*d][i*d] = 1;
+        }
+
+        // A_0_2 = |+0><+0| (x) |0><0|
+        // A_1_2 = |+1><+1| (x) |0><0|
+        // A_2_2 = |+2><+2| (x) |0><0|
+        if (d >= 3) {
+            std::complex<double> omega = exp(2i*M_PI/double(d));
+            std::complex<double> omega2 = exp(4i*M_PI/double(d));
+            for (int i=0; i<d; i++) {
+                for (int j=0; j<d; j++) {
+                    knownAs[2][i*d][j*d] = 1/sqrt(3);
+                    std::complex<double> coeff1 = 1/sqrt(3);
+                    std::complex<double> coeff2 = 1/sqrt(3);
+                    if (i == 1) {
+                        coeff1 *= omega;
+                        coeff2 *= omega2;
+                    } else if (i == 2) {
+                        coeff1 *= omega2;
+                        coeff2 *= omega;
+                    }
+                    if (j == 1) {
+                        coeff1 *= omega;
+                        coeff2 *= omega2;
+                    } else if (j == 2) {
+                        coeff1 *= omega2;
+                        coeff2 *= omega;
+                    }
+                    knownAs[d+2][i*d][j*d] = coeff1;
+                    knownAs[2*d+2][i*d][j*d] = coeff2;
+                }
+            }
+        }
+
+        // Bs the same as the As
+        for (int i=0; i<numBs; i++) {
+            knownBs[i] = knownAs[i];
+        }
+
     }
 
     // Ansats approach TODO
@@ -707,7 +720,7 @@ int main(int argc, char ** argv) {
                 } else {
                     W[i][j] = Polynomial<std::complex<double>>(numVars, 1, {nextVar}) + Polynomial<std::complex<double>>(numVars, 1i, {nextVar+1});
                     W[j][i] = std::conj(W[i][j]);
-                    nextVar+=2;
+                    nextVar += 2;
                 }
             }
         }
@@ -747,7 +760,7 @@ int main(int argc, char ** argv) {
                             nextVar++;
                         } else {
                             B[j][k] = Polynomial<std::complex<double>>(numVars, 1, {nextVar}) + Polynomial<std::complex<double>>(numVars, 1i, {nextVar+1});
-                            nextVar+=2;
+                            nextVar += 2;
                         }
                     }
                     B[k][j] = std::conj(B[j][k]);
@@ -756,6 +769,17 @@ int main(int argc, char ** argv) {
             Bs.push_back(B);
         }
 
+    }
+
+    // If each B should equal each A
+    if (bEqualsA) {
+        for (int i=0; i<numAs; i++) {
+            for (int j=0; j<widthA; j++) {
+                for (int k=j; k<widthA; k++) {
+                    Bs[i][j][k] = As[i][j][k];
+                }
+            }
+        }
     }
 
     // Print everything
@@ -1045,47 +1069,47 @@ int main(int argc, char ** argv) {
     prob.obj = prob.obj*(1.0/numProbs);
 
     // Custom moment matrix TODO
-    std::vector<std::vector<std::vector<Polynomial<std::complex<double>>>>> matsInTopRow;
-    std::vector<std::vector<Polynomial<std::complex<double>>>> fullI(widthW, std::vector<Polynomial<std::complex<double>>>(widthW, Polynomial<std::complex<double>>(numVars, 0i)));
-    std::vector<std::vector<Polynomial<std::complex<double>>>> partialI(widthA, std::vector<Polynomial<std::complex<double>>>(widthA, Polynomial<std::complex<double>>(numVars, 0i)));
-    for (int i=0; i<widthW; i++) {
-        fullI[i][i] = Polynomial<std::complex<double>>(numVars, 1);
-    }
-    for (int i=0; i<widthA; i++) {
-        partialI[i][i] = Polynomial<std::complex<double>>(numVars, 1);
-    }
-    matsInTopRow.push_back(fullI);
-    matsInTopRow.push_back(W);
-    std::cout << "W done" << std::endl;
-    for (int i=0; i<numAs; i++) {
-        matsInTopRow.push_back(tensor(As[i], partialI));
-        std::cout << "A[" << i << "] done" << std::endl;
-    }
-    for (int i=0; i<numBs; i++) {
-        matsInTopRow.push_back(tensor(partialI, Bs[i]));
-        std::cout << "B[" << i << "] done" << std::endl;
-    }
-    for (int i=0; i<numBs; i++) {
-        matsInTopRow.push_back(tensor(partialI, Bs[i]) * W);
-        std::cout << "B[" << i << "]W done" << std::endl;
-    }
+    //std::vector<std::vector<std::vector<Polynomial<std::complex<double>>>>> matsInTopRow;
+    //std::vector<std::vector<Polynomial<std::complex<double>>>> fullI(widthW, std::vector<Polynomial<std::complex<double>>>(widthW, Polynomial<std::complex<double>>(numVars, 0i)));
+    //std::vector<std::vector<Polynomial<std::complex<double>>>> partialI(widthA, std::vector<Polynomial<std::complex<double>>>(widthA, Polynomial<std::complex<double>>(numVars, 0i)));
+    //for (int i=0; i<widthW; i++) {
+        //fullI[i][i] = Polynomial<std::complex<double>>(numVars, 1);
+    //}
+    //for (int i=0; i<widthA; i++) {
+        //partialI[i][i] = Polynomial<std::complex<double>>(numVars, 1);
+    //}
+    //matsInTopRow.push_back(fullI);
+    //matsInTopRow.push_back(W);
+    //std::cout << "W done" << std::endl;
+    //for (int i=0; i<numAs; i++) {
+        //matsInTopRow.push_back(tensor(As[i], partialI));
+        //std::cout << "A[" << i << "] done" << std::endl;
+    //}
+    //for (int i=0; i<numBs; i++) {
+        //matsInTopRow.push_back(tensor(partialI, Bs[i]));
+        //std::cout << "B[" << i << "] done" << std::endl;
+    //}
+    //for (int i=0; i<numBs; i++) {
+        //matsInTopRow.push_back(tensor(partialI, Bs[i]) * W);
+        //std::cout << "B[" << i << "]W done" << std::endl;
+    //}
 
     // Form the custom matrix based on the products of the above matrices
-    int customMatWidth = matsInTopRow.size() * widthW;
-    std::vector<std::vector<Polynomial<double>>> customMomentMat(customMatWidth, std::vector<Polynomial<double>>(customMatWidth, Polynomial<double>(numVars, 0)));
-    for (int i=0; i<matsInTopRow.size(); i++) {
-        for (int j=0; j<matsInTopRow.size(); j++) {
-            std::cout << "Multiplying " << i << " " << j << std::endl;
-            std::vector<std::vector<Polynomial<std::complex<double>>>> mat = matsInTopRow[i] * matsInTopRow[j];
-            for (int k=0; k<mat.size(); k++) {
-                for (int l=0; l<mat.size(); l++) {
-                    customMomentMat[widthW*i+k][widthW*j+l] += real(mat[k][l]);
-                }
-            }
-        }
-    }
-    level = 0;
-    prob.conPSD.push_back(customMomentMat);
+    //int customMatWidth = matsInTopRow.size() * widthW;
+    //std::vector<std::vector<Polynomial<double>>> customMomentMat(customMatWidth, std::vector<Polynomial<double>>(customMatWidth, Polynomial<double>(numVars, 0)));
+    //for (int i=0; i<matsInTopRow.size(); i++) {
+        //for (int j=0; j<matsInTopRow.size(); j++) {
+            //std::cout << "Multiplying " << i << " " << j << std::endl;
+            //std::vector<std::vector<Polynomial<std::complex<double>>>> mat = matsInTopRow[i] * matsInTopRow[j];
+            //for (int k=0; k<mat.size(); k++) {
+                //for (int l=0; l<mat.size(); l++) {
+                    //customMomentMat[widthW*i+k][widthW*j+l] += real(mat[k][l]);
+                //}
+            //}
+        //}
+    //}
+    //level = 0;
+    //prob.conPSD.push_back(customMomentMat);
 
     // Try restricting to a subset of the objective
     //Polynomial<double> objSubset = Polynomial<double>(numVars, 0);
@@ -1366,6 +1390,36 @@ int main(int argc, char ** argv) {
     //}
     //Polynomial<double> trueObj = prob.obj;
     //prob.obj = linearObj;
+
+    // If told to just print the Hessian
+    if (justPrintHessian) {
+
+        // Output the terminal
+        std::cout << "Calculating Hessian..." << std::endl;
+        std::vector<std::vector<Polynomial<double>>> hessian = prob.obj.hessian();
+        std::cout << "Hessian:" << std::endl;
+        std::cout << hessian << std::endl;
+
+        // Write it as a csv
+        std::ofstream outfile("hessian.csv");
+        for (int i=0; i<hessian.size(); i++) {
+            for (int j=0; j<hessian[i].size(); j++) {
+                if (hessian[i][j].size() > 0) {
+                    outfile << 1;
+                } else {
+                    outfile << 0;
+                }
+                if (j < hessian[i].size()-1) {
+                    outfile << ", ";
+                }
+            }
+            outfile << std::endl;
+        }
+        outfile.close();
+
+        return 0;
+
+    }
 
 	// Optimize using branch and bound
     std::cout << "Optimizing..." << std::endl;
