@@ -7,4 +7,5 @@ examples/sos
 examples/casual
 examples/matrices
 examples/isingFiles/*
+callgrind*
 
