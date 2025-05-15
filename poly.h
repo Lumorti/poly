@@ -854,6 +854,7 @@ public:
 		return newPoly;
 
 	}
+
 	// Substitute a string variable for a value  
 	Polynomial replaceWithValue(std::unordered_map<std::string, polyType> indMap) {
 
@@ -1779,7 +1780,7 @@ public:
 		// For each coefficient
 		for (auto const &pair: coeffs) {
 
-			// Get the indices as a std::vector
+            // For each of the indices
 			for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
 
 				// Check if this index is the correct
@@ -1795,6 +1796,29 @@ public:
 		return false;
 
 	}
+
+    // Return true if the polynomial contains any element of this set
+    bool containsAny(std::set<std::string> indSet) {
+
+        // For each coefficient
+        for (auto const &pair: coeffs) {
+
+            // For each of the indices
+            for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
+
+                // Check if this index is in the set
+                if (indSet.find(pair.first.substr(j, digitsPerInd)) != indSet.end()) {
+                    return true;
+                }
+
+            }
+
+        }
+
+        // Default false
+        return false;
+
+    }
 
 	// --------------------------------------------
 	//                  Other 
@@ -1955,15 +1979,24 @@ public:
 	}
 
     // Get the hessian of a Polynomial
-    std::vector<std::vector<Polynomial>> hessian() {
+    std::vector<std::vector<Polynomial>> hessian(int threads=4) {
+
+		// Prepare everything for parallel computation
+		omp_set_num_threads(threads);
+		Eigen::setNbThreads(threads);
+
+        // Calculate the Hessian
         std::vector<std::vector<Polynomial>> hessian(maxVariables, std::vector<Polynomial>(maxVariables, Polynomial(maxVariables)));
+        #pragma omp parallel for
         for (int i=0; i<maxVariables; i++) {
             for (int j=i; j<maxVariables; j++) {
-                hessian[i][j] = differentiate(i).differentiate(j);
+                hessian[i][j] = (differentiate(i).differentiate(j)).prune();
                 hessian[j][i] = hessian[i][j];
             }
         }
+
         return hessian;
+
     }
 
 	// Use the optim library to minimize the polynomial
@@ -2532,7 +2565,7 @@ public:
 
 	// Given a list of var indices and values, replace everything
 	template <typename otherType>
-	PolynomialProblem replaceWithValue(std::unordered_map<int,otherType> map) {
+	PolynomialProblem replaceWithValue(std::unordered_map<int, otherType> map) {
 
 		// Convert the map to the correct type
 		std::unordered_map<int,polyType> convertedMap;
@@ -2640,7 +2673,7 @@ public:
 				output << "Variable " << i << " is binary in {" << other.varBounds[i].first << ", " << other.varBounds[i].second << "}" << std::endl;
 				hasBounds = true;
 			} else if (other.varBounds[i].first > -other.largeTol || other.varBounds[i].second < other.largeTol) {
-				output << "Variable " << i << " is in range [" << other.varBounds[i].first << ", " << other.varBounds[i].second << "]" << std::endl;
+				output << "Variable " << i << " in range [" << other.varBounds[i].first << ", " << other.varBounds[i].second << "]" << std::endl;
 				hasBounds = true;
 			}
 		}
@@ -2689,6 +2722,47 @@ public:
 		return maxDegree;
 	}
 
+	// Remove trivial linear constraints
+	PolynomialProblem<polyType> removeTrivial() {
+
+		// Copy this problem
+		PolynomialProblem<polyType> newProb = *this;
+
+		// For each equality
+		for (int i=0; i<newProb.conZero.size(); i++) {
+
+            // If it's size one
+            if (newProb.conZero[i].size() == 1) {
+
+                // Get the var
+                std::string varToRemove = newProb.conZero[i].getMonomials()[0];
+
+                // Replace this everywhere
+                std::unordered_map<std::string,polyType> map;
+                map[varToRemove] = 0;
+                newProb.obj = newProb.obj.replaceWithValue(map);
+                for (int j=0; j<newProb.conZero.size(); j++) {
+                    newProb.conZero[j] = newProb.conZero[j].replaceWithValue(map);
+                }
+                for (int j=0; j<newProb.conPositive.size(); j++) {
+                    newProb.conPositive[j] = newProb.conPositive[j].replaceWithValue(map);
+                }
+                for (int j=0; j<newProb.conPSD.size(); j++) {
+                    for (int k=0; k<newProb.conPSD[j].size(); k++) {
+                        for (int l=0; l<newProb.conPSD[j][k].size(); l++) {
+                            newProb.conPSD[j][k][l] = newProb.conPSD[j][k][l].replaceWithValue(map);
+                        }
+                    }
+                }
+
+            }
+
+        }
+
+        return newProb;
+
+    }
+    
 	// Find any linear equalities and simplify everything else
 	PolynomialProblem<polyType> removeLinear() {
 
@@ -3110,6 +3184,206 @@ public:
 
     }
 
+	// Minimize using seesaw TODO
+	std::pair<polyType, std::vector<polyType>> seesaw(int verbosity=1, int maxIters=-1, std::vector<std::set<int>> varSets={}, std::vector<polyType> initVec={}, double convergenceTol=1e-5) {
+
+        // The current solution
+        std::vector<polyType> sol(maxVariables, 0);
+        polyType objVal = 0;
+        polyType prevObj = 1000000;
+        bool shouldStop = false;
+
+        // If we have an initial vector, use that
+        if (initVec.size() > 0) {
+            sol = initVec;
+
+        // Otherwise run the problem with a linear objective to get a feasible point
+        } else {
+            if (verbosity >= 1) {
+                std::cout << "Finding initial feasible point..." << std::endl;
+            }
+            PolynomialProblem<polyType> linProb = *this;
+            linProb.obj = Polynomial<polyType>(maxVariables);
+            for (int i=0; i<maxVariables; i++) {
+                double randNum = double(rand()) / double(RAND_MAX);
+                randNum = (randNum - 0.5) * 2.0;
+                linProb.obj.addTerm(randNum, {i});
+            }
+            auto solLin = linProb.optimize(0, 0, -1);
+            if (verbosity >= 1) {
+                std::cout << "Initial feasible point: " << obj.eval(solLin.second) << std::endl;
+            }
+            sol = solLin.second;
+
+        }
+
+        // If there's no limit
+        if (maxIters == -1) {
+            maxIters = 1000000;
+        }
+
+        // Generate each of the problems
+        if (verbosity >= 1) {
+            std::cout << "Generating problems..." << std::endl;
+        }
+        std::vector<PolynomialProblem<polyType>> problems;
+        for (int i=0; i<varSets.size(); i++) {
+
+            // Convert to strings for speed
+            std::set<int> varSet = varSets[i];
+            std::set<std::string> varSetStr;
+            for (auto it=varSet.begin(); it!=varSet.end(); it++) {
+                std::string asStr = std::to_string(*it);
+                while (asStr.size() < digitsPerInd) {
+                    asStr = " " + asStr;
+                }
+                varSetStr.insert(asStr);
+            }
+
+            // Verbose output
+            if (verbosity >= 3) {
+                std::cout << "For var set " << i << ": " << std::endl;
+                std::cout << "set: ";
+                for (auto it=varSet.begin(); it!=varSet.end(); it++) {
+                    std::cout << *it << ", ";
+                }
+                std::cout << std::endl;
+            }
+
+            // Start with a blank problem
+            PolynomialProblem<polyType> newProb(maxVariables);
+            newProb.obj = obj;
+
+            // Only add equality constraints with the variables in this set
+            for (int j=0; j<conZero.size(); j++) {
+                if (conZero[j].containsAny(varSetStr)) {
+                    newProb.conZero.push_back(conZero[j]);
+                }
+            }
+
+            // Only add inequality constraints with the variables in this set
+            for (int j=0; j<conPositive.size(); j++) {
+                if (conPositive[j].containsAny(varSetStr)) {
+                    newProb.conPositive.push_back(conPositive[j]);
+                }
+            }
+
+            // Only add PSD constraints with the variables in this set
+            for (int j=0; j<conPSD.size(); j++) {
+                bool contains = false;
+                for (int k=0; k<conPSD[j].size(); k++) {
+                    for (int l=k; l<conPSD[j][k].size(); l++) {
+                        if (conPSD[j][k][l].containsAny(varSetStr)) {
+                            contains = true;
+                            break;
+                        }
+                    }
+                    if (contains) {
+                        break;
+                    }
+                }
+                if (contains) {
+                    newProb.conPSD.push_back(conPSD[j]);
+                }
+            }
+
+            // Add the var bounds
+            newProb.varBounds = varBounds;
+
+            // Verbose output
+            if (verbosity >= 3) {
+                std::cout << newProb << std::endl;
+            }
+
+            //if (verbosity >= 1) {
+                //std::cout << "Switching to minimal variable mapping..." << std::endl;
+                //std::cout << "Num variables before reduction: " << newProb.maxVariables << std::endl;
+            //}
+            //std::unordered_map<int, int> minimalMap = newProb.getMinimalMap();
+            //newProb = newProb.replaceWithVariable(minimalMap);
+            //if (verbosity >= 1) {
+                //std::cout << "Num variables after reduction: " << newProb.maxVariables << std::endl;
+            //}
+
+            // Add this problem to the list
+            problems.push_back(newProb);
+
+        }
+
+        // Up to some iteration limit
+        if (verbosity >= 1) {
+            std::cout << "Starting seesaw..." << std::endl;
+        }
+        for (int i=0; i<maxIters; i++) {
+
+            // For each variable set
+            for (int j=0; j<varSets.size(); j++) {
+
+                // Get the current variable set
+                std::set<int> varSet = varSets[j];
+
+                // Get the mapping from every other variable to the current sol
+                std::unordered_map<int, polyType> map;
+                for (int k=0; k<maxVariables; k++) {
+                    if (std::find(varSet.begin(), varSet.end(), k) == varSet.end()) {
+                        map[k] = sol[k];
+                    }
+                }
+
+                // Add equality constraints to the problem
+                PolynomialProblem<polyType> newProb = problems[j].replaceWithValue(map);
+
+                // Verbose ouput
+                if (verbosity >= 2) {
+                    std::cout << newProb << std::endl;
+                }
+
+                // Solve this problem
+                auto solNew = newProb.optimize(0, verbosity-1, -1);
+                objVal = solNew.first;
+
+                // Output the solution
+                if (verbosity >= 1) {
+                    std::cout << "Seesaw iteration " << i << ", set " << j << ": " << solNew.first << std::endl;
+                }
+
+                // Replace the solution
+                if (solNew.second.size() > 0) {
+                    for (auto it=varSet.begin(); it!=varSet.end(); it++) {
+                        sol[*it] = solNew.second[*it];
+                    }
+
+                // If it was infeasible
+                } else {
+                    if (verbosity >= 1) {
+                        std::cout << "No solution found for this set" << std::endl;
+                    }
+                    shouldStop = true;
+                    break;
+                }
+
+            }
+
+            // If we've converged, break
+            if (std::abs(objVal - prevObj) < convergenceTol) {
+                if (verbosity >= 1) {
+                    std::cout << "Stopping due to convergence" << std::endl;
+                }
+                shouldStop = true;
+            }
+            prevObj = objVal;
+
+            // Break out of this loop
+            if (shouldStop) {
+                break;
+            }
+
+        }
+
+        return {objVal, sol};
+
+    }
+
 	// Minimize using branch and bound plus SDP
 	std::pair<polyType, std::vector<polyType>> optimize(int level=1, int verbosity=1, int maxIters=-1) {
 
@@ -3262,7 +3536,7 @@ public:
         // If we're doing a moment based approximation
         if (!isLin && level > 0) {
 
-            // Get the list monomials that can appear on the top row TODO not linears ones
+            // Get the list monomials that can appear on the top row
             std::vector<std::string> possibleMonoms;
             for (int j=0; j<level; j++) {
                 addMonomsOfOrder(possibleMonoms, j+1, varIsNonlinear);
@@ -3280,25 +3554,6 @@ public:
                 }
             }
 
-            // Only put the non-linear terms in the moment matrix
-            //for (int j=0; j<possibleMonoms.size(); j++) {
-                //bool containsSomethingNonlinear = false;
-                //for (int k=0; k<possibleMonoms[j].size(); k+=digitsPerInd) {
-                    //int ind = std::stoi(possibleMonoms[j].substr(k, digitsPerInd));
-                    //if (varIsNonlinear[ind]) {
-                        //containsSomethingNonlinear = true;
-                        //break;
-                    //}
-                //}
-                //if (!containsSomethingNonlinear) {
-                    //if (verbosity >= 2) {
-                        //std::cout << "Removing " << possibleMonoms[j] << " from the moment matrix" << std::endl;
-                    //}
-                    //possibleMonoms.erase(possibleMonoms.begin()+j);
-                    //j--;
-                //}
-            //}
-
             // Add these all to the top row of a moment matrix
             std::vector<Polynomial<double>> toAdd;
             if (possibleMonoms.size() > 0) {
@@ -3308,9 +3563,6 @@ public:
                 }
                 monomProducts.push_back(toAdd);
             }
-
-            // TODO smaller moment mats
-            //int sizeLimit = 30;
 
         }
 
@@ -3598,7 +3850,7 @@ public:
         mosek::fusion::Parameter::t EM = M->parameter(monty::new_array_ptr<int>({numParamEqCons, varsTotal}), monty::new_array_ptr<long>(sparsity2));
         M->constraint(mosek::fusion::Expr::mul(EM, xM), mosek::fusion::Domain::equalsTo(0.0));
 
-        // Parameterized bounds for each variable TODO
+        // Parameterized bounds for each variable
         int numParamBounds = 0;
         std::vector<long> sparsity3;
         for (int i=0; i<monoms.size(); i++) {

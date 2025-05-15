@@ -1,6 +1,6 @@
 CXX=g++
 CXXFLAGS=-fmax-errors=3 -O3 -march=native
-DEBUGFLAGS=-Wall -g -pg -Wfatal-errors
+DEBUGFLAGS=-g -Og -fmax-errors=1
 LIBSEIGEN= -I/usr/include/eigen3
 LIBSOMP= -fopenmp
 LIBSSCS= -L${SCSHOME}/lib/ -I${SCSHOME}/include/scs/ -lscsdir

@@ -354,6 +354,7 @@ int main(int argc, char ** argv) {
     bool useAnsatz = false;
     bool bEqualsA = false;
     bool fixedAB = false;
+    bool seesaw = false;
     bool justPrintHessian = false;
 	for (int i=0; i<argc; i++) {
 		std::string arg = argv[i];
@@ -362,6 +363,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -v [int]    set the verbosity level" << std::endl;
 			std::cout << " -l [int]    set the level of the branch and bound" << std::endl;
 			std::cout << " -i [int]    set the maximum number of iterations" << std::endl;
+			std::cout << " -s          optimize using seesaw" << std::endl;
 			std::cout << " -H          just print the Hessian of the objective" << std::endl;
 			std::cout << " -a          use ansatz approach" << std::endl;
 			std::cout << " -B          set all A and B matrices to be equal" << std::endl;
@@ -377,6 +379,8 @@ int main(int argc, char ** argv) {
 			i++;
         } else if (arg == "-H") {
             justPrintHessian = true;
+        } else if (arg == "-s") {
+            seesaw = true;
         } else if (arg == "-B") {
             bEqualsA = true;
         } else if (arg == "-f") {
@@ -402,15 +406,12 @@ int main(int argc, char ** argv) {
     int d3 = d*d*d;
     int d4 = d*d*d*d;
     int widthW = d4;
-    int numAs = d2;
-    int numBs = d2;
+    int numAs = 4;
+    int numBs = 4;
     int widthA = d2;
     int widthB = d2;
     int fullWidth = widthW + numAs*widthA + numBs*widthB;
     int numVars = 2*(widthW*(widthW+1)/2 + numAs*widthA*(widthA+1)/2 + numBs*widthB*(widthB+1)/2);
-    //if (useAnsatz) {
-        //numVars = 14;
-    //}
 	PolynomialProblem<double> prob(numVars);
 
     // Output some sizes
@@ -459,7 +460,7 @@ int main(int argc, char ** argv) {
     std::vector<std::vector<std::complex<double>>> ZIXX = tensor(Z, tensor(I2, tensor(X, X)));
 
     // W = 0.25 * (I_8 + (1/sqrt(2)) * (ZZZI + ZIXX))
-    if (d == 2) {
+    if (useKnown) {
         for (int i=0; i<widthW; i++) {
             knownW[i][i] = 1;
         }
@@ -571,31 +572,31 @@ int main(int argc, char ** argv) {
         std::vector<std::vector<std::complex<double>>> proj01 = tensor(proj0, proj1);
         std::vector<std::vector<std::complex<double>>> proj10 = tensor(proj1, proj0);
         std::vector<std::vector<std::complex<double>>> proj00 = tensor(proj0, proj0);
-        std::vector<std::vector<std::complex<double>>> psi(4, std::vector<std::complex<double>>(4, 0));
+        std::vector<std::vector<std::complex<double>>> psi(d2, std::vector<std::complex<double>>(d2, 0));
         psi[0][0] = 1;
-        psi[3][3] = 1;
-        psi[0][3] = 1;
-        psi[3][0] = 1;
+        psi[d2-1][d2-1] = 1;
+        psi[0][d2-1] = 1;
+        psi[d2-1][0] = 1;
 
         // Which to use
         std::vector<std::vector<std::vector<std::complex<double>>>> termsW = {
+
             IIII,
-
-            ZIZI,
-
-            ZIII,
-            IIZI,
-
-            ZIIZ,
-            IZZI,
-
-            ZIZZ,
             ZZZI,
-
             ZIXX,
-            ZIYY,
-            XXZI,
-            YYZI,
+
+            //IIII,
+            //ZIZI,
+            //ZIII,
+            //IIZI,
+            //ZIIZ,
+            //IZZI,
+            //ZIZZ,
+            //ZZZI,
+            //ZIXX,
+            //ZIYY,
+            //XXZI,
+            //YYZI,
 
         };
         std::vector<std::vector<std::vector<std::complex<double>>>> termsA = {
@@ -604,19 +605,42 @@ int main(int argc, char ** argv) {
             psi,
             //II,
             //IX,
+            //IY,
             //IZ,
             //XI,
             //XX,
+            //XY,
             //XZ,
+            //YI,
+            //YX,
             //YY,
+            //YZ,
             //ZI,
             //ZX,
+            //ZY,
             //ZZ,
         };
-        //std::vector<std::vector<std::vector<std::complex<double>>>> termsB = {
+        std::vector<std::vector<std::vector<std::complex<double>>>> termsB = {
+            proj10,
+            proj00,
+            psi,
             //II,
+            //IX,
+            //IY,
+            //IZ,
+            //XI,
             //XX,
-        //};
+            //XY,
+            //XZ,
+            //YI,
+            //YX,
+            //YY,
+            //YZ,
+            //ZI,
+            //ZX,
+            //ZY,
+            //ZZ,
+        };
 
         // W
         int nextVar = 0;
@@ -659,48 +683,25 @@ int main(int argc, char ** argv) {
             As.push_back(A);
         }
 
-        // General A
-        //for (int i=0; i<numAs; i++) {
-            //std::vector<std::vector<Polynomial<std::complex<double>>>> A(widthA, std::vector<Polynomial<std::complex<double>>>(widthA, Polynomial<std::complex<double>>(numVars, 0i)));
-            //for (int j=0; j<widthA; j++) {
-                //for (int k=j; k<widthA; k++) {
-                    //if (fixedAB) {
-                        //A[j][k] = Polynomial<std::complex<double>>(numVars, knownAs[i][j][k]);
-                    //} else {
-                        //if (j == k) {
-                            //A[j][k] = Polynomial<std::complex<double>>(numVars, 1, {nextVar});
-                            //nextVar++;
-                        //} else {
-                            //A[j][k] = Polynomial<std::complex<double>>(numVars, 1, {nextVar}) + Polynomial<std::complex<double>>(numVars, 1i, {nextVar+1});
-                            //nextVar+=2;
-                        //}
-                    //}
-                    //A[k][j] = std::conj(A[j][k]);
-                //}
-            //}
-            //As.push_back(A);
-        //}
-
         // The Bs
         for (int i=0; i<numBs; i++) {
             std::vector<std::vector<Polynomial<std::complex<double>>>> B(widthB, std::vector<Polynomial<std::complex<double>>>(widthB, Polynomial<std::complex<double>>(numVars, 0i)));
-            //for (int j=0; j<termsB.size(); j++) {
-                //for (int k=0; k<widthB; k++) {
-                    //for (int l=k; l<widthB; l++) {
-                        //if (std::abs(termsB[j][k][l]) > 1e-8) {
-                            //B[k][l] += Polynomial<std::complex<double>>(numVars, 0.5, {nextVar}) * termsB[j][k][l];
-                        //}
-                    //}
-                //}
-                //nextVar++;
-            //}
-            //for (int j=0; j<widthB; j++) {
-                //for (int k=j; k<widthB; k++) {
-                    //B[j][k] = B[j][k].prune();
-                    //B[k][j] = std::conj(B[j][k]);
-                //}
-            //}
-            B = As[i];
+            for (int j=0; j<termsB.size(); j++) {
+                for (int k=0; k<widthB; k++) {
+                    for (int l=k; l<widthB; l++) {
+                        if (std::abs(termsB[j][k][l]) > 1e-8) {
+                            B[k][l] += Polynomial<std::complex<double>>(numVars, 0.5, {nextVar}) * termsB[j][k][l];
+                        }
+                    }
+                }
+                nextVar++;
+            }
+            for (int j=0; j<widthB; j++) {
+                for (int k=j; k<widthB; k++) {
+                    B[j][k] = B[j][k].prune();
+                    B[k][j] = std::conj(B[j][k]);
+                }
+            }
             Bs.push_back(B);
         }
 
@@ -800,65 +801,6 @@ int main(int argc, char ** argv) {
     if (verbosity >= 1) {
         std::cout << "Adding constraints..." << std::endl;
     }
-    //fullWidth = 2*fullWidth;
-    //std::vector<std::vector<Polynomial<double>>> psdCon(fullWidth, std::vector<Polynomial<double>>(fullWidth, Polynomial<double>(numVars, 0)));
-    //int delta = 0;
-    //for (int i=0; i<widthW; i++) {
-        //for (int j=i; j<widthW; j++) {
-            //Polynomial<double> realComp = real(W[i][j]);
-            //Polynomial<double> imagComp = imag(W[i][j]);
-            //psdCon[i+delta][j+delta] = realComp;
-            //psdCon[j+delta][i+delta] = realComp;
-            //psdCon[i+delta+widthW][j+delta+widthW] = realComp;
-            //psdCon[j+delta+widthW][i+delta+widthW] = realComp;
-            //if (i != j) {
-                //psdCon[i+delta][j+delta+widthW] = imagComp;
-                //psdCon[j+delta][i+delta+widthW] = -imagComp;
-                //psdCon[j+delta+widthW][i+delta] = imagComp;
-                //psdCon[i+delta+widthW][j+delta] = -imagComp;
-            //}
-        //}
-    //}
-    //delta += 2*widthW;
-    //for (int i=0; i<numAs; i++) {
-        //for (int j=0; j<widthA; j++) {
-            //for (int k=j; k<widthA; k++) {
-                //Polynomial<double> realComp = real(As[i][j][k]);
-                //Polynomial<double> imagComp = imag(As[i][j][k]);
-                //psdCon[j+delta][k+delta] = realComp;
-                //psdCon[k+delta][j+delta] = realComp;
-                //psdCon[j+delta+widthA][k+delta+widthA] = realComp;
-                //psdCon[k+delta+widthA][j+delta+widthA] = realComp;
-                //if (j != k) {
-                    //psdCon[j+delta][k+delta+widthA] = imagComp;
-                    //psdCon[k+delta][j+delta+widthA] = -imagComp;
-                    //psdCon[k+delta+widthA][j+delta] = imagComp;
-                    //psdCon[j+delta+widthA][k+delta] = -imagComp;
-                //}
-            //}
-        //}
-        //delta += 2*widthA;
-    //}
-    //for (int i=0; i<numBs; i++) {
-        //for (int j=0; j<widthB; j++) {
-            //for (int k=j; k<widthB; k++) {
-                //Polynomial<double> realComp = real(Bs[i][j][k]);
-                //Polynomial<double> imagComp = imag(Bs[i][j][k]);
-                //psdCon[j+delta][k+delta] = realComp;
-                //psdCon[k+delta][j+delta] = realComp;
-                //psdCon[j+delta+widthB][k+delta+widthB] = realComp;
-                //psdCon[k+delta+widthB][j+delta+widthB] = realComp;
-                //if (j != k) {
-                    //psdCon[j+delta][k+delta+widthB] = imagComp;
-                    //psdCon[k+delta][j+delta+widthB] = -imagComp;
-                    //psdCon[k+delta+widthB][j+delta] = imagComp;
-                    //psdCon[j+delta+widthB][k+delta] = -imagComp;
-                //}
-            //}
-        //}
-        //delta += 2*widthB;
-    //}
-    //prob.conPSD = psdCon;
     std::vector<std::vector<Polynomial<double>>> psdW(2*widthW, std::vector<Polynomial<double>>(2*widthW, Polynomial<double>(numVars, 0)));
     for (int i=0; i<widthW; i++) {
         for (int j=i; j<widthW; j++) {
@@ -1054,10 +996,10 @@ int main(int argc, char ** argv) {
     }
     prob.obj = Polynomial<double>(numVars);
     int numProbs = 0;
-    for (int a=0; a<d; a++) {
-        for (int b=0; b<d; b++) {
-            int indA = a*d + b;
-            int indB = b*d + a;
+    for (int a=0; a<2; a++) {
+        for (int b=0; b<2; b++) {
+            int indA = a*2 + b;
+            int indB = b*2 + a;
             Polynomial<std::complex<double>> p = trace(tensor(As[indA], Bs[indB]) * W).prune();
             if (verbosity >= 3) {
                 std::cout << "Prob " << a << " " << b << " : " << p << std::endl;
@@ -1157,7 +1099,7 @@ int main(int argc, char ** argv) {
     if (verbosity > 0) {
         std::cout << "Reducing problem..." << std::endl;
     }
-    //prob = prob.removeLinear();
+    prob = prob.removeTrivial();
     std::vector<Polynomial<double>> conZeroNew;
     for (int i=0; i<prob.conZero.size(); i++) {
         Polynomial<double> p = prob.conZero[i].prune();
@@ -1177,8 +1119,9 @@ int main(int argc, char ** argv) {
     }
 
     // Put everything in
-    std::vector<double> valueVec(numVars, 0);
+    std::vector<double> valueVec;
     if (useKnown) {
+        valueVec = std::vector<double>(numVars, 0);
         std::unordered_map<int, double> valueMap;
         int nextVarInd = 0;
         for (int i=0; i<widthW; i++) {
@@ -1228,7 +1171,9 @@ int main(int argc, char ** argv) {
         bool feasible = prob.isFeasible(valueVec);
         std::cout << "Feasible: " << feasible << std::endl;
         std::cout << "Value: " << prob.obj.eval(valueVec) << std::endl;
-        return 0;
+        if (!justPrintHessian && !seesaw) {
+            return 0;
+        }
     }
 
     // Switch the minimal variable mapping
@@ -1394,11 +1339,34 @@ int main(int argc, char ** argv) {
     // If told to just print the Hessian
     if (justPrintHessian) {
 
+        // Mess around with the objective
+        std::cout << "Modifying the objective..." << std::endl;
+        prob.obj = prob.obj * prob.obj;
+
         // Output the terminal
         std::cout << "Calculating Hessian..." << std::endl;
-        std::vector<std::vector<Polynomial<double>>> hessian = prob.obj.hessian();
-        std::cout << "Hessian:" << std::endl;
-        std::cout << hessian << std::endl;
+        std::vector<std::vector<Polynomial<double>>> hessian = prob.obj.hessian(8);
+
+        // If using known, check the Hessian with the known optimum
+        if (useKnown) {
+
+            // Evaluate the Hessian at the known optimum
+            std::cout << "Checking Hessian with known optimum..." << std::endl;
+            Eigen::MatrixXd hessianMat(hessian.size(), hessian[0].size());
+            for (int i=0; i<hessian.size(); i++) {
+                for (int j=0; j<hessian[i].size(); j++) {
+                    hessianMat(i, j) = hessian[i][j].eval(valueVec);
+                }
+            }
+
+            // Get the eigenvalues
+            Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(hessianMat);
+            Eigen::VectorXd eigenvalues = es.eigenvalues();
+            double minEigenvalue = eigenvalues.minCoeff();
+            double maxEigenvalue = eigenvalues.maxCoeff();
+            std::cout << "Eigenvalues from " << minEigenvalue << " to " << maxEigenvalue << std::endl;
+
+        }
 
         // Write it as a csv
         std::ofstream outfile("hessian.csv");
@@ -1421,13 +1389,58 @@ int main(int argc, char ** argv) {
 
     }
 
-	// Optimize using branch and bound
-    std::cout << "Optimizing..." << std::endl;
-    auto res2 = prob.optimize(level, verbosity, maxIters);
-    std::cout << "Result: " << -res2.first << std::endl;
-    bool isFeas = prob.isFeasible(res2.second);
-    std::cout << "Feasible: " << isFeas << std::endl;
-    //std::cout << "True result: " << -trueObj.eval(res2.second) << std::endl;
+    // If seesawing
+    if (seesaw) {
+
+        // Determine the variable sets
+        std::set<int> varSetA;
+        std::set<int> varSetB;
+        std::set<int> varSetW;
+        for (int i=0; i<numAs; i++) {
+            for (int j=0; j<As[i].size(); j++) {
+                for (int k=j; k<As[i][j].size(); k++) {
+                    std::vector<int> vars = As[i][j][k].getVariables();
+                    for (auto it=vars.begin(); it!=vars.end(); it++) {
+                        varSetA.insert(*it);
+                    }
+                }
+            }
+        }
+        for (int i=0; i<numBs; i++) {
+            for (int j=0; j<Bs[i].size(); j++) {
+                for (int k=j; k<Bs[i][j].size(); k++) {
+                    std::vector<int> vars = Bs[i][j][k].getVariables();
+                    for (auto it=vars.begin(); it!=vars.end(); it++) {
+                        varSetB.insert(*it);
+                    }
+                }
+            }
+        }
+        for (int i=0; i<W.size(); i++) {
+            for (int j=i; j<W[i].size(); j++) {
+                std::vector<int> vars = W[i][j].getVariables();
+                for (auto it=vars.begin(); it!=vars.end(); it++) {
+                    varSetW.insert(*it);
+                }
+            }
+        }
+
+        // Optimize using seesaw
+        std::cout << "Optimizing using seesaw..." << std::endl;
+        auto res = prob.seesaw(verbosity, maxIters, {varSetW, varSetA, varSetB}, valueVec);
+        std::cout << "Result: " << -res.first << std::endl;
+
+    // If branch and bounding
+    } else {
+
+        // Optimize using branch and bound
+        std::cout << "Optimizing..." << std::endl;
+        auto res2 = prob.optimize(level, verbosity, maxIters);
+        std::cout << "Result: " << -res2.first << std::endl;
+        bool isFeas = prob.isFeasible(res2.second);
+        std::cout << "Feasible: " << isFeas << std::endl;
+        
+    }
 
     // Output the optimal W
     //int nextVarInd = 0;
