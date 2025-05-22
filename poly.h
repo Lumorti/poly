@@ -99,6 +99,17 @@ std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
     return os;
 }
 
+// Get an element from a map, or return a default value
+template <typename T, typename U>
+T getOrDefault(const std::map<U, T>& map, const U& key, const T& defaultValue) {
+    auto it = map.find(key);
+    if (it != map.end()) {
+        return it->second;
+    } else {
+        return static_cast<T>(defaultValue);
+    }
+}
+
 // Generic overload for outputting vector of vector
 template <typename type> 
 std::ostream &operator<<(std::ostream &output, const std::vector<std::vector<type>> &arr) {
@@ -1897,6 +1908,11 @@ public:
 		// Create a model
 		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
 
+        // Verbose logging
+        if (verbosity >= 3) {
+            M->setLogHandler([=](const std::string & msg) {std::cout << msg << std::endl;});
+        }
+
 		// Create the variable
 		mosek::fusion::Variable::t xM = M->variable(mosek::fusion::Domain::inPSDCone(x.size()));
 		mosek::fusion::Variable::t lambda = M->variable(mosek::fusion::Domain::greaterThan(0.0));
@@ -3184,7 +3200,7 @@ public:
 
     }
 
-	// Minimize using seesaw TODO
+	// Minimize using seesaw
 	std::pair<polyType, std::vector<polyType>> seesaw(int verbosity=1, int maxIters=-1, std::vector<std::set<int>> varSets={}, std::vector<polyType> initVec={}, double convergenceTol=1e-5) {
 
         // The current solution
@@ -3450,6 +3466,15 @@ public:
             maxIters = 1;
         }
 
+        // Check if there are any binary variables
+        bool hasBinary = false;
+        for (int i=0; i<maxVariables; i++) {
+            if (varIsBinary[i]) {
+                hasBinary = true;
+                break;
+            }
+        }
+
 		// Get the monomial list and sort it
 		std::vector<std::string> monoms = getMonomials();
 		std::sort(monoms.begin(), monoms.end(), [](const std::string& first, const std::string& second){return first.size() < second.size();});
@@ -3567,7 +3592,7 @@ public:
         }
 
 		// Determine the outer bound for all variables
-		std::pair<double,double> generalBounds = {0,0};
+		std::pair<double,double> generalBounds = {0, 0};
 		for (int i=0; i<obj.maxVariables; i++) {
 			if (varBounds[i].second > generalBounds.second) {
 				generalBounds.second = varBounds[i].second;
@@ -3663,7 +3688,7 @@ public:
 
 		}
 
-		// Get the inds of the first order monomials and their squares TODO
+		// Get the inds of the first order monomials and their squares
 		std::vector<int> firstMonomInds(maxVariables, -1);
 		std::vector<std::vector<int>> quadraticMonomInds(maxVariables, std::vector<int>(maxVariables, -1));
         std::map<std::vector<int>, int> monomInds;
@@ -3795,6 +3820,11 @@ public:
 		// Create a model
 		mosek::fusion::Model::t M = new mosek::fusion::Model(); auto _M = monty::finally([&]() {M->dispose();});
 
+        // Verbose logging
+        if (verbosity >= 3) {
+            M->setLogHandler([=](const std::string & msg) {std::cout << msg << std::endl;});
+        }
+
 		// Create the variable
 		mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(generalBounds.first, generalBounds.second));
 
@@ -3821,20 +3851,71 @@ public:
 
 		}
 
-		// Parameterized linear positivity constraints
+        // Set up the McCormick envelopes TODO
 		int numParamPosCons = 0;
 		std::vector<long> sparsity;
-		for (int i=0; i<toProcess[0].size(); i++) {
-            if (quadraticMonomInds[i][i] != -1 && firstMonomInds[i] != -1) {
-                sparsity.push_back(numParamPosCons*varsTotal + firstMonomInds[i]);
-                sparsity.push_back(numParamPosCons*varsTotal + quadraticMonomInds[i][i]);
-                sparsity.push_back(numParamPosCons*varsTotal + oneIndex);
-                numParamPosCons++;
+		for (auto const &pair: monomInds) {
+            if (pair.first.size() >= 2 && pair.first.size() <= 3) {
+                std::set<int> inds;
+
+                // for xij need: xij, xi, xj, 1
+                if (pair.first.size() == 2) {
+                    int thisInd = pair.second;
+                    int ind1 = getOrDefault(monomInds, {pair.first[0]}, -1);
+                    int ind2 = getOrDefault(monomInds, {pair.first[1]}, -1);
+                    inds = {thisInd, ind1, ind2, oneIndex};
+
+                // for xijk need: xijk, xij, xjk, xik, xi, xj, xk, 1
+                } else if (pair.first.size() == 3) {
+                    int thisInd = pair.second;
+                    int ind1 = getOrDefault(monomInds, {pair.first[0]}, -1);
+                    int ind2 = getOrDefault(monomInds, {pair.first[1]}, -1);
+                    int ind3 = getOrDefault(monomInds, {pair.first[2]}, -1);
+                    int ind12 = getOrDefault(monomInds, {pair.first[0], pair.first[1]}, -1);
+                    int ind13 = getOrDefault(monomInds, {pair.first[0], pair.first[2]}, -1);
+                    int ind23 = getOrDefault(monomInds, {pair.first[1], pair.first[2]}, -1);
+                    inds = {thisInd, ind1, ind2, ind3, ind12, ind13, ind23, oneIndex};
+                }
+
+                // Make sure all the indices are valid
+                bool allValid = true;
+                for (auto const &ind: inds) {
+                    if (ind <= -1) {
+                        allValid = false;
+                        break;
+                    }
+                }
+
+                // If they are
+                if (allValid) {
+                    int numCons = 2 << pair.first.size();
+                    for (int k=0; k<numCons; k++) {
+                        for (auto const &ind: inds) {
+                            sparsity.push_back(numParamPosCons*varsTotal + ind);
+                        }
+                        numParamPosCons++;
+                    }
+                }
+
             }
 		}
 		std::sort(sparsity.begin(), sparsity.end());
         mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamPosCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
-        M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::greaterThan(0));
+
+		// Parameterized linear positivity constraints
+		//int numParamPosCons = 0;
+		//std::vector<long> sparsity;
+		//for (int i=0; i<toProcess[0].size(); i++) {
+            //if (quadraticMonomInds[i][i] != -1 && firstMonomInds[i] != -1) {
+                //sparsity.push_back(numParamPosCons*varsTotal + firstMonomInds[i]);
+                //sparsity.push_back(numParamPosCons*varsTotal + quadraticMonomInds[i][i]);
+                //sparsity.push_back(numParamPosCons*varsTotal + oneIndex);
+                //numParamPosCons++;
+            //}
+		//}
+		//std::sort(sparsity.begin(), sparsity.end());
+        //mosek::fusion::Parameter::t DM = M->parameter(monty::new_array_ptr<int>({numParamPosCons, varsTotal}), monty::new_array_ptr<long>(sparsity));
+        //M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::greaterThan(0));
 
 		// Parameterized linear equality constraints
 		int numParamEqCons = 0;
@@ -3848,7 +3929,6 @@ public:
 		}
 		std::sort(sparsity2.begin(), sparsity2.end());
         mosek::fusion::Parameter::t EM = M->parameter(monty::new_array_ptr<int>({numParamEqCons, varsTotal}), monty::new_array_ptr<long>(sparsity2));
-        M->constraint(mosek::fusion::Expr::mul(EM, xM), mosek::fusion::Domain::equalsTo(0.0));
 
         // Parameterized bounds for each variable
         int numParamBounds = 0;
@@ -3879,6 +3959,14 @@ public:
 
 		// Linear objective function
 		M->objective(mosek::fusion::ObjectiveSense::Minimize, mosek::fusion::Expr::dot(cM, xM));
+
+        // The parameterized linear positivity constraints
+        M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::greaterThan(0));
+
+        // The parameterized equality constraints for the binary variables
+        if (hasBinary) {
+            M->constraint(mosek::fusion::Expr::mul(EM, xM), mosek::fusion::Domain::equalsTo(0.0));
+        }
 
 		// Moment matrix constraints
 		for (int i=0; i<shouldBePSD.size(); i++) {
@@ -3935,50 +4023,277 @@ public:
             // If we're not just solving a normal SDP
             if (!isLin) {
 
-                // Update the linear constraints on the quadratics
-                std::vector<std::vector<double>> newD(numParamPosCons, std::vector<double>(varsTotal, 0));
-                std::vector<std::vector<double>> newE(numParamEqCons, std::vector<double>(varsTotal, 0));
-                int dInd = 0;
-                int eInd = 0;
-                for (int i=0; i<toProcess[0].size(); i++) {
+                // If we have binary vars, these should be branched with equalities
+                if (hasBinary) {
 
-                    // If it's a binary variable
-                    if (varIsBinary[i]) {
+                    // The new parameter vector
+                    std::vector<std::vector<double>> newE(numParamEqCons, std::vector<double>(varsTotal, 0));
+                    int dInd = 0;
+                    int eInd = 0;
 
-                        // If it's been constrained to a value
-                        if (toProcess[0][i].first == toProcess[0][i].second) {
+                    // For each variable
+                    for (int i=0; i<toProcess[0].size(); i++) {
 
-                            // Add this as a linear equality con
-                            if (firstMonomInds[i] != -1) {
-                                newE[eInd][oneIndex] = -toProcess[0][i].first;
-                                newE[eInd][firstMonomInds[i]] = 1;
-                                eInd++;
+                        // If it's a binary variable
+                        if (varIsBinary[i]) {
+
+                            // If it's been constrained to a value
+                            if (toProcess[0][i].first == toProcess[0][i].second) {
+
+                                // Add this as a linear equality con
+                                if (firstMonomInds[i] != -1) {
+                                    newE[eInd][oneIndex] = -toProcess[0][i].first;
+                                    newE[eInd][firstMonomInds[i]] = 1;
+                                    eInd++;
+                                }
+
                             }
 
                         }
 
-                    } else {
+                    }
 
-                        // Given two points, find ax+by+c=0
-                        std::vector<double> point1 = {toProcess[0][i].first, toProcess[0][i].first*toProcess[0][i].first};
-                        std::vector<double> point2 = {toProcess[0][i].second, toProcess[0][i].second*toProcess[0][i].second};
-                        std::vector<double> coeffs = getLineFromPoints(point1, point2);
+                    // Update the SDP
+                    EM->setValue(monty::new_array_ptr<double>(newE));
 
-                        // Add this as a linear positivity con
-                        if (quadraticMonomInds[i][i] != -1 && firstMonomInds[i] != -1) {
-                            newD[dInd][oneIndex] = coeffs[0];
-                            newD[dInd][firstMonomInds[i]] = coeffs[1];
-                            newD[dInd][quadraticMonomInds[i][i]] = coeffs[2];
+                }
+
+                // Update the McCormick envelopes TODO
+                std::vector<std::vector<double>> newD(numParamPosCons, std::vector<double>(varsTotal, 0));
+                int dInd = 0;
+                for (auto const &pair: monomInds) {
+
+                    // Second order envelopes
+                    if (pair.first.size() == 2) {
+
+                        // For brevity
+                        int var1 = pair.first[0];
+                        int var2 = pair.first[1];
+                        int xij = pair.second;
+                        int xi = getOrDefault(monomInds, {var1}, -1);
+                        int xj = getOrDefault(monomInds, {var2}, -1);
+                        double li = toProcess[0][var1].first;
+                        double ui = toProcess[0][var1].second;
+                        double lj = toProcess[0][var2].first;
+                        double uj = toProcess[0][var2].second;
+
+                        // Assuming everything valid
+                        if (xij != -1 && xi != -1 && xj != -1) {
+
+                            // (xi - li)(xj - lj) >= 0
+                            // xij - li*xj - lj*xi + li*lj >= 0
+                            newD[dInd][xij] += 1;
+                            newD[dInd][xi] += -lj;
+                            newD[dInd][xj] += -li;
+                            newD[dInd][oneIndex] += li*lj;
                             dInd++;
+
+                            // (ui - xi)(xj - lj) >= 0
+                            // ui*xj - xij - ui*lj + xi*lj >= 0
+                            newD[dInd][xij] += -1;
+                            newD[dInd][xi] += lj;
+                            newD[dInd][xj] += ui;
+                            newD[dInd][oneIndex] += -ui*lj;
+                            dInd++;
+                            
+                            // (xi - li)(uj - xj) >= 0
+                            // xi*uj - li*uj - xij + li*xj >= 0
+                            newD[dInd][xij] += -1;
+                            newD[dInd][xi] += uj;
+                            newD[dInd][xj] += li;
+                            newD[dInd][oneIndex] += -li*uj;
+                            dInd++;
+                            
+                            // (ui - xi)(uj - xj) >= 0
+                            // ui*uj - xi*uj - ui*xj + xij >= 0
+                            newD[dInd][xij] += 1;
+                            newD[dInd][xi] += -uj;
+                            newD[dInd][xj] += -ui;
+                            newD[dInd][oneIndex] += ui*uj;
+                            dInd++;
+
                         }
 
+                    // Third order envelopes
+                    } else if (pair.first.size() == 3) {
+
+                        // For brevity
+                        int var1 = pair.first[0];
+                        int var2 = pair.first[1];
+                        int var3 = pair.first[2];
+                        int xijk = pair.second;
+                        int xi = getOrDefault(monomInds, {var1}, -1);
+                        int xj = getOrDefault(monomInds, {var2}, -1);
+                        int xk = getOrDefault(monomInds, {var3}, -1);
+                        int xij = getOrDefault(monomInds, {var1, var2}, -1);
+                        int xik = getOrDefault(monomInds, {var1, var3}, -1);
+                        int xjk = getOrDefault(monomInds, {var2, var3}, -1);
+                        double li = toProcess[0][var1].first;
+                        double ui = toProcess[0][var1].second;
+                        double lj = toProcess[0][var2].first;
+                        double uj = toProcess[0][var2].second;
+                        double lk = toProcess[0][var3].first;
+                        double uk = toProcess[0][var3].second;
+
+                        // Assuming everything valid
+                        if (xijk != -1 && xi != -1 && xj != -1 && xk != -1 && xij != -1 && xik != -1 && xjk != -1) {
+
+                            // (xij - li*xj - lj*xi + li*lj)(xk - lk) >= 0
+                            // xijk - li*xjk - lj*xik + li*lj*xk
+                            // -lk*xij + lk*li*xj + lk*lj*xi - li*lj*lk
+                            newD[dInd][xijk] += 1;
+                            newD[dInd][xjk] += -li;
+                            newD[dInd][xik] += -lj;
+                            newD[dInd][xij] += -lk;
+                            newD[dInd][xk] += li*lj;
+                            newD[dInd][xj] += lk*li;
+                            newD[dInd][xi] += lk*lj;
+                            newD[dInd][oneIndex] += -li*lj*lk;
+                            dInd++;
+
+                            // (xij - li*xj - lj*xi + li*lj)(uk - xk) >= 0
+                            // xij*uk - li*xj*uk - lj*xi*uk + li*lj*uk
+                            // - xijk + li*xjk + lj*xik - li*lj*xk
+                            newD[dInd][xijk] += -1;
+                            newD[dInd][xjk] += li;
+                            newD[dInd][xik] += lj;
+                            newD[dInd][xij] += uk;
+                            newD[dInd][xk] += -li*lj;
+                            newD[dInd][xj] += -li*uk;
+                            newD[dInd][xi] += -lj*uk;
+                            newD[dInd][oneIndex] += li*lj*uk;
+                            dInd++;
+
+                            // (ui*xj - xij - ui*lj + xi*lj)(xk - lk) >= 0
+                            // ui*xjk - xijk - ui*lj*xk + xik*lj
+                            // - ui*xj*lk + xij*lk + ui*lj*lk - xi*lj*lk
+                            newD[dInd][xijk] += -1;
+                            newD[dInd][xjk] += ui;
+                            newD[dInd][xik] += lj;
+                            newD[dInd][xij] += lk;
+                            newD[dInd][xk] += -ui*lj;
+                            newD[dInd][xj] += -ui*lk;
+                            newD[dInd][xi] += lj*lk;
+                            newD[dInd][oneIndex] += ui*lj*lk;
+                            dInd++;
+
+                            // (ui*xj - xij - ui*lj + xi*lj)(uk - xk) >= 0
+                            // ui*xj*uk - xij*uk - ui*lj*uk + xi*lj*uk
+                            // - ui*xjk + xijk + ui*lj*xk - xik*lj
+                            newD[dInd][xijk] += 1;
+                            newD[dInd][xjk] += -ui;
+                            newD[dInd][xik] += -lj;
+                            newD[dInd][xij] += -uk;
+                            newD[dInd][xk] += ui*lj;
+                            newD[dInd][xj] += ui*uk;
+                            newD[dInd][xi] += lj*uk;
+                            newD[dInd][oneIndex] += -ui*lj*uk;
+                            dInd++;
+                            
+                            // (xi*uj - li*uj - xij + li*xj)(xk - lk) >= 0
+                            // xik*uj - li*uj*xk - xijk + li*xjk
+                            // - xi*uj*lk + li*uj*lk + xij*lk - li*xj*lk
+                            newD[dInd][xijk] += -1;
+                            newD[dInd][xjk] += li;
+                            newD[dInd][xik] += uj;
+                            newD[dInd][xij] += lk;
+                            newD[dInd][xk] += -li*uj;
+                            newD[dInd][xj] += -li*lk;
+                            newD[dInd][xi] += -uj*lk;
+                            newD[dInd][oneIndex] += li*uj*lk;
+                            dInd++;
+                            
+                            // (xi*uj - li*uj - xij + li*xj)(uk - xk) >= 0
+                            // xi*uj*uk - li*uj*uk - xij*uk + li*xj*uk
+                            // - xik*uj + li*uj*xk + xijk - li*xjk
+                            newD[dInd][xijk] += 1;
+                            newD[dInd][xjk] += -li;
+                            newD[dInd][xik] += -uj;
+                            newD[dInd][xij] += -uk;
+                            newD[dInd][xk] += li*uj;
+                            newD[dInd][xj] += li*uk;
+                            newD[dInd][xi] += uj*uk;
+                            newD[dInd][oneIndex] += -li*uj*uk;
+                            dInd++;
+                            
+                            // (ui*uj - xi*uj - ui*xj + xij)(xk - lk) >= 0
+                            // ui*uj*xk - xik*uj - ui*xjk + xijk
+                            // - ui*uj*lk + xi*uj*lk + ui*xj*lk - xij*lk
+                            newD[dInd][xijk] += 1;
+                            newD[dInd][xjk] += -ui;
+                            newD[dInd][xik] += -uj;
+                            newD[dInd][xij] += -lk;
+                            newD[dInd][xk] += ui*uj;
+                            newD[dInd][xj] += ui*lk;
+                            newD[dInd][xi] += uj*lk;
+                            newD[dInd][oneIndex] += -ui*uj*lk;
+                            dInd++;
+                            
+                            // (ui*uj - xi*uj - ui*xj + xij)(uk - xk) >= 0
+                            // ui*uj*uk - xi*uj*uk - ui*xj*uk + xij*uk
+                            // - ui*uj*xk + xik*uj + ui*xjk - xijk
+                            newD[dInd][xijk] += -1;
+                            newD[dInd][xjk] += ui;
+                            newD[dInd][xik] += uj;
+                            newD[dInd][xij] += uk;
+                            newD[dInd][xk] += -ui*uj;
+                            newD[dInd][xj] += -ui*uk;
+                            newD[dInd][xi] += uj*uk;
+                            newD[dInd][oneIndex] += ui*uj*uk;
+                            dInd++;
+
+                        }
                     }
 
                 }
-                DM->setValue(monty::new_array_ptr<double>(newD));
-                EM->setValue(monty::new_array_ptr<double>(newE));
 
-                // Update the bounds TODO
+                // Set the parameters
+                DM->setValue(monty::new_array_ptr<double>(newD));
+
+                // Update the linear constraints on the quadratics
+                //std::vector<std::vector<double>> newD(numParamPosCons, std::vector<double>(varsTotal, 0));
+                //std::vector<std::vector<double>> newE(numParamEqCons, std::vector<double>(varsTotal, 0));
+                //int dInd = 0;
+                //int eInd = 0;
+                //for (int i=0; i<toProcess[0].size(); i++) {
+
+                    //// If it's a binary variable
+                    //if (varIsBinary[i]) {
+
+                        //// If it's been constrained to a value
+                        //if (toProcess[0][i].first == toProcess[0][i].second) {
+
+                            //// Add this as a linear equality con
+                            //if (firstMonomInds[i] != -1) {
+                                //newE[eInd][oneIndex] = -toProcess[0][i].first;
+                                //newE[eInd][firstMonomInds[i]] = 1;
+                                //eInd++;
+                            //}
+
+                        //}
+
+                    //} else {
+
+                        //// Given two points, find ax+by+c=0
+                        //std::vector<double> point1 = {toProcess[0][i].first, toProcess[0][i].first*toProcess[0][i].first};
+                        //std::vector<double> point2 = {toProcess[0][i].second, toProcess[0][i].second*toProcess[0][i].second};
+                        //std::vector<double> coeffs = getLineFromPoints(point1, point2);
+
+                        //// Add this as a linear positivity con
+                        //if (quadraticMonomInds[i][i] != -1 && firstMonomInds[i] != -1) {
+                            //newD[dInd][oneIndex] = coeffs[0];
+                            //newD[dInd][firstMonomInds[i]] = coeffs[1];
+                            //newD[dInd][quadraticMonomInds[i][i]] = coeffs[2];
+                            //dInd++;
+                        //}
+
+                    //}
+
+                //}
+                //DM->setValue(monty::new_array_ptr<double>(newD));
+                //EM->setValue(monty::new_array_ptr<double>(newE));
+
+                // Update the bounds
                 std::vector<std::vector<double>> newB(numParamBounds, std::vector<double>(varsTotal, 0));
                 int bInd = 0;
                 for (int i=0; i<monoms.size(); i++) {
@@ -4061,7 +4376,7 @@ public:
 
                 }
 
-				// Check the resulting vector for a good place to split TODO
+				// Check the resulting vector for a good place to split
 				std::vector<double> errors(maxVariables);
                 //if (nearestFeasiblePoint.size() > 0) {
                     //for (int i=0; i<maxVariables; i++) {

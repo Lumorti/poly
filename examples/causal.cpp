@@ -5,8 +5,9 @@
 #include <iostream>
 
 // Addition of two matrices of polynomials
-std::vector<std::vector<Polynomial<double>>> operator+(const std::vector<std::vector<Polynomial<double>>>& A, const std::vector<std::vector<Polynomial<double>>>& B) {
-    std::vector<std::vector<Polynomial<double>>> C(A.size(), std::vector<Polynomial<double>>(A[0].size(), Polynomial<double>(A[0][0].maxVariables)));
+template <typename T>
+std::vector<std::vector<Polynomial<T>>> operator+(const std::vector<std::vector<Polynomial<T>>>& A, const std::vector<std::vector<Polynomial<T>>>& B) {
+    std::vector<std::vector<Polynomial<T>>> C(A.size(), std::vector<Polynomial<T>>(A[0].size(), Polynomial<T>(A[0][0].maxVariables)));
     for (int i=0; i<A.size(); i++) {
         for (int j=0; j<A[0].size(); j++) {
             C[i][j] = A[i][j] + B[i][j];
@@ -22,6 +23,18 @@ std::vector<std::vector<T>> operator+(const std::vector<std::vector<T>>& A, cons
     for (int i=0; i<A.size(); i++) {
         for (int j=0; j<A[0].size(); j++) {
             C[i][j] = A[i][j] + B[i][j];
+        }
+    }
+    return C;
+}
+
+// Subtraction of two matrices of polynomials
+template <typename T>
+std::vector<std::vector<Polynomial<T>>> operator-(const std::vector<std::vector<Polynomial<T>>>& A, const std::vector<std::vector<Polynomial<T>>>& B) {
+    std::vector<std::vector<Polynomial<T>>> C(A.size(), std::vector<Polynomial<T>>(A[0].size(), Polynomial<T>(A[0][0].maxVariables)));
+    for (int i=0; i<A.size(); i++) {
+        for (int j=0; j<A[0].size(); j++) {
+            C[i][j] = A[i][j] - B[i][j];
         }
     }
     return C;
@@ -75,6 +88,18 @@ std::vector<std::vector<T>> operator*(const std::vector<std::vector<T>>& A, cons
     return C;
 }
 
+// Hadamard product of two matrices of polynomials
+template <typename T>
+std::vector<std::vector<Polynomial<T>>> hadamard(const std::vector<std::vector<Polynomial<T>>>& A, const std::vector<std::vector<Polynomial<T>>>& B) {
+    std::vector<std::vector<Polynomial<T>>> C(A.size(), std::vector<Polynomial<T>>(A[0].size(), Polynomial<T>(A[0][0].maxVariables)));
+    for (int i=0; i<A.size(); i++) {
+        for (int j=0; j<A[0].size(); j++) {
+            C[i][j] = A[i][j]*B[i][j];
+        }
+    }
+    return C;
+}
+
 // Tensor product of two matrices of polynomials
 template <typename T>
 std::vector<std::vector<Polynomial<T>>> tensor(const std::vector<std::vector<Polynomial<T>>>& A, const std::vector<std::vector<Polynomial<T>>>& B) {
@@ -105,6 +130,30 @@ std::vector<std::vector<T>> tensor(const std::vector<std::vector<T>>& A, const s
         }
     }
     return C;
+}
+
+// Given a complex matrix that should be positive, get the real version
+// i.e. M >= 0
+// =>
+// ( M_r -M_i)
+// ( M_i M_r ) >= 0
+std::vector<std::vector<Polynomial<double>>> complexSDPToReal(const std::vector<std::vector<Polynomial<std::complex<double>>>>& M) {
+
+    // The result is a 2n x 2n matrix
+    int n = M.size();
+    std::vector<std::vector<Polynomial<double>>> result(2*n, std::vector<Polynomial<double>>(2*n, Polynomial<double>(M[0][0].maxVariables)));
+
+    // Fill the result matrix
+    for(int i = 0; i < n; ++i) {
+        for(int j = 0; j < n; ++j) {
+            result[i][j] = real(M[i][j]);
+            result[i+n][j+n] = real(M[i][j]);
+            result[i+n][j] = imag(M[i][j]);
+            result[i][j+n] = -imag(M[i][j]);
+        }
+    }
+
+    return result;
 }
 
 /**
@@ -351,6 +400,7 @@ int main(int argc, char ** argv) {
 	int level = 1;
 	int maxIters = -1;
     bool useKnown = false;
+    bool useMatProds = false;
     bool useAnsatz = false;
     bool bEqualsA = false;
     bool fixedAB = false;
@@ -363,6 +413,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -v [int]    set the verbosity level" << std::endl;
 			std::cout << " -l [int]    set the level of the branch and bound" << std::endl;
 			std::cout << " -i [int]    set the maximum number of iterations" << std::endl;
+			std::cout << " -m          include products of matrices" << std::endl;
 			std::cout << " -s          optimize using seesaw" << std::endl;
 			std::cout << " -H          just print the Hessian of the objective" << std::endl;
 			std::cout << " -a          use ansatz approach" << std::endl;
@@ -379,6 +430,8 @@ int main(int argc, char ** argv) {
 			i++;
         } else if (arg == "-H") {
             justPrintHessian = true;
+        } else if (arg == "-m") {
+            useMatProds = true;
         } else if (arg == "-s") {
             seesaw = true;
         } else if (arg == "-B") {
@@ -460,7 +513,7 @@ int main(int argc, char ** argv) {
     std::vector<std::vector<std::complex<double>>> ZIXX = tensor(Z, tensor(I2, tensor(X, X)));
 
     // W = 0.25 * (I_8 + (1/sqrt(2)) * (ZZZI + ZIXX))
-    if (useKnown) {
+    if (d == 2) {
         for (int i=0; i<widthW; i++) {
             knownW[i][i] = 1;
         }
@@ -498,37 +551,6 @@ int main(int argc, char ** argv) {
             knownAs[d*i+1][i*d][i*d] = 1;
         }
 
-        // A_0_2 = |+0><+0| (x) |0><0|
-        // A_1_2 = |+1><+1| (x) |0><0|
-        // A_2_2 = |+2><+2| (x) |0><0|
-        if (d >= 3) {
-            std::complex<double> omega = exp(2i*M_PI/double(d));
-            std::complex<double> omega2 = exp(4i*M_PI/double(d));
-            for (int i=0; i<d; i++) {
-                for (int j=0; j<d; j++) {
-                    knownAs[2][i*d][j*d] = 1/sqrt(3);
-                    std::complex<double> coeff1 = 1/sqrt(3);
-                    std::complex<double> coeff2 = 1/sqrt(3);
-                    if (i == 1) {
-                        coeff1 *= omega;
-                        coeff2 *= omega2;
-                    } else if (i == 2) {
-                        coeff1 *= omega2;
-                        coeff2 *= omega;
-                    }
-                    if (j == 1) {
-                        coeff1 *= omega;
-                        coeff2 *= omega2;
-                    } else if (j == 2) {
-                        coeff1 *= omega2;
-                        coeff2 *= omega;
-                    }
-                    knownAs[d+2][i*d][j*d] = coeff1;
-                    knownAs[2*d+2][i*d][j*d] = coeff2;
-                }
-            }
-        }
-
         // Bs the same as the As
         for (int i=0; i<numBs; i++) {
             knownBs[i] = knownAs[i];
@@ -536,7 +558,7 @@ int main(int argc, char ** argv) {
 
     }
 
-    // Ansats approach TODO
+    // Ansats approach
     std::vector<std::vector<Polynomial<std::complex<double>>>> W(widthW, std::vector<Polynomial<std::complex<double>>>(widthW, Polynomial<std::complex<double>>(numVars, 0i)));
     std::vector<std::vector<std::vector<Polynomial<std::complex<double>>>>> As;
     std::vector<std::vector<std::vector<Polynomial<std::complex<double>>>>> Bs;
@@ -581,22 +603,28 @@ int main(int argc, char ** argv) {
         // Which to use
         std::vector<std::vector<std::vector<std::complex<double>>>> termsW = {
 
-            IIII,
-            ZZZI,
-            ZIXX,
-
+            // TODO ./causal -a -i 50
+            // 37s -1.17 < -0.41
+            // 52s -1.10 < -0.46
+            // 48s -0.83 < -0.39
+            // 1m -0.77 < -0.39
             //IIII,
-            //ZIZI,
-            //ZIII,
-            //IIZI,
-            //ZIIZ,
-            //IZZI,
-            //ZIZZ,
             //ZZZI,
             //ZIXX,
-            //ZIYY,
-            //XXZI,
-            //YYZI,
+
+            // 0.5694
+            IIII,
+            ZIZI,
+            ZIII,
+            IIZI,
+            ZIIZ,
+            IZZI,
+            ZIZZ,
+            ZZZI,
+            ZIXX,
+            ZIYY,
+            XXZI,
+            YYZI,
 
         };
         std::vector<std::vector<std::vector<std::complex<double>>>> termsA = {
@@ -731,16 +759,12 @@ int main(int argc, char ** argv) {
             std::vector<std::vector<Polynomial<std::complex<double>>>> A(widthA, std::vector<Polynomial<std::complex<double>>>(widthA, Polynomial<std::complex<double>>(numVars, 0i)));
             for (int j=0; j<widthA; j++) {
                 for (int k=j; k<widthA; k++) {
-                    if (fixedAB) {
-                        A[j][k] = Polynomial<std::complex<double>>(numVars, knownAs[i][j][k]);
+                    if (j == k) {
+                        A[j][k] = Polynomial<std::complex<double>>(numVars, 1, {nextVar});
+                        nextVar++;
                     } else {
-                        if (j == k) {
-                            A[j][k] = Polynomial<std::complex<double>>(numVars, 1, {nextVar});
-                            nextVar++;
-                        } else {
-                            A[j][k] = Polynomial<std::complex<double>>(numVars, 1, {nextVar}) + Polynomial<std::complex<double>>(numVars, 1i, {nextVar+1});
-                            nextVar+=2;
-                        }
+                        A[j][k] = Polynomial<std::complex<double>>(numVars, 1, {nextVar}) + Polynomial<std::complex<double>>(numVars, 1i, {nextVar+1});
+                        nextVar+=2;
                     }
                     A[k][j] = std::conj(A[j][k]);
                 }
@@ -753,16 +777,12 @@ int main(int argc, char ** argv) {
             std::vector<std::vector<Polynomial<std::complex<double>>>> B(widthB, std::vector<Polynomial<std::complex<double>>>(widthB, Polynomial<std::complex<double>>(numVars, 0i)));
             for (int j=0; j<widthB; j++) {
                 for (int k=j; k<widthB; k++) {
-                    if (fixedAB) {
-                        B[j][k] = Polynomial<std::complex<double>>(numVars, knownBs[i][j][k]);
+                    if (j == k) {
+                        B[j][k] = Polynomial<std::complex<double>>(numVars, 1, {nextVar});
+                        nextVar++;
                     } else {
-                        if (j == k) {
-                            B[j][k] = Polynomial<std::complex<double>>(numVars, 1, {nextVar});
-                            nextVar++;
-                        } else {
-                            B[j][k] = Polynomial<std::complex<double>>(numVars, 1, {nextVar}) + Polynomial<std::complex<double>>(numVars, 1i, {nextVar+1});
-                            nextVar += 2;
-                        }
+                        B[j][k] = Polynomial<std::complex<double>>(numVars, 1, {nextVar}) + Polynomial<std::complex<double>>(numVars, 1i, {nextVar+1});
+                        nextVar += 2;
                     }
                     B[k][j] = std::conj(B[j][k]);
                 }
@@ -772,11 +792,29 @@ int main(int argc, char ** argv) {
 
     }
 
+    // If we should use known optimum for A and B
+    if (fixedAB) {
+        for (int i=0; i<numAs; i++) {
+            for (int j=0; j<widthA; j++) {
+                for (int k=0; k<widthA; k++) {
+                    As[i][j][k] = knownAs[i][j][k];
+                }
+            }
+        }
+        for (int i=0; i<numBs; i++) {
+            for (int j=0; j<widthB; j++) {
+                for (int k=0; k<widthB; k++) {
+                    Bs[i][j][k] = knownBs[i][j][k];
+                }
+            }
+        }
+    }
+
     // If each B should equal each A
     if (bEqualsA) {
         for (int i=0; i<numAs; i++) {
             for (int j=0; j<widthA; j++) {
-                for (int k=j; k<widthA; k++) {
+                for (int k=0; k<widthA; k++) {
                     Bs[i][j][k] = As[i][j][k];
                 }
             }
@@ -801,63 +839,54 @@ int main(int argc, char ** argv) {
     if (verbosity >= 1) {
         std::cout << "Adding constraints..." << std::endl;
     }
-    std::vector<std::vector<Polynomial<double>>> psdW(2*widthW, std::vector<Polynomial<double>>(2*widthW, Polynomial<double>(numVars, 0)));
-    for (int i=0; i<widthW; i++) {
-        for (int j=i; j<widthW; j++) {
-            Polynomial<double> realComp = real(W[i][j]);
-            Polynomial<double> imagComp = imag(W[i][j]);
-            psdW[i][j] = realComp;
-            psdW[j][i] = realComp;
-            psdW[i+widthW][j+widthW] = realComp;
-            psdW[j+widthW][i+widthW] = realComp;
-            if (i != j) {
-                psdW[i][j+widthW] = imagComp;
-                psdW[j][i+widthW] = -imagComp;
-                psdW[j+widthW][i] = imagComp;
-                psdW[i+widthW][j] = -imagComp;
-            }
-        }
-    }
-    prob.conPSD.push_back(psdW);
+    prob.conPSD.push_back(complexSDPToReal(W));
     for (int i=0; i<numAs; i++) {
-        std::vector<std::vector<Polynomial<double>>> psdA(2*widthA, std::vector<Polynomial<double>>(2*widthA, Polynomial<double>(numVars, 0)));
-        for (int j=0; j<widthA; j++) {
-            for (int k=j; k<widthA; k++) {
-                Polynomial<double> realComp = real(As[i][j][k]);
-                Polynomial<double> imagComp = imag(As[i][j][k]);
-                psdA[j][k] = realComp;
-                psdA[k][j] = realComp;
-                psdA[j+widthA][k+widthA] = realComp;
-                psdA[k+widthA][j+widthA] = realComp;
-                if (j != k) {
-                    psdA[j][k+widthA] = imagComp;
-                    psdA[k][j+widthA] = -imagComp;
-                    psdA[k+widthA][j] = imagComp;
-                    psdA[j+widthA][k] = -imagComp;
-                }
-            }
-        }
-        prob.conPSD.push_back(psdA);
+        prob.conPSD.push_back(complexSDPToReal(As[i]));
     }
     for (int i=0; i<numBs; i++) {
-        std::vector<std::vector<Polynomial<double>>> psdB(2*widthB, std::vector<Polynomial<double>>(2*widthB, Polynomial<double>(numVars, 0)));
-        for (int j=0; j<widthB; j++) {
-            for (int k=j; k<widthB; k++) {
-                Polynomial<double> realComp = real(Bs[i][j][k]);
-                Polynomial<double> imagComp = imag(Bs[i][j][k]);
-                psdB[j][k] = realComp;
-                psdB[k][j] = realComp;
-                psdB[j+widthB][k+widthB] = realComp;
-                psdB[k+widthB][j+widthB] = realComp;
-                if (j != k) {
-                    psdB[j][k+widthB] = imagComp;
-                    psdB[k][j+widthB] = -imagComp;
-                    psdB[k+widthB][j] = imagComp;
-                    psdB[j+widthB][k] = -imagComp;
-                }
+        prob.conPSD.push_back(complexSDPToReal(Bs[i]));
+    }
+
+    // TODO add products of matrices
+    if (useMatProds) {
+
+        // all 2nd order hadamard products
+        for (int i=0; i<numAs; i++) {
+            for (int j=0; j<numBs; j++) {
+                prob.conPSD.push_back(complexSDPToReal(hadamard(As[i], Bs[j])));
             }
         }
-        prob.conPSD.push_back(psdB);
+        for (int i=0; i<numAs; i++) {
+            for (int j=i; j<numAs; j++) {
+                prob.conPSD.push_back(complexSDPToReal(hadamard(As[i], As[j])));
+            }
+        }
+        for (int i=0; i<numBs; i++) {
+            for (int j=i; j<numBs; j++) {
+                prob.conPSD.push_back(complexSDPToReal(hadamard(Bs[i], Bs[j])));
+            }
+        }
+        for (int i=0; i<numAs; i++) {
+            prob.conPSD.push_back(complexSDPToReal(hadamard(As[i], W)));
+        }
+        for (int i=0; i<numBs; i++) {
+            prob.conPSD.push_back(complexSDPToReal(hadamard(Bs[i], W)));
+        }
+
+        // all 3rd order hadamard products
+        for (int i=0; i<numAs; i++) {
+            for (int j=0; j<numBs; j++) {
+                prob.conPSD.push_back(complexSDPToReal(hadamard(As[i], hadamard(Bs[j], W))));
+            }
+        }
+
+        // since A and B commute, AB is positive
+        for (int i=0; i<numAs; i++) {
+            for (int j=0; j<numBs; j++) {
+                prob.conPSD.push_back(complexSDPToReal(As[i] * Bs[j]));
+            }
+        }
+
     }
 
     // Identities
@@ -970,6 +999,20 @@ int main(int argc, char ** argv) {
         }
     }
 
+    // TODO
+    if (useMatProds) {
+
+        // Add squares of each linear constraint
+        //int ogSize = prob.conZero.size();
+        //for (int i=0; i<ogSize; i++) {
+            //for (int j=0; j<ogSize; j++) {
+                //Polynomial<double> con = prob.conZero[i] * prob.conZero[j];
+                //prob.conZero.push_back(con);
+            //}
+        //}
+
+    }
+
     //double a = 0.1048566;
     //prob.conZero.push_back(real(W[0][3]) - Polynomial<double>(numVars, a));
     //prob.conZero.push_back(real(W[0][12]) - Polynomial<double>(numVars, a));
@@ -1010,7 +1053,7 @@ int main(int argc, char ** argv) {
     }
     prob.obj = prob.obj*(1.0/numProbs);
 
-    // Custom moment matrix TODO
+    // Custom moment matrix
     //std::vector<std::vector<std::vector<Polynomial<std::complex<double>>>>> matsInTopRow;
     //std::vector<std::vector<Polynomial<std::complex<double>>>> fullI(widthW, std::vector<Polynomial<std::complex<double>>>(widthW, Polynomial<std::complex<double>>(numVars, 0i)));
     //std::vector<std::vector<Polynomial<std::complex<double>>>> partialI(widthA, std::vector<Polynomial<std::complex<double>>>(widthA, Polynomial<std::complex<double>>(numVars, 0i)));
