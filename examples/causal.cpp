@@ -399,6 +399,9 @@ int main(int argc, char ** argv) {
 	int verbosity = 1;
 	int level = 1;
 	int maxIters = -1;
+    std::string problemName = "gyni";
+    std::string ineqString = "";
+    bool outputFinal = false;
     bool useKnown = false;
     bool useMatProds = false;
     bool useAnsatz = false;
@@ -413,7 +416,11 @@ int main(int argc, char ** argv) {
 			std::cout << " -v [int]    set the verbosity level" << std::endl;
 			std::cout << " -l [int]    set the level of the branch and bound" << std::endl;
 			std::cout << " -i [int]    set the maximum number of iterations" << std::endl;
+			std::cout << " --gyni      use the GYNI problem" << std::endl;
+			std::cout << " --lgyni     use the LGYNI problem" << std::endl;
+			std::cout << " --rlgyni    use the RLGYNI problem" << std::endl;
 			std::cout << " -m          include products of matrices" << std::endl;
+			std::cout << " -o          output the final inequality" << std::endl;
 			std::cout << " -s          optimize using seesaw" << std::endl;
 			std::cout << " -H          just print the Hessian of the objective" << std::endl;
 			std::cout << " -a          use ansatz approach" << std::endl;
@@ -430,6 +437,14 @@ int main(int argc, char ** argv) {
 			i++;
         } else if (arg == "-H") {
             justPrintHessian = true;
+        } else if (arg == "-o") {
+            outputFinal = true;
+        } else if (arg == "--gyni") {
+            problemName = "gyni";
+        } else if (arg == "--lgyni") {
+            problemName = "lgyni";
+        } else if (arg == "--rlgyni") {
+            problemName = "rlgyni";
         } else if (arg == "-m") {
             useMatProds = true;
         } else if (arg == "-s") {
@@ -535,21 +550,15 @@ int main(int argc, char ** argv) {
 
         // A_0_0 = 0
         // A_1_0 = |00><00| + |00><11| + |11><00| + |11><11|
-        // A_2_0 = 0
-        for (int i=0; i<d; i++) {
-            for (int j=0; j<d; j++) {
-                int ind1 = i*d + i;
-                int ind2 = j*d + j;
-                knownAs[d][ind1][ind2] = 1;
-            }
-        }
+        knownAs[2][0][0] = 1;
+        knownAs[2][0][3] = 1;
+        knownAs[2][3][0] = 1;
+        knownAs[2][3][3] = 1;
         
         // A_0_1 = |0><0| (x) |0><0|
         // A_1_1 = |1><1| (x) |0><0|
-        // A_2_1 = |2><2| (x) |0><0|
-        for (int i=0; i<d; i++) {
-            knownAs[d*i+1][i*d][i*d] = 1;
-        }
+        knownAs[1][0][0] = 1;
+        knownAs[3][2][2] = 1;
 
         // Bs the same as the As
         for (int i=0; i<numBs; i++) {
@@ -999,59 +1008,83 @@ int main(int argc, char ** argv) {
         }
     }
 
-    // TODO
-    if (useMatProds) {
-
-        // Add squares of each linear constraint
-        //int ogSize = prob.conZero.size();
-        //for (int i=0; i<ogSize; i++) {
-            //for (int j=0; j<ogSize; j++) {
-                //Polynomial<double> con = prob.conZero[i] * prob.conZero[j];
-                //prob.conZero.push_back(con);
-            //}
-        //}
-
-    }
-
-    //double a = 0.1048566;
-    //prob.conZero.push_back(real(W[0][3]) - Polynomial<double>(numVars, a));
-    //prob.conZero.push_back(real(W[0][12]) - Polynomial<double>(numVars, a));
-    //prob.conZero.push_back(real(W[1][13]) - Polynomial<double>(numVars, a));
-    //prob.conZero.push_back(real(W[2][14]) - Polynomial<double>(numVars, -a));
-    //prob.conZero.push_back(real(W[3][0]) - Polynomial<double>(numVars, a));
-    //prob.conZero.push_back(real(W[3][15]) - Polynomial<double>(numVars, -a));
-    //prob.conZero.push_back(real(W[4][7]) - Polynomial<double>(numVars, a));
-    //prob.conZero.push_back(real(W[7][4]) - Polynomial<double>(numVars, a));
-    //prob.conZero.push_back(real(W[8][11]) - Polynomial<double>(numVars, -a));
-    //prob.conZero.push_back(real(W[11][8]) - Polynomial<double>(numVars, -a));
-    //prob.conZero.push_back(real(W[12][0]) - Polynomial<double>(numVars, a));
-    //prob.conZero.push_back(real(W[12][15]) - Polynomial<double>(numVars, -a));
-    //prob.conZero.push_back(real(W[13][1]) - Polynomial<double>(numVars, a));
-    //prob.conZero.push_back(real(W[14][2]) - Polynomial<double>(numVars, -a));
-    //prob.conZero.push_back(real(W[15][3]) - Polynomial<double>(numVars, -a));
-    //prob.conZero.push_back(real(W[15][12]) - Polynomial<double>(numVars, -a));
-
     // Objective
-    // GYNI = p(a = y, b = x)
-    //      = 0.25*(p_0_0_0_0 + p_0_1_1_0 + p_1_0_0_1 + p_1_1_1_1);
     if (verbosity >= 1) {
         std::cout << "Constructing objective..." << std::endl;
     }
     prob.obj = Polynomial<double>(numVars);
-    int numProbs = 0;
-    for (int a=0; a<2; a++) {
-        for (int b=0; b<2; b++) {
-            int indA = a*2 + b;
-            int indB = b*2 + a;
-            Polynomial<std::complex<double>> p = trace(tensor(As[indA], Bs[indB]) * W).prune();
-            if (verbosity >= 3) {
-                std::cout << "Prob " << a << " " << b << " : " << p << std::endl;
+
+    // GYNI = p(a = y, b = x)
+    //      = 0.25*(p_0_0_0_0 + p_0_1_1_0 + p_1_0_0_1 + p_1_1_1_1);
+    if (problemName == "gyni") {
+        for (int y=0; y<2; y++) {
+            for (int x=0; x<2; x++) {
+                int indA = x*2 + y;
+                int indB = y*2 + x;
+                Polynomial<std::complex<double>> p = trace(tensor(As[indA], Bs[indB]) * W).prune();
+                if (verbosity >= 3) {
+                    std::cout << "Prob " << x << " " << y << " : " << p << std::endl;
+                }
+                prob.obj += real(p);
             }
-            prob.obj += real(p);
-            numProbs++;
+        }
+        prob.obj = prob.obj * 0.25;
+    } else if (problemName == "lgyni") {
+        for (int x=0; x<2; x++) {
+            for (int y=0; y<2; y++) {
+                for (int a=0; a<2; a++) {
+                    for (int b=0; b<2; b++) {
+                        if (x*(a ^ y) == 0 && y*(b ^ x) == 0) {
+                            int indA = a*2 + x;
+                            int indB = b*2 + y;
+                            Polynomial<std::complex<double>> p = trace(tensor(As[indA], Bs[indB]) * W).prune();
+                            if (verbosity >= 3) {
+                                std::cout << "Prob " << x << " " << y << " " << a << " " << b << " : " << p << std::endl;
+                            }
+                            prob.obj += real(p);
+                        }
+                    }
+                }
+            }
+        }
+        prob.obj = prob.obj * 0.25;
+    } else if (problemName == "rlgyni") { // TODO
+        for (int x=0; x<2; x++) {
+            for (int y=0; y<2; y++) {
+                for (int a=0; a<2; a++) {
+                    for (int b=0; b<2; b++) {
+                        if (x*(a ^ y) == 0 && y*(b ^ x) == 0) {
+                            int indA = a*2 + x;
+                            int indB = b*2 + y;
+                            Polynomial<std::complex<double>> p = trace(tensor(As[indA], Bs[indB]) * W).prune();
+                            if (verbosity >= 3) {
+                                std::cout << "Prob " << x << " " << y << " " << a << " " << b << " : " << p << std::endl;
+                            }
+                            double randCoeff = ((double) rand() / (RAND_MAX)) * 2 - 1;
+                            prob.obj += randCoeff * real(p);
+                            ineqString += std::to_string(-randCoeff) + "<A" + std::to_string(indA) + "B" + std::to_string(indB) + "> +";
+                        }
+                    }
+                }
+            }
         }
     }
-    prob.obj = prob.obj*(1.0/numProbs);
+
+    // Tidy the inequality string
+    // remove all spaces
+    std::string newIneqString;
+    for (size_t i=0; i<ineqString.size(); i++) {
+        if (ineqString[i] != ' ') {
+            newIneqString += ineqString[i];
+        }
+    }
+    ineqString = newIneqString;
+    // replace "+-" with "-"
+    size_t pos = 0;
+    while ((pos = ineqString.find("+-", pos)) != std::string::npos) {
+        ineqString.replace(pos, 2, "-");
+        pos += 1;
+    }
 
     // Custom moment matrix
     //std::vector<std::vector<std::vector<Polynomial<std::complex<double>>>>> matsInTopRow;
@@ -1433,6 +1466,7 @@ int main(int argc, char ** argv) {
     }
 
     // If seesawing
+    std::pair<double, std::vector<double>> res;
     if (seesaw) {
 
         // Determine the variable sets
@@ -1469,19 +1503,29 @@ int main(int argc, char ** argv) {
         }
 
         // Optimize using seesaw
-        std::cout << "Optimizing using seesaw..." << std::endl;
-        auto res = prob.seesaw(verbosity, maxIters, {varSetW, varSetA, varSetB}, valueVec);
-        std::cout << "Result: " << -res.first << std::endl;
+        if (verbosity >= 1) {
+            std::cout << "Optimizing using seesaw..." << std::endl;
+        }
+        res = prob.seesaw(verbosity, maxIters, {varSetW, varSetA, varSetB}, valueVec);
+        if (verbosity >= 1) {
+            std::cout << "Result: " << -res.first << std::endl;
+        }
 
     // If branch and bounding
     } else {
 
         // Optimize using branch and bound
-        std::cout << "Optimizing..." << std::endl;
-        auto res2 = prob.optimize(level, verbosity, maxIters);
-        std::cout << "Result: " << -res2.first << std::endl;
-        bool isFeas = prob.isFeasible(res2.second);
-        std::cout << "Feasible: " << isFeas << std::endl;
+        if (verbosity >= 1) {
+            std::cout << "Optimizing..." << std::endl;
+        }
+        res = prob.optimize(level, verbosity, maxIters);
+        if (verbosity >= 1) {
+            std::cout << "Result: " << -res.first << std::endl;
+        }
+        bool isFeas = prob.isFeasible(res.second);
+        if (verbosity >= 1) {
+            std::cout << "Feasible: " << isFeas << std::endl;
+        }
         
     }
 
@@ -1517,17 +1561,10 @@ int main(int argc, char ** argv) {
     //std::cout << "Wopt:" << std::endl;
     //std::cout << Wopt << std::endl;
 
-    // Output all the indices which should be equal to 0.1048566
-    //for (int i=0; i<widthW; i++) {
-        //for (int j=0; j<widthW; j++) {
-            //if (std::abs(Wopt(i, j)-0.1048566) < 1e-6) {
-                //std::cout << "W[" << i << "," << j << "] = " << 0.1048566 << std::endl;
-            //}
-            //if (std::abs(Wopt(i, j)+0.1048566) < 1e-6) {
-                //std::cout << "W[" << i << "," << j << "] = " << -0.1048566 << std::endl;
-            //}
-        //}
-    //}
+    // Output the ineqString if it is not empty TODO
+    if (outputFinal) {
+        std::cout << -res.first << ineqString << std::endl;
+    }
 
 	return 0;
 
