@@ -3,6 +3,7 @@ temp*
 -copilot.log
 examples/mub
 examples/simple
+examples/ising
 examples/sos
 examples/casual
 examples/matrices
