@@ -3134,10 +3134,21 @@ public:
 	}
 
     // Get a bunch of points in the feasible region
-    std::vector<std::vector<polyType>> manyFeasible(int num, int verbosity=1) {
+    std::vector<std::vector<polyType>> manyFeasible(int num, int verbosity=1, std::vector<int> inds={}) {
 
         // Save the objective
         Polynomial<polyType> prevObj = obj;
+
+        // Which variables are allowed
+        std::vector<bool> indAllowed(maxVariables, true);
+        if (inds.size() > 0) {
+            indAllowed = std::vector<bool>(maxVariables, false);
+            for (int i=0; i<inds.size(); i++) {
+                if (inds[i] < maxVariables) {
+                    indAllowed[inds[i]] = true;
+                }
+            }
+        }
 
         // For the number that we need
         std::vector<std::vector<polyType>> points;
@@ -3149,7 +3160,11 @@ public:
             // Random objective
             obj = Polynomial<polyType>(maxVariables);
             for (int j=0; j<maxVariables; j++) {
-                obj.addTerm(double(rand()) / double(RAND_MAX), {j});
+                if (indAllowed[j]) {
+                    double coeff = double(rand()) / double(RAND_MAX);
+                    coeff = 2*coeff - 1;
+                    obj.addTerm(coeff, {j});
+                }
             }
 
             // Solve and get the solution

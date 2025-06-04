@@ -409,7 +409,9 @@ int main(int argc, char ** argv) {
     bool fixedAB = false;
     bool seesaw = false;
     bool justPrintHessian = false;
-	for (int i=0; i<argc; i++) {
+    int generatePoints = 0;
+    int seed = -1;
+	for (int i=1; i<argc; i++) {
 		std::string arg = argv[i];
 		if (arg == "-h" || arg == "--help") {
 			std::cout << " -d [int]    set the dimension" << std::endl;
@@ -419,6 +421,7 @@ int main(int argc, char ** argv) {
 			std::cout << " --gyni      use the GYNI problem" << std::endl;
 			std::cout << " --lgyni     use the LGYNI problem" << std::endl;
 			std::cout << " --rlgyni    use the RLGYNI problem" << std::endl;
+			std::cout << " -g [int]    generate points on the edge of the set" << std::endl;
 			std::cout << " -m          include products of matrices" << std::endl;
 			std::cout << " -o          output the final inequality" << std::endl;
 			std::cout << " -s          optimize using seesaw" << std::endl;
@@ -427,7 +430,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -B          set all A and B matrices to be equal" << std::endl;
 			std::cout << " -f          use fixed A and B matrices" << std::endl;
 			std::cout << " -k          test with a known solution" << std::endl;
-			std::cout << " -r          use a random seed" << std::endl;
+			std::cout << " -r [int]    use a seed" << std::endl;
 			return 0;
 		} else if (arg == "-d" && i+1 < argc) {
 			d = std::stoi(argv[i+1]);
@@ -437,6 +440,9 @@ int main(int argc, char ** argv) {
 			i++;
         } else if (arg == "-H") {
             justPrintHessian = true;
+        } else if (arg == "-g") {
+            generatePoints = std::stoi(argv[i+1]);
+            i++;
         } else if (arg == "-o") {
             outputFinal = true;
         } else if (arg == "--gyni") {
@@ -464,7 +470,11 @@ int main(int argc, char ** argv) {
 			maxIters = std::stoi(argv[i+1]);
 			i++;
 		} else if (arg == "-r") {
-			std::srand(time(0));
+            seed = std::stoi(argv[i+1]);
+            i++;
+        } else {
+            std::cerr << "Unknown argument: " << arg << std::endl;
+            return 1;
 		}
 
 	}
@@ -550,15 +560,30 @@ int main(int argc, char ** argv) {
 
         // A_0_0 = 0
         // A_1_0 = |00><00| + |00><11| + |11><00| + |11><11|
+        // A_0_1 = |0><0| (x) |0><0|
+        // A_1_1 = |1><1| (x) |0><0|
         knownAs[2][0][0] = 1;
         knownAs[2][0][3] = 1;
         knownAs[2][3][0] = 1;
         knownAs[2][3][3] = 1;
-        
-        // A_0_1 = |0><0| (x) |0><0|
-        // A_1_1 = |1><1| (x) |0><0|
         knownAs[1][0][0] = 1;
         knownAs[3][2][2] = 1;
+
+        // A_0_0 = |00><00| + |00><11| + |11><00| + |11><11|
+        // A_0_1 = |0><0| (x) |0><0|
+        // A_1_0 = |00><00| + |00><11| + |11><00| + |11><11|
+        // A_1_1 = |1><1| (x) |1><1|
+        //double coeff = 1.0 / sqrt(2.0);
+        //knownAs[0][0][0] = coeff;
+        //knownAs[0][0][3] = coeff;
+        //knownAs[0][3][0] = coeff;
+        //knownAs[0][3][3] = coeff;
+        //knownAs[1][0][0] = 1;
+        //knownAs[2][0][0] = coeff;
+        //knownAs[2][0][3] = coeff;
+        //knownAs[2][3][0] = coeff;
+        //knownAs[2][3][3] = coeff;
+        //knownAs[3][3][3] = 1;
 
         // Bs the same as the As
         for (int i=0; i<numBs; i++) {
@@ -856,7 +881,7 @@ int main(int argc, char ** argv) {
         prob.conPSD.push_back(complexSDPToReal(Bs[i]));
     }
 
-    // TODO add products of matrices
+    // Add products of matrices
     if (useMatProds) {
 
         // all 2nd order hadamard products
@@ -1014,6 +1039,13 @@ int main(int argc, char ** argv) {
     }
     prob.obj = Polynomial<double>(numVars);
 
+    // Set the seed
+    if (seed != -1) {
+        srand(seed);
+    } else {
+        srand(time(0));
+    }
+
     // GYNI = p(a = y, b = x)
     //      = 0.25*(p_0_0_0_0 + p_0_1_1_0 + p_1_0_0_1 + p_1_1_1_1);
     if (problemName == "gyni") {
@@ -1060,7 +1092,7 @@ int main(int argc, char ** argv) {
                             if (verbosity >= 3) {
                                 std::cout << "Prob " << x << " " << y << " " << a << " " << b << " : " << p << std::endl;
                             }
-                            double randCoeff = ((double) rand() / (RAND_MAX)) * 2 - 1;
+                            double randCoeff = ((double) rand() / (RAND_MAX));
                             prob.obj += randCoeff * real(p);
                             ineqString += std::to_string(-randCoeff) + "<A" + std::to_string(indA) + "B" + std::to_string(indB) + "> +";
                         }
@@ -1071,7 +1103,6 @@ int main(int argc, char ** argv) {
     }
 
     // Tidy the inequality string
-    // remove all spaces
     std::string newIneqString;
     for (size_t i=0; i<ineqString.size(); i++) {
         if (ineqString[i] != ' ') {
@@ -1079,7 +1110,6 @@ int main(int argc, char ** argv) {
         }
     }
     ineqString = newIneqString;
-    // replace "+-" with "-"
     size_t pos = 0;
     while ((pos = ineqString.find("+-", pos)) != std::string::npos) {
         ineqString.replace(pos, 2, "-");
@@ -1272,145 +1302,20 @@ int main(int argc, char ** argv) {
     }
     prob.obj = -prob.obj;
 
-    // Generate two random points and plot the objective between them
-    //std::vector<std::vector<double>> points = prob.manyFeasible(10, verbosity);
-    //points.push_back(valueVec);
-    //int steps = 100;
-    //std::ofstream outfile("temp2");
-
-    // 2D
-    //for (int i=0; i<steps; i++) {
-
-        //// The mix
-        //double t1 = double(i)/double(steps);
-
-        //// For each combination of points
-        //std::vector<double> results;
-        //for (int j1=0; j1<points.size(); j1++) {
-            //for (int j2=j1+1; j2<points.size(); j2++) {
-
-                //// Mixing the two
-                //std::vector<double> point(prob.maxVariables, 0);
-                //for (int l=0; l<prob.maxVariables; l++) {
-                    //point[l] = (1-t1)*points[j1][l] + t1*points[j2][l];
-                //}
-
-                //// Evaluate the objective
-                //double obj = prob.obj.eval(point);
-                //results.push_back(obj);
-
-            //}
-        //}
-
-        //// Write it to file
-        //outfile << t1 << ", ";
-        //for (int j=0; j<results.size(); j++) {
-            //outfile << results[j];
-            //if (j < results.size()-1) {
-                //outfile << ", ";
-            //}
-        //}
-        //outfile << std::endl;
-
-    //}
-
-    // 3D
-    //for (int i=0; i<steps; i++) {
-        //for (int k=0; k<steps; k++) {
-
-            //// The mix
-            //double t1 = double(i)/double(steps);
-            //double t2 = double(k)/double(steps);
-
-            //// For each combination of points
-            //std::vector<double> results;
-            //for (int j1=0; j1<points.size(); j1++) {
-                //for (int j2=j1+1; j2<points.size(); j2++) {
-                    //for (int j3=j2+1; j3<points.size(); j3++) {
-
-                        //// Mixing all three
-                        //std::vector<double> point(prob.maxVariables, 0);
-                        //for (int l=0; l<prob.maxVariables; l++) {
-                            //point[l] = t1*points[j1][l] + t2*points[j2][l] + (1-t1-t2)*points[j3][l];
-                        //}
-
-                        //// Evaluate the objective
-                        //double obj = prob.obj.eval(point);
-                        //results.push_back(obj);
-
-                    //}
-                //}
-            //}
-
-            //// Write it to file
-            //outfile << t1 << ", ";
-            //outfile << t2 << ", ";
-            //for (int j=0; j<results.size(); j++) {
-                //outfile << results[j];
-                //if (j < results.size()-1) {
-                    //outfile << ", ";
-                //}
-            //}
-            //outfile << std::endl;
-
-        //}
-    //}
-
-    //return 0;
-
-    // See how convex it is using TSNE, writing to a file
-    //std::ofstream outfile("temp2");
-    //std::ofstream outfile2("temp3");
-    //auto points = prob.manyRandom(100, 1000);
-    //for (int i=0; i<points.size(); i++) {
-        //for (int j=0; j<points[i].size(); j++) {
-            //outfile << points[i][j];
-            //if (j < points[i].size()-1) {
-                //outfile << "\t";
-            //}
-        //}
-        //outfile << std::endl;
-        //outfile2 << prob.obj.eval(points[i]) << std::endl;
-    //}
-    //return 0;
-
-    // Get approximate linear objective
-    //std::vector<double> direction(prob.maxVariables);
-    //direction = valueVec;
-    //for (int j=0; j<prob.maxVariables; j++) {
-
-        //// Looking for this var
-        //int digitsPerInd = prob.obj.digitsPerInd;
-        //std::string indToFind = std::to_string(j);
-        //indToFind.insert(0, digitsPerInd-indToFind.size(), ' ');
-
-        //// Get the sum of all terms that contain this variable
-        //double coeffSum = 0;
-        //for (auto const &pair: prob.obj.coeffs) {
-            
-            //// Check if this term contains our variable
-            //for (int j=0; j<pair.first.size(); j+=digitsPerInd) {
-                //if (pair.first.substr(j, digitsPerInd) == indToFind) {
-                    //coeffSum += pair.second / double(pair.first.size()/digitsPerInd);
-                    //break;
-                //}
-
-            //}
-
-        //}
-
-        //// For now the direction is just the sum
-        //direction[j] = -coeffSum;
-
-    //}
-
-    // This is the linear objective
-    //Polynomial<double> linearObj = Polynomial<double>(numVars, 0);
-    //for (int j=0; j<prob.maxVariables; j++) {
-        //linearObj += (-direction[j])*Polynomial<double>(numVars, 1, {j});
-    //}
-    //Polynomial<double> trueObj = prob.obj;
-    //prob.obj = linearObj;
+    // Generate many random points on the edge of the set
+    if (generatePoints > 0) {
+        std::vector<std::vector<double>> points = prob.manyFeasible(generatePoints, verbosity, {10, 203, 305});
+        std::ofstream outfile("temp2.csv", std::ios::trunc);
+        for (const auto& point : points) {
+            for (size_t i=0; i<point.size(); i++) {
+                outfile << point[i];
+                if (i < point.size() - 1) {
+                    outfile << ", ";
+                }
+            }
+            outfile << std::endl;
+        }
+    }
 
     // If told to just print the Hessian
     if (justPrintHessian) {
@@ -1468,6 +1373,9 @@ int main(int argc, char ** argv) {
     // If seesawing
     std::pair<double, std::vector<double>> res;
     if (seesaw) {
+
+        // Random seed
+        srand(std::time(0));
 
         // Determine the variable sets
         std::set<int> varSetA;
@@ -1529,39 +1437,58 @@ int main(int argc, char ** argv) {
         
     }
 
-    // Output the optimal W
-    //int nextVarInd = 0;
-    //Eigen::MatrixXcd Wopt = Eigen::MatrixXcd::Zero(widthW, widthW);
-    //for (int i=0; i<widthW; i++) {
-        //for (int j=i; j<widthW; j++) {
-            //if (i == j) {
-                //Wopt(i, j) = res2.second[nextVarInd];
-                //nextVarInd++;
-            //} else {
-                //Wopt(i, j) = res2.second[nextVarInd] + 1i*res2.second[nextVarInd+1];
-                //Wopt(j, i) = std::conj(Wopt(i, j));
-                //nextVarInd+=2;
-            //}
-        //}
-    //}
-    //// set near 0 elements to 0
-    //for (int i=0; i<widthW; i++) {
-        //for (int j=0; j<widthW; j++) {
-            //if (std::abs(Wopt(i, j)) < 1e-6) {
-                //Wopt(i, j) = 0;
-            //}
-            //if (std::abs(std::imag(Wopt(i, j))) < 1e-6) {
-                //Wopt(i, j) = std::real(Wopt(i, j));
-            //}
-            //if (std::abs(std::real(Wopt(i, j))) < 1e-6) {
-                //Wopt(i, j) = 1i*std::imag(Wopt(i, j));
-            //}
-        //}
-    //}
-    //std::cout << "Wopt:" << std::endl;
-    //std::cout << Wopt << std::endl;
+    // Output the optimal W, A and B TODO
+    if (verbosity >= 3) {
+        Eigen::MatrixXcd Wopt = Eigen::MatrixXcd::Zero(widthW, widthW);
+        double thresh = 1e-8;
+        for (int i=0; i<widthW; i++) {
+            for (int j=i; j<widthW; j++) {
+                Wopt(i, j) = W[i][j].eval(res.second);
+                if (std::abs(Wopt(i, j)) < thresh) {
+                    Wopt(i, j) = 0.0;
+                }
+                Wopt(j, i) = std::conj(Wopt(i, j));
+            }
+        }
+        std::vector<Eigen::MatrixXcd> AsOpt(numAs);
+        for (int i=0; i<numAs; i++) {
+            AsOpt[i] = Eigen::MatrixXcd::Zero(widthA, widthA);
+            for (int j=0; j<widthA; j++) {
+                for (int k=j; k<widthA; k++) {
+                    AsOpt[i](j, k) = As[i][j][k].eval(res.second);
+                    if (std::abs(AsOpt[i](j, k)) < thresh) {
+                        AsOpt[i](j, k) = 0.0;
+                    }
+                    AsOpt[i](k, j) = std::conj(AsOpt[i](j, k));
+                }
+            }
+        }
+        std::vector<Eigen::MatrixXcd> BsOpt(numBs);
+        for (int i=0; i<numBs; i++) {
+            BsOpt[i] = Eigen::MatrixXcd::Zero(widthB, widthB);
+            for (int j=0; j<widthB; j++) {
+                for (int k=j; k<widthB; k++) {
+                    BsOpt[i](j, k) = Bs[i][j][k].eval(res.second);
+                    if (std::abs(BsOpt[i](j, k)) < thresh) {
+                        BsOpt[i](j, k) = 0.0;
+                    }
+                    BsOpt[i](k, j) = std::conj(BsOpt[i](j, k));
+                }
+            }
+        }
+        std::cout << "Optimal W:" << std::endl;
+        std::cout << Wopt << std::endl;
+        for (int i=0; i<numAs; i++) {
+            std::cout << "Optimal A[" << i << "]:" << std::endl;
+            std::cout << AsOpt[i] << std::endl;
+        }
+        for (int i=0; i<numBs; i++) {
+            std::cout << "Optimal B[" << i << "]:" << std::endl;
+            std::cout << BsOpt[i] << std::endl;
+        }
+    }
 
-    // Output the ineqString if it is not empty TODO
+    // Output the ineqString if it is not empty
     if (outputFinal) {
         std::cout << -res.first << ineqString << std::endl;
     }
