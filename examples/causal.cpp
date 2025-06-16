@@ -399,6 +399,9 @@ int main(int argc, char ** argv) {
 	int verbosity = 1;
 	int level = 1;
 	int maxIters = -1;
+    bool noWCons = false;
+    bool noABCons = false;
+    bool probCons = false;
     std::string problemName = "gyni";
     std::string ineqString = "";
     bool outputFinal = false;
@@ -422,6 +425,9 @@ int main(int argc, char ** argv) {
 			std::cout << " --lgyni     use the LGYNI problem" << std::endl;
 			std::cout << " --rlgyni    use the RLGYNI problem" << std::endl;
 			std::cout << " -g [int]    generate points on the edge of the set" << std::endl;
+			std::cout << " --noW       do not include W constraints" << std::endl;
+            std::cout << " --noAB      do not include A and B constraints" << std::endl;
+			std::cout << " -p          add probability constraints" << std::endl;
 			std::cout << " -m          include products of matrices" << std::endl;
 			std::cout << " -o          output the final inequality" << std::endl;
 			std::cout << " -s          optimize using seesaw" << std::endl;
@@ -438,6 +444,12 @@ int main(int argc, char ** argv) {
 		} else if (arg == "-v" && i+1 < argc) {
 			verbosity = std::stoi(argv[i+1]);
 			i++;
+        } else if (arg == "-p") {
+            probCons = true;
+        } else if (arg == "--noW") {
+            noWCons = true;
+        } else if (arg == "--noAB") {
+            noABCons = true;
         } else if (arg == "-H") {
             justPrintHessian = true;
         } else if (arg == "-g") {
@@ -949,88 +961,98 @@ int main(int argc, char ** argv) {
     std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI_BI_BO = reorderSubsystems(tensor(I_2, partialTrace(W, 4, d, 1)), 4, d, {1, 0, 2, 3});
     std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI_BI = reorderSubsystems(tensor(I_4, partialTrace(partialTrace(W, 4, d, 3), 3, d, 1)), 4, d, {2, 1, 3, 0});
 
-    // tr_W  = d^2 
-    Polynomial<std::complex<double>> traceCon = trace_W - Polynomial<std::complex<double>>(numVars, d*d);
-    prob.conZero.push_back(real(traceCon));
-    prob.conZero.push_back(imag(traceCon));
+    // Unless told to ignore W constraints
+    if (!noWCons) {
 
-    // W_{AI,AO} = W_{AI}
-    for (int i=0; i<widthW; i++) {
-        for (int j=i; j<widthW; j++) {
-            Polynomial<std::complex<double>> con = W_AI_AO[i][j] - W_AI[i][j];
-            prob.conZero.push_back(real(con));
-            prob.conZero.push_back(imag(con));
-        }
-    }
+        // tr_W  = d^2 
+        Polynomial<std::complex<double>> traceCon = trace_W - Polynomial<std::complex<double>>(numVars, d*d);
+        prob.conZero.push_back(real(traceCon));
+        prob.conZero.push_back(imag(traceCon));
 
-    // W_{BI,BO} = W_{BI}
-    for (int i=0; i<widthW; i++) {
-        for (int j=i; j<widthW; j++) {
-            Polynomial<std::complex<double>> con = W_BI_BO[i][j] - W_BI[i][j];
-            prob.conZero.push_back(real(con));
-            prob.conZero.push_back(imag(con));
-        }
-    }
-
-    // W = W_{AI,AO,BI} + W_{AI,BI,BO} - W_{AI,BI}
-    for (int i=0; i<widthW; i++) {
-        for (int j=i; j<widthW; j++) {
-            Polynomial<std::complex<double>> con = W_AI_AO_BI[i][j] + W_AI_BI_BO[i][j] - W_AI_BI[i][j] - W[i][j];
-            prob.conZero.push_back(real(con));
-            prob.conZero.push_back(imag(con));
-        }
-    }
-
-    // Constraints on the As
-    // tr_AO \sum_a A^{AO,AI}_{a,x} = I
-    std::vector<std::vector<Polynomial<std::complex<double>>>> A_0_0_AI = partialTrace(As[0], 2, d, 1);
-    std::vector<std::vector<Polynomial<std::complex<double>>>> A_0_1_AI = partialTrace(As[1], 2, d, 1);
-    std::vector<std::vector<Polynomial<std::complex<double>>>> A_1_0_AI = partialTrace(As[2], 2, d, 1);
-    std::vector<std::vector<Polynomial<std::complex<double>>>> A_1_1_AI = partialTrace(As[3], 2, d, 1);
-    std::vector<std::vector<Polynomial<std::complex<double>>>> A_0_sum = A_0_0_AI + A_1_0_AI;
-    std::vector<std::vector<Polynomial<std::complex<double>>>> A_1_sum = A_0_1_AI + A_1_1_AI;
-    for (int i=0; i<A_0_sum.size(); i++) {
-        for (int j=i; j<A_0_sum.size(); j++) {
-            if (i == j) {
-                Polynomial<std::complex<double>> con1 = A_0_sum[i][j] - Polynomial<std::complex<double>>(numVars, 1);
-                Polynomial<std::complex<double>> con2 = A_1_sum[i][j] - Polynomial<std::complex<double>>(numVars, 1);
-                prob.conZero.push_back(real(con1));
-                prob.conZero.push_back(imag(con1));
-                prob.conZero.push_back(real(con2));
-                prob.conZero.push_back(imag(con2));
-            } else {
-                prob.conZero.push_back(real(A_0_sum[i][j]));
-                prob.conZero.push_back(imag(A_0_sum[i][j]));
-                prob.conZero.push_back(real(A_1_sum[i][j]));
-                prob.conZero.push_back(imag(A_1_sum[i][j]));
+        // W_{AI,AO} = W_{AI}
+        for (int i=0; i<widthW; i++) {
+            for (int j=i; j<widthW; j++) {
+                Polynomial<std::complex<double>> con = W_AI_AO[i][j] - W_AI[i][j];
+                prob.conZero.push_back(real(con));
+                prob.conZero.push_back(imag(con));
             }
         }
-    }
 
-    // Constraints on the Bs
-    // tr_BO \sum_b B^{BO,BI}_{b,x} = I
-    std::vector<std::vector<Polynomial<std::complex<double>>>> B_0_0_BI = partialTrace(Bs[0], 2, d, 1);
-    std::vector<std::vector<Polynomial<std::complex<double>>>> B_0_1_BI = partialTrace(Bs[1], 2, d, 1);
-    std::vector<std::vector<Polynomial<std::complex<double>>>> B_1_0_BI = partialTrace(Bs[2], 2, d, 1);
-    std::vector<std::vector<Polynomial<std::complex<double>>>> B_1_1_BI = partialTrace(Bs[3], 2, d, 1);
-    std::vector<std::vector<Polynomial<std::complex<double>>>> B_0_sum = B_0_0_BI + B_1_0_BI;
-    std::vector<std::vector<Polynomial<std::complex<double>>>> B_1_sum = B_0_1_BI + B_1_1_BI;
-    for (int i=0; i<B_0_sum.size(); i++) {
-        for (int j=i; j<B_0_sum.size(); j++) {
-            if (i == j) {
-                Polynomial<std::complex<double>> con1 = B_0_sum[i][j] - Polynomial<std::complex<double>>(numVars, 1);
-                Polynomial<std::complex<double>> con2 = B_1_sum[i][j] - Polynomial<std::complex<double>>(numVars, 1);
-                prob.conZero.push_back(real(con1));
-                prob.conZero.push_back(imag(con1));
-                prob.conZero.push_back(real(con2));
-                prob.conZero.push_back(imag(con2));
-            } else {
-                prob.conZero.push_back(real(B_0_sum[i][j]));
-                prob.conZero.push_back(imag(B_0_sum[i][j]));
-                prob.conZero.push_back(real(B_1_sum[i][j]));
-                prob.conZero.push_back(imag(B_1_sum[i][j]));
+        // W_{BI,BO} = W_{BI}
+        for (int i=0; i<widthW; i++) {
+            for (int j=i; j<widthW; j++) {
+                Polynomial<std::complex<double>> con = W_BI_BO[i][j] - W_BI[i][j];
+                prob.conZero.push_back(real(con));
+                prob.conZero.push_back(imag(con));
             }
         }
+
+        // W = W_{AI,AO,BI} + W_{AI,BI,BO} - W_{AI,BI}
+        for (int i=0; i<widthW; i++) {
+            for (int j=i; j<widthW; j++) {
+                Polynomial<std::complex<double>> con = W_AI_AO_BI[i][j] + W_AI_BI_BO[i][j] - W_AI_BI[i][j] - W[i][j];
+                prob.conZero.push_back(real(con));
+                prob.conZero.push_back(imag(con));
+            }
+        }
+
+    }
+
+    // Unless told to ignore A and B constraints
+    if (!noABCons) {
+
+        // Constraints on the As
+        // tr_AO \sum_a A^{AO,AI}_{a,x} = I
+        std::vector<std::vector<Polynomial<std::complex<double>>>> A_0_0_AI = partialTrace(As[0], 2, d, 1);
+        std::vector<std::vector<Polynomial<std::complex<double>>>> A_0_1_AI = partialTrace(As[1], 2, d, 1);
+        std::vector<std::vector<Polynomial<std::complex<double>>>> A_1_0_AI = partialTrace(As[2], 2, d, 1);
+        std::vector<std::vector<Polynomial<std::complex<double>>>> A_1_1_AI = partialTrace(As[3], 2, d, 1);
+        std::vector<std::vector<Polynomial<std::complex<double>>>> A_0_sum = A_0_0_AI + A_1_0_AI;
+        std::vector<std::vector<Polynomial<std::complex<double>>>> A_1_sum = A_0_1_AI + A_1_1_AI;
+        for (int i=0; i<A_0_sum.size(); i++) {
+            for (int j=i; j<A_0_sum.size(); j++) {
+                if (i == j) {
+                    Polynomial<std::complex<double>> con1 = A_0_sum[i][j] - Polynomial<std::complex<double>>(numVars, 1);
+                    Polynomial<std::complex<double>> con2 = A_1_sum[i][j] - Polynomial<std::complex<double>>(numVars, 1);
+                    prob.conZero.push_back(real(con1));
+                    prob.conZero.push_back(imag(con1));
+                    prob.conZero.push_back(real(con2));
+                    prob.conZero.push_back(imag(con2));
+                } else {
+                    prob.conZero.push_back(real(A_0_sum[i][j]));
+                    prob.conZero.push_back(imag(A_0_sum[i][j]));
+                    prob.conZero.push_back(real(A_1_sum[i][j]));
+                    prob.conZero.push_back(imag(A_1_sum[i][j]));
+                }
+            }
+        }
+
+        // Constraints on the Bs
+        // tr_BO \sum_b B^{BO,BI}_{b,x} = I
+        std::vector<std::vector<Polynomial<std::complex<double>>>> B_0_0_BI = partialTrace(Bs[0], 2, d, 1);
+        std::vector<std::vector<Polynomial<std::complex<double>>>> B_0_1_BI = partialTrace(Bs[1], 2, d, 1);
+        std::vector<std::vector<Polynomial<std::complex<double>>>> B_1_0_BI = partialTrace(Bs[2], 2, d, 1);
+        std::vector<std::vector<Polynomial<std::complex<double>>>> B_1_1_BI = partialTrace(Bs[3], 2, d, 1);
+        std::vector<std::vector<Polynomial<std::complex<double>>>> B_0_sum = B_0_0_BI + B_1_0_BI;
+        std::vector<std::vector<Polynomial<std::complex<double>>>> B_1_sum = B_0_1_BI + B_1_1_BI;
+        for (int i=0; i<B_0_sum.size(); i++) {
+            for (int j=i; j<B_0_sum.size(); j++) {
+                if (i == j) {
+                    Polynomial<std::complex<double>> con1 = B_0_sum[i][j] - Polynomial<std::complex<double>>(numVars, 1);
+                    Polynomial<std::complex<double>> con2 = B_1_sum[i][j] - Polynomial<std::complex<double>>(numVars, 1);
+                    prob.conZero.push_back(real(con1));
+                    prob.conZero.push_back(imag(con1));
+                    prob.conZero.push_back(real(con2));
+                    prob.conZero.push_back(imag(con2));
+                } else {
+                    prob.conZero.push_back(real(B_0_sum[i][j]));
+                    prob.conZero.push_back(imag(B_0_sum[i][j]));
+                    prob.conZero.push_back(real(B_1_sum[i][j]));
+                    prob.conZero.push_back(imag(B_1_sum[i][j]));
+                }
+            }
+        }
+
     }
 
     // Objective
@@ -1044,6 +1066,25 @@ int main(int argc, char ** argv) {
         srand(seed);
     } else {
         srand(time(0));
+    }
+
+    // If using probability constraints
+    if (probCons) {
+        for (int y=0; y<2; y++) {
+            for (int x=0; x<2; x++) {
+                Polynomial<std::complex<double>> p;
+                for (int a=0; a<2; a++) {
+                    for (int b=0; b<2; b++) {
+                        int indA = a*2 + x;
+                        int indB = b*2 + y;
+                        p += trace(tensor(As[indA], Bs[indB]) * W).prune();
+                    }
+                }
+                p -= 1;
+                prob.conZero.push_back(real(p));
+                prob.conZero.push_back(imag(p));
+            }
+        }
     }
 
     // GYNI = p(a = y, b = x)
