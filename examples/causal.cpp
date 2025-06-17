@@ -404,6 +404,7 @@ int main(int argc, char ** argv) {
     bool probCons = false;
     std::string problemName = "gyni";
     std::string ineqString = "";
+    bool canonical = false;
     bool outputFinal = false;
     bool useKnown = false;
     bool useMatProds = false;
@@ -427,6 +428,7 @@ int main(int argc, char ** argv) {
 			std::cout << " -g [int]    generate points on the edge of the set" << std::endl;
 			std::cout << " --noW       do not include W constraints" << std::endl;
             std::cout << " --noAB      do not include A and B constraints" << std::endl;
+			std::cout << " -c          use the canonical instruments" << std::endl;
 			std::cout << " -p          add probability constraints" << std::endl;
 			std::cout << " -m          include products of matrices" << std::endl;
 			std::cout << " -o          output the final inequality" << std::endl;
@@ -444,6 +446,11 @@ int main(int argc, char ** argv) {
 		} else if (arg == "-v" && i+1 < argc) {
 			verbosity = std::stoi(argv[i+1]);
 			i++;
+        } else if (arg == "-c") {
+            canonical = true;
+            fixedAB = true;
+            noABCons = true;
+            d = 2;
         } else if (arg == "-p") {
             probCons = true;
         } else if (arg == "--noW") {
@@ -492,21 +499,26 @@ int main(int argc, char ** argv) {
 	}
 
 	// Generate the problem for GYNI
-    int d2 = d*d;
-    int d3 = d*d*d;
-    int d4 = d*d*d*d;
+    int d2 = std::pow(d, 2);
+    int d3 = std::pow(d, 3);
+    int d4 = std::pow(d, 4);
+    int d5 = std::pow(d, 5);
+    int d6 = std::pow(d, 6);
     int widthW = d4;
     int numAs = 4;
     int numBs = 4;
     int widthA = d2;
     int widthB = d2;
-    int fullWidth = widthW + numAs*widthA + numBs*widthB;
+    if (canonical) {
+        widthA = d3;
+        widthB = d3;
+        widthW = d6;
+    }
     int numVars = 2*(widthW*(widthW+1)/2 + numAs*widthA*(widthA+1)/2 + numBs*widthB*(widthB+1)/2);
 	PolynomialProblem<double> prob(numVars);
 
     // Output some sizes
     if (verbosity > 0) {
-        std::cout << "Full (complex) matrix size: " << fullWidth << std::endl;
         std::cout << "Number of variables: " << numVars << std::endl;
         std::cout << "Width of W: " << widthW << std::endl;
         std::cout << "Width of A: " << widthA << std::endl;
@@ -549,8 +561,37 @@ int main(int argc, char ** argv) {
     std::vector<std::vector<std::complex<double>>> ZZZI = tensor(Z, tensor(Z, tensor(Z, I2)));
     std::vector<std::vector<std::complex<double>>> ZIXX = tensor(Z, tensor(I2, tensor(X, X)));
 
-    // W = 0.25 * (I_8 + (1/sqrt(2)) * (ZZZI + ZIXX))
-    if (d == 2) {
+    // If told to use the canonical instrument TODO
+    if (canonical) {
+
+        // The maximally mixed state 
+        std::vector<std::vector<std::complex<double>>> psi(d2, std::vector<std::complex<double>>(d2, 0));
+        std::complex<double> coeff = 1.0;
+        psi[0][0] = coeff;
+        psi[0][d2-1] = coeff;
+        psi[d2-1][0] = coeff;
+        psi[d2-1][d2-1] = coeff;
+
+        // |a><a| (x) |a><a| (x) |x><x|  if x == trigger
+        //        |psi><psi| (x) |x><x|  if x != trigger
+        // a = 0, x = 0
+        knownAs[0] = tensor(psi, proj0);
+        // a = 0, x = 1
+        knownAs[1] = tensor(proj0, tensor(proj0, proj1));
+        // a = 1, x = 0
+        knownAs[2] = tensor(psi, proj0);
+        // a = 1, x = 1
+        knownAs[3] = tensor(proj1, tensor(proj1, proj1));
+
+        // Same for the Bs
+        for (int i=0; i<numBs; i++) {
+            knownBs[i] = knownAs[i];
+        }
+
+    // If using known optimum from that one paper
+    } else if (d == 2) {
+
+        // W = 0.25 * (I_8 + (1/sqrt(2)) * (ZZZI + ZIXX))
         for (int i=0; i<widthW; i++) {
             knownW[i][i] = 1;
         }
@@ -571,14 +612,14 @@ int main(int argc, char ** argv) {
         }
 
         // A_0_0 = 0
-        // A_1_0 = |00><00| + |00><11| + |11><00| + |11><11|
         // A_0_1 = |0><0| (x) |0><0|
+        // A_1_0 = |00><00| + |00><11| + |11><00| + |11><11|
         // A_1_1 = |1><1| (x) |0><0|
+        knownAs[1][0][0] = 1;
         knownAs[2][0][0] = 1;
         knownAs[2][0][3] = 1;
         knownAs[2][3][0] = 1;
         knownAs[2][3][3] = 1;
-        knownAs[1][0][0] = 1;
         knownAs[3][2][2] = 1;
 
         // A_0_0 = |00><00| + |00><11| + |11><00| + |11><11|
@@ -843,14 +884,14 @@ int main(int argc, char ** argv) {
         for (int i=0; i<numAs; i++) {
             for (int j=0; j<widthA; j++) {
                 for (int k=0; k<widthA; k++) {
-                    As[i][j][k] = knownAs[i][j][k];
+                    As[i][j][k] = Polynomial<std::complex<double>>(numVars, knownAs[i][j][k]);
                 }
             }
         }
         for (int i=0; i<numBs; i++) {
             for (int j=0; j<widthB; j++) {
                 for (int k=0; k<widthB; k++) {
-                    Bs[i][j][k] = knownBs[i][j][k];
+                    Bs[i][j][k] = Polynomial<std::complex<double>>(numVars, knownBs[i][j][k]);
                 }
             }
         }
@@ -885,12 +926,16 @@ int main(int argc, char ** argv) {
     if (verbosity >= 1) {
         std::cout << "Adding constraints..." << std::endl;
     }
-    prob.conPSD.push_back(complexSDPToReal(W));
-    for (int i=0; i<numAs; i++) {
-        prob.conPSD.push_back(complexSDPToReal(As[i]));
+    if (!noWCons) {
+        prob.conPSD.push_back(complexSDPToReal(W));
     }
-    for (int i=0; i<numBs; i++) {
-        prob.conPSD.push_back(complexSDPToReal(Bs[i]));
+    if (!fixedAB && !noABCons) {
+        for (int i=0; i<numAs; i++) {
+            prob.conPSD.push_back(complexSDPToReal(As[i]));
+        }
+        for (int i=0; i<numBs; i++) {
+            prob.conPSD.push_back(complexSDPToReal(Bs[i]));
+        }
     }
 
     // Add products of matrices
@@ -948,52 +993,115 @@ int main(int argc, char ** argv) {
     for (int i=0; i<d3; i++) {
         I_8[i][i] = Polynomial<std::complex<double>>(numVars, 1.0/d3);
     }
-
-    // Constraints on the W
-    // The order of W is AI, AO, BI, BO
-    // W_something means just the W_{something} part (the rest traced out and replaced with identity)
-    Polynomial<std::complex<double>> trace_W = trace(W);
-    std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI_AO = tensor(tensor(partialTrace(partialTrace(W, 4, d, 3), 3, d, 2), I_2), I_2);
-    std::vector<std::vector<Polynomial<std::complex<double>>>> W_BI_BO = tensor(I_2, tensor(I_2, partialTrace(partialTrace(W, 4, d, 0), 3, d, 0)));
-    std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI = tensor(partialTrace(partialTrace(partialTrace(W, 4, d, 3), 3, d, 2), 2, d, 1), I_8);
-    std::vector<std::vector<Polynomial<std::complex<double>>>> W_BI = tensor(I_4, tensor(partialTrace(partialTrace(partialTrace(W, 4, d, 3), 3, d, 0), 2, d, 0), I_2));
-    std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI_AO_BI = tensor(partialTrace(W, 4, d, 3), I_2);
-    std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI_BI_BO = reorderSubsystems(tensor(I_2, partialTrace(W, 4, d, 1)), 4, d, {1, 0, 2, 3});
-    std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI_BI = reorderSubsystems(tensor(I_4, partialTrace(partialTrace(W, 4, d, 3), 3, d, 1)), 4, d, {2, 1, 3, 0});
+    std::vector<std::vector<Polynomial<std::complex<double>>>> I_16(d4, std::vector<Polynomial<std::complex<double>>>(d4, Polynomial<std::complex<double>>(numVars, 0i)));
+    for (int i=0; i<d4; i++) {
+        I_16[i][i] = Polynomial<std::complex<double>>(numVars, 1.0/d4);
+    }
+    std::vector<std::vector<Polynomial<std::complex<double>>>> I_32(d5, std::vector<Polynomial<std::complex<double>>>(d5, Polynomial<std::complex<double>>(numVars, 0i)));
+    for (int i=0; i<d5; i++) {
+        I_32[i][i] = Polynomial<std::complex<double>>(numVars, 1.0/d5);
+    }
 
     // Unless told to ignore W constraints
     if (!noWCons) {
 
         // tr_W  = d^2 
+        Polynomial<std::complex<double>> trace_W = trace(W);
         Polynomial<std::complex<double>> traceCon = trace_W - Polynomial<std::complex<double>>(numVars, d*d);
         prob.conZero.push_back(real(traceCon));
         prob.conZero.push_back(imag(traceCon));
 
-        // W_{AI,AO} = W_{AI}
-        for (int i=0; i<widthW; i++) {
-            for (int j=i; j<widthW; j++) {
-                Polynomial<std::complex<double>> con = W_AI_AO[i][j] - W_AI[i][j];
-                prob.conZero.push_back(real(con));
-                prob.conZero.push_back(imag(con));
-            }
-        }
+        // TODO
+        if (canonical) {
 
-        // W_{BI,BO} = W_{BI}
-        for (int i=0; i<widthW; i++) {
-            for (int j=i; j<widthW; j++) {
-                Polynomial<std::complex<double>> con = W_BI_BO[i][j] - W_BI[i][j];
-                prob.conZero.push_back(real(con));
-                prob.conZero.push_back(imag(con));
-            }
-        }
+            // The order of W is AI, AO, Aaux, BI, BO, Baux
+            // W_something means just the W_{something} part (the rest traced out and replaced with identity)
 
-        // W = W_{AI,AO,BI} + W_{AI,BI,BO} - W_{AI,BI}
-        for (int i=0; i<widthW; i++) {
-            for (int j=i; j<widthW; j++) {
-                Polynomial<std::complex<double>> con = W_AI_AO_BI[i][j] + W_AI_BI_BO[i][j] - W_AI_BI[i][j] - W[i][j];
-                prob.conZero.push_back(real(con));
-                prob.conZero.push_back(imag(con));
+            // W_{AI,AO} = W_{AI}
+            std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI_AO = 
+                            tensor(
+                                    partialTrace(
+                                        partialTrace(
+                                            partialTrace(W, 
+                                            6, d, 5), 
+                                        5, d, 4), 
+                                    4, d, 3), 
+                                I_8);
+            std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI = 
+                            tensor(
+                                    partialTrace(
+                                        partialTrace(
+                                            partialTrace(
+                                                partialTrace(
+                                                    partialTrace(W, 
+                                                    6, d, 5), 
+                                                5, d, 4), 
+                                            4, d, 3), 
+                                         3, d, 2), 
+                                    2, d, 1), 
+                                I_32);
+            for (int i=0; i<widthW; i++) {
+                for (int j=i; j<widthW; j++) {
+                    Polynomial<std::complex<double>> con = W_AI_AO[i][j] - W_AI[i][j];
+                    prob.conZero.push_back(real(con));
+                    prob.conZero.push_back(imag(con));
+                }
             }
+
+            //// W_{BI,BO} = W_{BI}
+            //std::vector<std::vector<Polynomial<std::complex<double>>>> W_BI_BO = tensor(tensor(I_8, partialTrace(partialTrace(partialTrace(partialTrace(W, 6, d, 5), 5, d, 0), 4, d, 0), 3, d, 0)), I_2);
+            //std::vector<std::vector<Polynomial<std::complex<double>>>> W_BI = tensor(I_8, tensor(partialTrace(partialTrace(partialTrace(partialTrace(partialTrace(W, 6, d, 5), 5, d, 4), 4, d, 0), 3, d, 0), 2, d, 0), I_4));
+            //for (int i=0; i<widthW; i++) {
+                //for (int j=i; j<widthW; j++) {
+                    //Polynomial<std::complex<double>> con = W_BI_BO[i][j] - W_BI[i][j];
+                    //prob.conZero.push_back(real(con));
+                    //prob.conZero.push_back(imag(con));
+                //}
+            //}
+
+            //std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI_AO_BI = tensor(partialTrace(W, 4, d, 3), I_2);
+            //std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI_BI_BO = reorderSubsystems(tensor(I_2, partialTrace(W, 4, d, 1)), 4, d, {1, 0, 2, 3});
+            //std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI_BI = reorderSubsystems(tensor(I_4, partialTrace(partialTrace(W, 4, d, 3), 3, d, 1)), 4, d, {2, 1, 3, 0});
+
+        } else {
+
+            // The order of W is AI, AO, BI, BO
+            // W_something means just the W_{something} part (the rest traced out and replaced with identity)
+
+            // W_{AI,AO} = W_{AI}
+            std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI_AO = tensor(tensor(partialTrace(partialTrace(W, 4, d, 3), 3, d, 2), I_2), I_2);
+            std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI = tensor(partialTrace(partialTrace(partialTrace(W, 4, d, 3), 3, d, 2), 2, d, 1), I_8);
+            for (int i=0; i<widthW; i++) {
+                for (int j=i; j<widthW; j++) {
+                    Polynomial<std::complex<double>> con = W_AI_AO[i][j] - W_AI[i][j];
+                    prob.conZero.push_back(real(con));
+                    prob.conZero.push_back(imag(con));
+                }
+            }
+
+            // W_{BI,BO} = W_{BI}
+            std::vector<std::vector<Polynomial<std::complex<double>>>> W_BI_BO = tensor(I_2, tensor(I_2, partialTrace(partialTrace(W, 4, d, 0), 3, d, 0)));
+            std::vector<std::vector<Polynomial<std::complex<double>>>> W_BI = tensor(I_4, tensor(partialTrace(partialTrace(partialTrace(W, 4, d, 3), 3, d, 0), 2, d, 0), I_2));
+            for (int i=0; i<widthW; i++) {
+                for (int j=i; j<widthW; j++) {
+                    Polynomial<std::complex<double>> con = W_BI_BO[i][j] - W_BI[i][j];
+                    prob.conZero.push_back(real(con));
+                    prob.conZero.push_back(imag(con));
+                }
+            }
+
+            // W = W_{AI,AO,BI} + W_{AI,BI,BO} - W_{AI,BI}
+            std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI_AO_BI = tensor(partialTrace(W, 4, d, 3), I_2);
+            std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI_BI_BO = reorderSubsystems(tensor(I_2, partialTrace(W, 4, d, 1)), 4, d, {1, 0, 2, 3});
+            std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI_BI = reorderSubsystems(tensor(I_4, partialTrace(partialTrace(W, 4, d, 3), 3, d, 1)), 4, d, {2, 1, 3, 0});
+            for (int i=0; i<widthW; i++) {
+                for (int j=i; j<widthW; j++) {
+                    Polynomial<std::complex<double>> con = W_AI_AO_BI[i][j] + W_AI_BI_BO[i][j] - W_AI_BI[i][j] - W[i][j];
+                    prob.conZero.push_back(real(con));
+                    prob.conZero.push_back(imag(con));
+                }
+            }
+
         }
 
     }
@@ -1055,6 +1163,37 @@ int main(int argc, char ** argv) {
 
     }
 
+    // If using probability constraints
+    if (probCons) {
+        for (int y=0; y<2; y++) {
+            for (int x=0; x<2; x++) {
+                Polynomial<std::complex<double>> p(numVars);
+                for (int a=0; a<2; a++) {
+                    for (int b=0; b<2; b++) {
+                        int indA = a*2 + x;
+                        int indB = b*2 + y;
+                        p += trace(tensor(As[indA], Bs[indB]) * W).prune();
+                    }
+                }
+                p -= 1;
+                Polynomial<double> pImag = imag(p).prune();
+                Polynomial<double> pReal = real(p).prune();
+                prob.conZero.push_back(pReal);
+                prob.conZero.push_back(pImag);
+            }
+        }
+    }
+    
+    // Make sure all the constraints are linear
+    bool allLinear = true;
+    for (const auto& con : prob.conZero) {
+        if (con.getDegree() > 1) {
+            allLinear = false;
+            std::cout << "Error - nonlinear constraint found" << std::endl;
+            return 0;
+        }
+    }
+
     // Objective
     if (verbosity >= 1) {
         std::cout << "Constructing objective..." << std::endl;
@@ -1066,25 +1205,6 @@ int main(int argc, char ** argv) {
         srand(seed);
     } else {
         srand(time(0));
-    }
-
-    // If using probability constraints
-    if (probCons) {
-        for (int y=0; y<2; y++) {
-            for (int x=0; x<2; x++) {
-                Polynomial<std::complex<double>> p;
-                for (int a=0; a<2; a++) {
-                    for (int b=0; b<2; b++) {
-                        int indA = a*2 + x;
-                        int indB = b*2 + y;
-                        p += trace(tensor(As[indA], Bs[indB]) * W).prune();
-                    }
-                }
-                p -= 1;
-                prob.conZero.push_back(real(p));
-                prob.conZero.push_back(imag(p));
-            }
-        }
     }
 
     // GYNI = p(a = y, b = x)
@@ -1121,7 +1241,7 @@ int main(int argc, char ** argv) {
             }
         }
         prob.obj = prob.obj * 0.25;
-    } else if (problemName == "rlgyni") { // TODO
+    } else if (problemName == "rlgyni") {
         for (int x=0; x<2; x++) {
             for (int y=0; y<2; y++) {
                 for (int a=0; a<2; a++) {
@@ -1478,7 +1598,7 @@ int main(int argc, char ** argv) {
         
     }
 
-    // Output the optimal W, A and B TODO
+    // Output the optimal W, A and B
     if (verbosity >= 3) {
         Eigen::MatrixXcd Wopt = Eigen::MatrixXcd::Zero(widthW, widthW);
         double thresh = 1e-8;
