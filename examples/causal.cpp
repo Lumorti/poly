@@ -1020,26 +1020,26 @@ int main(int argc, char ** argv) {
             // W_{AI,AO} = W_{AI}
             std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI_AO = 
                             tensor(
+                                partialTrace(
                                     partialTrace(
-                                        partialTrace(
-                                            partialTrace(W, 
-                                            6, d, 5), 
-                                        5, d, 4), 
-                                    4, d, 3), 
-                                I_8);
+                                        partialTrace(W, 
+                                        6, d, 5), 
+                                    5, d, 4), 
+                                4, d, 3), 
+                            I_8);
             std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI = 
                             tensor(
+                                partialTrace(
                                     partialTrace(
                                         partialTrace(
                                             partialTrace(
-                                                partialTrace(
-                                                    partialTrace(W, 
-                                                    6, d, 5), 
-                                                5, d, 4), 
-                                            4, d, 3), 
-                                         3, d, 2), 
-                                    2, d, 1), 
-                                I_32);
+                                                partialTrace(W, 
+                                                6, d, 5), 
+                                            5, d, 4), 
+                                        4, d, 3), 
+                                     3, d, 2), 
+                                2, d, 1), 
+                            I_32);
             for (int i=0; i<widthW; i++) {
                 for (int j=i; j<widthW; j++) {
                     Polynomial<std::complex<double>> con = W_AI_AO[i][j] - W_AI[i][j];
@@ -1048,18 +1048,46 @@ int main(int argc, char ** argv) {
                 }
             }
 
-            //// W_{BI,BO} = W_{BI}
-            //std::vector<std::vector<Polynomial<std::complex<double>>>> W_BI_BO = tensor(tensor(I_8, partialTrace(partialTrace(partialTrace(partialTrace(W, 6, d, 5), 5, d, 0), 4, d, 0), 3, d, 0)), I_2);
-            //std::vector<std::vector<Polynomial<std::complex<double>>>> W_BI = tensor(I_8, tensor(partialTrace(partialTrace(partialTrace(partialTrace(partialTrace(W, 6, d, 5), 5, d, 4), 4, d, 0), 3, d, 0), 2, d, 0), I_4));
-            //for (int i=0; i<widthW; i++) {
-                //for (int j=i; j<widthW; j++) {
-                    //Polynomial<std::complex<double>> con = W_BI_BO[i][j] - W_BI[i][j];
-                    //prob.conZero.push_back(real(con));
-                    //prob.conZero.push_back(imag(con));
-                //}
-            //}
+            // W_{BI,BO} = W_{BI}
+            std::vector<std::vector<Polynomial<std::complex<double>>>> W_BI_BO = 
+                            tensor(
+                                partialTrace(
+                                    partialTrace(
+                                        partialTrace(W, 
+                                        6, d, 0), 
+                                    5, d, 0), 
+                                4, d, 0), 
+                            I_8);
+            std::vector<std::vector<Polynomial<std::complex<double>>>> W_BI =
+                        tensor(
+                            tensor(
+                                I_16, 
+                                partialTrace(
+                                    partialTrace(
+                                        partialTrace(
+                                            partialTrace(
+                                                partialTrace(W, 
+                                                6, d, 5), 
+                                            5, d, 4), 
+                                        4, d, 0), 
+                                     3, d, 0), 
+                                2, d, 0)),
+                            I_2);
+            for (int i=0; i<widthW; i++) {
+                for (int j=i; j<widthW; j++) {
+                    Polynomial<std::complex<double>> con = W_BI_BO[i][j] - W_BI[i][j];
+                    prob.conZero.push_back(real(con));
+                    prob.conZero.push_back(imag(con));
+                }
+            }
 
-            //std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI_AO_BI = tensor(partialTrace(W, 4, d, 3), I_2);
+            std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI_AO_BI = 
+                            tensor(
+                                partialTrace(
+                                    partialTrace(W,
+                                    6, d, 5),
+                                5, d, 4),
+                            I_2);
             //std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI_BI_BO = reorderSubsystems(tensor(I_2, partialTrace(W, 4, d, 1)), 4, d, {1, 0, 2, 3});
             //std::vector<std::vector<Polynomial<std::complex<double>>>> W_AI_BI = reorderSubsystems(tensor(I_4, partialTrace(partialTrace(W, 4, d, 3), 3, d, 1)), 4, d, {2, 1, 3, 0});
 
