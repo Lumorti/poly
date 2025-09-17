@@ -31,9 +31,6 @@
 // MOSEK
 #include "fusion.h"
 
-// SCS
-#include "scs.h"
-
 // Allow complex literals like 1i
 using namespace std::complex_literals;
 

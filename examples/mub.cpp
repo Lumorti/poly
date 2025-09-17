@@ -25,7 +25,7 @@ int main(int argc, char ** argv) {
     bool asAMPL = false;
 	std::string givenSizes = "";
 	std::string solver = "mosek";
-	std::string level = "1f";
+	int level = 1;
 	std::string fileName = "";
 	for (int i=0; i<argc; i++) {
 		std::string arg = argv[i];
@@ -39,7 +39,7 @@ int main(int argc, char ** argv) {
 			std::cout << "             3 = redundancy analysis with S-lemma" << std::endl;
 			std::cout << "             6 = trig poly test" << std::endl;
 			std::cout << " -N [str]    set the basis sizes e.g. 2,1,1,1" << std::endl;
-			std::cout << " -l [str]    set the level for the relaxation e.g. 1+2f,3p" << std::endl;
+			std::cout << " -l [str]    set the level for the relaxation" << std::endl;
 			std::cout << " -i [int]    set max iterations (-1 for no limit)" << std::endl;
 			std::cout << " -t [dbl]    set the tolerance" << std::endl;
 			std::cout << " -a [dbl]    set the scaling for the feasible check" << std::endl;
@@ -87,7 +87,7 @@ int main(int argc, char ** argv) {
 			alpha = std::stod(argv[i+1]);
 			i++;
 		} else if (arg == "-l" && i+1 < argc) {
-			level = argv[i+1];
+			level = std::stoi(argv[i+1]);
 			i++;
 		} else if (arg == "-v" && i+1 < argc) {
 			verbosity = std::stoi(argv[i+1]);
@@ -552,6 +552,10 @@ int main(int argc, char ** argv) {
     prob.conZero = eqns;
     prob.conPositive = orderingCons;
 
+    // Add bounds to all the variables
+    double bound = 1 / std::sqrt(d);
+    prob.varBounds = std::vector<std::pair<double,double>>(numVars, std::make_pair(-bound, bound));
+
 	// Use as few indices as possible
 	std::unordered_map<int,int> reducedMap = prob.getMinimalMap();
 	if (verbosity >= 2) {
@@ -950,21 +954,21 @@ int main(int argc, char ** argv) {
 
 		// If we're using a higher level mat, add higher-order cons
 		int ogCons = prob.conZero.size();
-		if (level.find("2") != std::string::npos) {
+		if (level >= 2) {
 			for (int i=0; i<ogCons; i++) {
 				prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]);
 			}
 		}
 
 		// If we're using a higher level mat, add higher-order cons
-		if (level.find("3") != std::string::npos) {
+		if (level >= 3) {
 			for (int i=0; i<ogCons; i++) {
 				prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
 			}
 		}
 
 		// If we're using a higher level mat, add higher-order cons
-		if (level.find("4") != std::string::npos) {
+		if (level >= 4) {
 			for (int i=0; i<ogCons; i++) {
 				prob.conZero.push_back(prob.conZero[i]*prob.conZero[i]*prob.conZero[i]*prob.conZero[i]);
 			}
@@ -972,9 +976,7 @@ int main(int argc, char ** argv) {
 
 		// Try to prove infeasiblity
 		if (solver == "mosek") {
-			prob.proveInfeasible(maxIters, level, 1.0/std::sqrt(d), fileName, verbosity, numToSplit);
-		} else if (solver == "scs") {
-			prob.proveInfeasibleSCS(maxIters, level, 1.0/std::sqrt(d), fileName, verbosity, numToSplit);
+            prob.optimize(level, verbosity, maxIters);
 		}
 		
 	}
