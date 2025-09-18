@@ -57,7 +57,6 @@ int main(int argc, char ** argv) {
 			std::cout << " -3          don't assume the first element of each is one" << std::endl;
 			std::cout << " -4          don't require normalisation" << std::endl;
 			std::cout << " -5          don't require normalisation of the extra variables" << std::endl;
-			std::cout << " -s          use SCS as the SDP solver insead of Mosek" << std::endl;
 			std::cout << " -0          debug flag" << std::endl;
 			return 0;
 		} else if (arg == "-d" && i+1 < argc) {
@@ -107,8 +106,6 @@ int main(int argc, char ** argv) {
 		} else if (arg == "-m" && i+1 < argc) {
 			task = std::stoi(argv[i+1]);
 			i++;
-		} else if (arg == "-s") {
-			solver = "scs";
 		} else if (arg == "-r") {
 			std::srand(time(0));
 		} else if (arg == "-1") {
@@ -552,10 +549,6 @@ int main(int argc, char ** argv) {
     prob.conZero = eqns;
     prob.conPositive = orderingCons;
 
-    // Add bounds to all the variables
-    double bound = 1 / std::sqrt(d);
-    prob.varBounds = std::vector<std::pair<double,double>>(numVars, std::make_pair(-bound, bound));
-
 	// Use as few indices as possible
 	std::unordered_map<int,int> reducedMap = prob.getMinimalMap();
 	if (verbosity >= 2) {
@@ -566,6 +559,8 @@ int main(int argc, char ** argv) {
 		std::cout << prob << std::endl;
 	}
 	prob = prob.replaceWithVariable(reducedMap);
+    double bound = 1 / std::sqrt(d);
+    prob.varBounds = std::vector<std::pair<double,double>>(prob.maxVariables, std::make_pair(-bound, bound));
 	if (verbosity >= 2) {
 		std::cout << "---------------------" << std::endl;
 		std::cout << "Reduced Problem: " << std::endl;
@@ -586,7 +581,7 @@ int main(int argc, char ** argv) {
 		std::cout << "num norm eqns: " << normList.size() << ", num extra norm eqns: " << normListExtras.size() << std::endl;
 	}
 
-    // If told to just output as AMPL TODO
+    // If told to just output as AMPL
     if (asAMPL) {
         double bound = 1 / std::sqrt(d);
         std::cout << "----------------------------------------------------" << std::endl;

@@ -3603,17 +3603,6 @@ public:
 
         }
 
-		// Determine the outer bound for all variables
-		std::pair<double,double> generalBounds = {0, 0};
-		for (int i=0; i<obj.maxVariables; i++) {
-			if (varBounds[i].second > generalBounds.second) {
-				generalBounds.second = varBounds[i].second;
-			}
-			if (varBounds[i].first < generalBounds.first) {
-				generalBounds.first = varBounds[i].first;
-			}
-		}
-
 		// Start with the most general area
 		double maxArea = 1;
 		std::vector<std::vector<std::pair<double,double>>> toProcess;
@@ -3838,32 +3827,32 @@ public:
         }
 
 		// Create the variable
-		mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::inRange(generalBounds.first, generalBounds.second));
+		mosek::fusion::Variable::t xM = M->variable(varsTotal, mosek::fusion::Domain::unbounded());
 
 		// If the variables should be constrained
-		for (int i=0; i<maxVariables; i++) {
+		//for (int i=0; i<maxVariables; i++) {
 
-			// If there are bounds
-			if (varBounds[i].first > -largeTol && varBounds[i].second < largeTol) {
-				M->constraint(xM->index(firstMonomInds[i]), mosek::fusion::Domain::inRange(varBounds[i].first, varBounds[i].second));
-			} else if (varBounds[i].first > -largeTol) {
-				M->constraint(xM->index(firstMonomInds[i]), mosek::fusion::Domain::greaterThan(varBounds[i].first));
-			} else if (varBounds[i].second < largeTol) {
-				M->constraint(xM->index(firstMonomInds[i]), mosek::fusion::Domain::lessThan(varBounds[i].second));
-			}
+			//// If there are bounds
+			//if (varBounds[i].first > -largeTol && varBounds[i].second < largeTol) {
+				//M->constraint(xM->index(firstMonomInds[i]), mosek::fusion::Domain::inRange(varBounds[i].first, varBounds[i].second));
+			//} else if (varBounds[i].first > -largeTol) {
+				//M->constraint(xM->index(firstMonomInds[i]), mosek::fusion::Domain::greaterThan(varBounds[i].first));
+			//} else if (varBounds[i].second < largeTol) {
+				//M->constraint(xM->index(firstMonomInds[i]), mosek::fusion::Domain::lessThan(varBounds[i].second));
+			//}
 
-			// If it's binary, either -1/1 or 0/1
-			if (varIsBinary[i]) {
-				if (varBounds[i].first == -1 && varBounds[i].second == 1) {
-					M->constraint(xM->index(quadraticMonomInds[i][i]), mosek::fusion::Domain::equalsTo(1.0));
-				} else if (varBounds[i].first == 0 && varBounds[i].second == 1) {
-					M->constraint(mosek::fusion::Expr::sub(xM->index(quadraticMonomInds[i][i]), xM->index(firstMonomInds[i])), mosek::fusion::Domain::equalsTo(0.0));
-				}
-			}
+			//// If it's binary, either -1/1 or 0/1
+			//if (varIsBinary[i]) {
+				//if (varBounds[i].first == -1 && varBounds[i].second == 1) {
+					//M->constraint(xM->index(quadraticMonomInds[i][i]), mosek::fusion::Domain::equalsTo(1.0));
+				//} else if (varBounds[i].first == 0 && varBounds[i].second == 1) {
+					//M->constraint(mosek::fusion::Expr::sub(xM->index(quadraticMonomInds[i][i]), xM->index(firstMonomInds[i])), mosek::fusion::Domain::equalsTo(0.0));
+				//}
+			//}
 
-		}
+		//}
 
-        // Set up the McCormick envelopes TODO
+        // Set up the McCormick envelopes
         bool useEnvelopes = false;
 		int numParamPosCons = 0;
 		std::vector<long> sparsity;
@@ -3941,35 +3930,29 @@ public:
 		std::sort(sparsity2.begin(), sparsity2.end());
         mosek::fusion::Parameter::t EM = M->parameter(monty::new_array_ptr<int>({numParamEqCons, varsTotal}), monty::new_array_ptr<long>(sparsity2));
 
-        // Parameterized bounds for each variable
-        int numParamBounds = 0;
-        std::vector<long> sparsity3;
-        for (int i=0; i<monoms.size(); i++) {
+        // Bounds per variable
+        int numBoundParams = monoms.size();
+        mosek::fusion::Parameter::t boundsLower = M->parameter(numBoundParams);
+        mosek::fusion::Parameter::t boundsUpper = M->parameter(numBoundParams);
+        for (int i=0; i<numBoundParams; i++) {
             if (i == oneIndex) {
                 continue;
             }
-            sparsity3.push_back(numParamBounds*varsTotal + i);
-            sparsity3.push_back(numParamBounds*varsTotal + oneIndex);
-            numParamBounds++;
-            sparsity3.push_back(numParamBounds*varsTotal + i);
-            sparsity3.push_back(numParamBounds*varsTotal + oneIndex);
-            numParamBounds++;
+            M->constraint(mosek::fusion::Expr::sub(xM->index(i), boundsLower->index(i)), mosek::fusion::Domain::greaterThan(0));
+            M->constraint(mosek::fusion::Expr::sub(boundsUpper->index(i), xM->index(i)), mosek::fusion::Domain::greaterThan(0));
         }
-        std::sort(sparsity3.begin(), sparsity3.end());
-        mosek::fusion::Parameter::t boundsM = M->parameter(monty::new_array_ptr<int>({numParamBounds, varsTotal}), monty::new_array_ptr<long>(sparsity3));
-        M->constraint(mosek::fusion::Expr::mul(boundsM, xM), mosek::fusion::Domain::greaterThan(0));
 
 		// The first element of the vector should be one
-		M->constraint(xM->index(oneIndex), mosek::fusion::Domain::equalsTo(1.0));
+        M->constraint(xM->index(oneIndex), mosek::fusion::Domain::equalsTo(1.0));
 
 		// Linear equality constraints
-		M->constraint(mosek::fusion::Expr::mul(AM, xM), mosek::fusion::Domain::equalsTo(0.0));
+        M->constraint(mosek::fusion::Expr::mul(AM, xM), mosek::fusion::Domain::equalsTo(0.0));
 
 		// Linear positivity constraints
-		M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(0));
+        M->constraint(mosek::fusion::Expr::mul(BM, xM), mosek::fusion::Domain::greaterThan(0));
 
 		// Linear objective function
-		M->objective(mosek::fusion::ObjectiveSense::Minimize, mosek::fusion::Expr::dot(cM, xM));
+        M->objective(mosek::fusion::ObjectiveSense::Minimize, mosek::fusion::Expr::dot(cM, xM));
 
         // The parameterized linear positivity constraints
         M->constraint(mosek::fusion::Expr::mul(DM, xM), mosek::fusion::Domain::greaterThan(0));
@@ -3980,9 +3963,9 @@ public:
         }
 
 		// Moment matrix constraints
-		for (int i=0; i<shouldBePSD.size(); i++) {
-			M->constraint(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Domain::inSVecPSDCone());
-		}
+        for (int i=0; i<shouldBePSD.size(); i++) {
+            M->constraint(mosek::fusion::Expr::mulElm(shouldBePSDCoeffs[i], xM->pick(shouldBePSD[i])), mosek::fusion::Domain::inSVecPSDCone());
+        }
 
 		// Linear PSD constraints
         if (conPSDLinear.size() > 0) {
@@ -4069,7 +4052,7 @@ public:
 
                 }
 
-                // Update the McCormick envelopes TODO
+                // Update the McCormick envelopes
                 std::vector<std::vector<double>> newD(numParamPosCons, std::vector<double>(varsTotal, 0));
                 std::vector<std::vector<double>> newE(numParamEqCons, std::vector<double>(varsTotal, 0));
                 int eInd = 0;
@@ -4306,31 +4289,38 @@ public:
                 DM->setValue(monty::new_array_ptr<double>(newD));
                 EM->setValue(monty::new_array_ptr<double>(newE));
 
-                // Update the bounds
-                std::vector<std::vector<double>> newB(numParamBounds, std::vector<double>(varsTotal, 0));
-                int bInd = 0;
+                // Update the bounds TODO
+                std::vector<double> newUpper(numBoundParams);
+                std::vector<double> newLower(numBoundParams);
                 for (int i=0; i<monoms.size(); i++) {
                     if (i == oneIndex) {
                         continue;
                     }
                     double lower = -1;
                     double upper = 1;
+                    bool allSame = true;
+                    int prevInd = -1;
                     for (int j=0; j<monoms[i].size(); j+=digitsPerInd) {
                         int ind = std::stoi(monoms[i].substr(j, digitsPerInd));
-                        lower *= std::abs(toProcess[0][ind].first);
-                        upper *= std::abs(toProcess[0][ind].second);
+                        if (prevInd != ind) {
+                            allSame = false;
+                        }
+                        prevInd = ind;
+                        double maxVal = std::max(std::abs(toProcess[0][ind].first), std::abs(toProcess[0][ind].second));
+                        lower *= maxVal;
+                        upper *= maxVal;
                     }
-                    //if (verbosity >= 3) {
-                        //std::cout << monoms[i] << " lower: " << lower << " upper: " << upper << std::endl;
-                    //}
-                    newB[bInd][i] = 1;
-                    newB[bInd][oneIndex] = -lower;
-                    bInd++;
-                    newB[bInd][i] = -1;
-                    newB[bInd][oneIndex] = upper;
-                    bInd++;
+                    if (allSame && monoms[i].size()/digitsPerInd % 2 == 0) {
+                        lower = 0;
+                    }
+                    if (verbosity >= 3) {
+                        std::cout << monoms[i] << " lower: " << lower << " upper: " << upper << std::endl;
+                    }
+                    newLower[i] = lower;
+                    newUpper[i] = upper;
                 }
-                boundsM->setValue(monty::new_array_ptr<double>(newB));
+                boundsLower->setValue(monty::new_array_ptr<double>(newLower));
+                boundsUpper->setValue(monty::new_array_ptr<double>(newUpper));
 
             }
 

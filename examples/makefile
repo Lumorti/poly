@@ -1,12 +1,11 @@
 CXX=g++
 CXXFLAGS=-fmax-errors=3 -O3 -march=native
-DEBUGFLAGS=-g -Og -fmax-errors=1
+DEBUGFLAGS=-g -Og -fmax-errors=3
 LIBSEIGEN= -I/usr/include/eigen3
 LIBSOMP= -fopenmp
-LIBSSCS= -L${SCSHOME}/lib/ -I${SCSHOME}/include/scs/ -lscsdir
 LIBSMOSEK= -I${MSKHOME}/h -L${MSKHOME}/bin -Wl,-rpath-link,${MSKHOME}/bin -Wl,-rpath=${MSKHOME}/bin -lmosek64 -lfusion64
 LIBSOPTIM= -I${OPTIMHOME}/include/ -L${OPTIMHOME} -loptim
-LIBS=$(LIBSEIGEN) $(LIBSOPTIM) $(LIBSMOSEK) $(LIBSSCS) $(LIBSOMP)
+LIBS=$(LIBSEIGEN) $(LIBSOPTIM) $(LIBSMOSEK) $(LIBSOMP)
 
 all: mub simple sos ising causal
 
